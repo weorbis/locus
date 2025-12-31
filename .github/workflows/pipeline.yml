@@ -1,0 +1,165 @@
+name: Pipeline
+
+on:
+  push:
+    branches: [main, master]
+    paths-ignore: ['**.md', '.gitignore']
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 'stable'
+  JAVA_VERSION: '17'
+
+jobs:
+  # -----------------------------------------------------------------
+  # STAGE 1: QUALITY ASSURANCE
+  # -----------------------------------------------------------------
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+      
+      - run: flutter pub get
+      
+      - name: Format
+        run: dart format --set-exit-if-changed .
+        
+      - name: Analyze
+        run: flutter analyze --fatal-infos
+        
+      - name: Unit Tests
+        run: flutter test --coverage
+        
+      - name: Upload codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage/lcov.info
+
+      - name: Install pana
+        run: |
+          dart pub global activate pana
+          echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
+
+      - name: Pana Score
+        run: pana --no-warning --exit-code-threshold 130
+
+      - name: Security Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  android-check:
+    name: Android Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+      - run: flutter pub get
+      
+      - name: Build Example APK
+        run: cd example && flutter build apk --debug
+
+      - name: Android Native Tests
+        run: cd android && ./gradlew test
+
+  ios-check:
+    name: iOS Check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
+      - run: flutter pub get
+      
+      - name: Build Example iOS
+        run: cd example && flutter build ios --no-codesign --debug
+
+  # -----------------------------------------------------------------
+  # STAGE 2: RELEASE
+  # -----------------------------------------------------------------
+  release:
+    name: Release
+    needs: [code-quality, android-check, ios-check]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Check version and consistency
+        id: check_version
+        run: |
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          PUBSPEC_VERSION=$(grep 'version:' pubspec.yaml | sed 's/version: //' | tr -d '[:space:]')
+          
+          if [ "$PUBSPEC_VERSION" != "$VERSION" ]; then
+            echo "::error::pubspec.yaml version ($PUBSPEC_VERSION) does not match VERSION file ($VERSION)"
+            exit 1
+          fi
+
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists. Skipping release."
+            echo "do_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "New version $VERSION detected. Proceeding with release."
+            echo "do_release=true" >> $GITHUB_OUTPUT
+            echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: subosito/flutter-action@v2
+        if: steps.check_version.outputs.do_release == 'true'
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
+          
+      - run: flutter pub get
+        if: steps.check_version.outputs.do_release == 'true'
+
+      - name: Create Git Tag
+        if: steps.check_version.outputs.do_release == 'true'
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag -a "v${{ steps.check_version.outputs.VERSION }}" -m "Release v${{ steps.check_version.outputs.VERSION }}"
+          git push origin "v${{ steps.check_version.outputs.VERSION }}"
+
+      - name: Publish to pub.dev
+        if: steps.check_version.outputs.do_release == 'true'
+        run: dart pub publish --force
+
+      - name: Create GitHub Release
+        if: steps.check_version.outputs.do_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ steps.check_version.outputs.VERSION }}"
+          generate_release_notes: true
+          body: |
+            Release v${{ steps.check_version.outputs.VERSION }}
+            
+            See CHANGELOG.md for details.
