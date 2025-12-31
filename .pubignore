@@ -1,0 +1,31 @@
+# Exclude generated and local artifacts from publication
+# Fixes: checked-in but gitignored file warning
+example/.flutter-plugins-dependencies
+
+# Common Flutter/Dart build artifacts
+.dart_tool/
+build/
+example/build/
+coverage/
+
+# iOS/CocoaPods artifacts
+ios/.symlinks/
+example/ios/Pods/
+example/ios/Podfile.lock
+
+# Android/Gradle artifacts
+example/android/.gradle/
+example/android/local.properties
+
+# IDE/editor junk
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Misc
+pubspec.lock
+
+# Internal development documentation (not for package users)
+doc/roadmap/
+.spec-workflow/

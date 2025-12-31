@@ -1,0 +1,28 @@
+# CODEOWNERS - Define code ownership for automatic review requests
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything in the repo
+*                       @koksalmehmet
+
+# Dart/Flutter code
+/lib/                   @koksalmehmet
+/test/                  @koksalmehmet
+/example/               @koksalmehmet
+pubspec.yaml            @koksalmehmet
+
+# Native Android
+/android/               @koksalmehmet
+
+# Native iOS
+/ios/                   @koksalmehmet
+
+# CI/CD and GitHub configuration
+/.github/               @koksalmehmet
+/.github/workflows/     @koksalmehmet
+
+# Documentation
+*.md                    @koksalmehmet
+/docs/                  @koksalmehmet
+
+# Security-sensitive files
+SECURITY.md             @koksalmehmet

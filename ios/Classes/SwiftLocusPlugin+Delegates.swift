@@ -1,0 +1,111 @@
+import Flutter
+import CoreLocation
+
+extension SwiftLocusPlugin {
+  // MARK: - MotionManagerDelegate
+  public func onActivityChange(type: String, confidence: Int) {
+    if let location = lastLocation {
+      emitLocationEvent(location, eventName: "activitychange")
+    }
+  }
+
+  public func onMotionStateChange(isMoving: Bool) {
+    locationClient.setDistanceFilter(isMoving ? configManager.distanceFilter : configManager.stationaryRadius)
+
+    // Only emit event if we have a location to attach to it
+    if let location = lastLocation {
+      emitLocationEvent(location, eventName: "motionchange")
+    }
+  }
+
+  // MARK: - SyncManagerDelegate
+  public func onHttpEvent(_ event: [String: Any]) {
+    sendEvent(event)
+  }
+
+  public func onLog(level: String, message: String) {
+    appendLog(message, level: level)
+  }
+
+  // MARK: - SchedulerDelegate
+  public func onScheduleCheck(shouldBeEnabled: Bool) {
+    if shouldBeEnabled {
+      if !isEnabled {
+        startTracking()
+        emitScheduleEvent()
+      }
+    } else {
+      if isEnabled {
+        stopTracking()
+      }
+    }
+  }
+
+  // MARK: - GeofenceManagerDelegate
+  public func onGeofencesChange(added: [String], removed: [String]) {
+    let event: [String: Any] = [
+      "type": "geofenceschange",
+      "data": [
+        "on": added,
+        "off": removed
+      ]
+    ]
+    sendEvent(event)
+  }
+
+  public func onGeofenceEvent(identifier: String, action: String) {
+    guard let geofence = geofenceManager.getGeofence(identifier) else {
+      return
+    }
+
+    var payload: [String: Any] = [
+      "geofence": geofence,
+      "action": action
+    ]
+
+    if let location = lastLocation {
+      let locationPayload = buildLocationPayload(location, eventName: "geofence")
+      payload["location"] = locationPayload
+      if shouldPersist(eventName: "geofence") {
+        storage.saveLocation(locationPayload, maxDays: configManager.maxDaysToPersist, maxRecords: configManager.maxRecordsToPersist)
+      }
+      syncManager.syncNow(currentPayload: locationPayload)
+    }
+
+    let event: [String: Any] = [
+      "type": "geofence",
+      "data": payload
+    ]
+    sendEvent(event)
+  }
+
+  // MARK: - LocationClientDelegate
+  public func onLocationUpdate(_ location: CLLocation) {
+    if let pending = pendingLocationResult {
+      pendingLocationResult = nil
+      let payload = buildLocationPayload(location, eventName: "location")
+      pending(payload)
+    }
+    if isEnabled {
+      emitLocationEvent(location, eventName: "location")
+    } else {
+      lastLocation = location
+    }
+
+    if configManager.startOnBoot && !isEnabled {
+      startTracking()
+    }
+  }
+
+  public func onLocationError(_ error: Error) {
+    if let pending = pendingLocationResult {
+      pendingLocationResult = nil
+      pending(FlutterError(code: "LOCATION_ERROR", message: error.localizedDescription, details: nil))
+    }
+    appendLog("Location error: \(error.localizedDescription)", level: "error")
+  }
+
+  public func onAuthorizationChange() {
+    emitProviderChange()
+  }
+}

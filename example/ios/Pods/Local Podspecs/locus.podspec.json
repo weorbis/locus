@@ -1,0 +1,39 @@
+{
+  "name": "locus",
+  "version": "1.0.0",
+  "summary": "Background geolocation SDK for Flutter.",
+  "description": "Background geolocation SDK for Flutter. Native tracking, geofencing, \nactivity recognition, and HTTP sync for Android and iOS.",
+  "homepage": "https://github.com/koksalmehmet/locus",
+  "license": {
+    "file": "../LICENSE"
+  },
+  "authors": {
+    "Mehmet Koksal": "hello@mkoksal.dev"
+  },
+  "source": {
+    "path": "."
+  },
+  "source_files": [
+    "Classes/LocusPlugin.{h,m}",
+    "Classes/SwiftLocusPlugin*.swift",
+    "Classes/Core/**/*",
+    "Classes/Geofence/**/*",
+    "Classes/Motion/**/*",
+    "Classes/Storage/**/*"
+  ],
+  "dependencies": {
+    "Flutter": [
+
+    ]
+  },
+  "platforms": {
+    "ios": "14.0"
+  },
+  "frameworks": "CoreMotion",
+  "pod_target_xcconfig": {
+    "DEFINES_MODULE": "YES",
+    "EXCLUDED_ARCHS[sdk=iphonesimulator*]": "i386"
+  },
+  "swift_versions": "5.9",
+  "swift_version": "5.9"
+}
