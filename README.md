@@ -885,19 +885,19 @@ flutter run
 
 ## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Please see [CONTRIBUTING.md](doc/CONTRIBUTING.md) for guidelines.
 
 ---
 
 ## Security
 
-For security policy and vulnerability reporting, please see [SECURITY.md](docs/SECURITY.md).
+For security policy and vulnerability reporting, please see [SECURITY.md](doc/SECURITY.md).
 
 ---
 
 ## License
 
-Locus Community License v1.0 (see `LICENSE` and [`docs/LICENSING.md`](docs/LICENSING.md)).
+Locus Community License v1.0 (see `LICENSE` and [`doc/LICENSING.md`](doc/LICENSING.md)).
 
 **Licensing summary**
 
