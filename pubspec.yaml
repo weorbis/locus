@@ -1,0 +1,36 @@
+name: locus
+description: Background geolocation SDK for Flutter. Native tracking, geofencing, activity recognition, and sync.
+version: 1.0.0
+homepage: https://github.com/koksalmehmet/locus
+repository: https://github.com/koksalmehmet/locus
+issue_tracker: https://github.com/koksalmehmet/locus/issues
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  permission_handler: ^12.0.1
+  # CLI dependencies
+  args: ^2.5.0
+  xml: ^6.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+executables:
+  setup: setup
+  doctor: doctor
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: dev.locus
+        pluginClass: LocusPlugin
+      ios:
+        pluginClass: LocusPlugin

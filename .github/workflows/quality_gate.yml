@@ -1,0 +1,71 @@
+name: Quality Gate
+
+on:
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 'stable'
+
+jobs:
+  pub-dev-score:
+    name: Pub.dev Score (Pana)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
+      - run: flutter pub get
+      - name: Install pana
+        run: dart pub global activate pana
+      - name: Check score
+        run: |
+          PATH="$PATH":"$HOME/.pub-cache/bin"
+          pana --no-warning --exit-code-threshold 10
+
+  native-tests-android:
+    name: Android Native Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Run Android unit tests
+        run: |
+          cd android
+          ./gradlew test
+
+  native-tests-ios:
+    name: iOS Native Tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run iOS unit tests
+        run: |
+          # Only runs if tests are defined in the project
+          cd ios
+          if [ -d Tests ]; then
+            xcodebuild test -scheme locus -destination 'platform=iOS Simulator,name=iPhone 14'
+          else
+            echo "No iOS tests found, skipping."
+          fi
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect secrets with Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

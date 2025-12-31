@@ -1,0 +1,13 @@
+include: package:flutter_lints/flutter.yaml
+
+# Note: "Package resolution error" warnings when running `dart format` directly
+# are expected - the lints resolve correctly when using `flutter analyze`.
+
+analyzer:
+  exclude:
+    - 'bin/**'
+
+linter:
+  rules:
+    avoid_print: true
+    avoid_relative_lib_imports: true
