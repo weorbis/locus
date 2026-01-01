@@ -1273,14 +1273,11 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
   }
 
   String _formatLogEntries(List<LogEntry> entries) {
-    return entries
-        .take(12)
-        .map((entry) {
-          final timestamp = _formatTimestamp(entry.timestamp.toLocal());
-          final tag = entry.tag;
-          final level = tag == null ? entry.level : '${entry.level}/$tag';
-          return '[$timestamp] $level ${entry.message}';
-        })
-        .join('\n');
+    return entries.take(12).map((entry) {
+      final timestamp = _formatTimestamp(entry.timestamp.toLocal());
+      final tag = entry.tag;
+      final level = tag == null ? entry.level : '${entry.level}/$tag';
+      return '[$timestamp] $level ${entry.message}';
+    }).join('\n');
   }
 }

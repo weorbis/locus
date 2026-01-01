@@ -27,8 +27,8 @@ class DeviceOptimizationService {
     if (!Platform.isAndroid) {
       return false;
     }
-    final result =
-        await LocusChannels.methods.invokeMethod('isIgnoringBatteryOptimizations');
+    final result = await LocusChannels.methods
+        .invokeMethod('isIgnoringBatteryOptimizations');
     return result == true;
   }
 
@@ -50,8 +50,8 @@ class DeviceOptimizationService {
         // Fallback to generic page.
       }
     }
-    final url = _manufacturerLinks[manufacturer] ??
-        'https://dontkillmyapp.com/';
+    final url =
+        _manufacturerLinks[manufacturer] ?? 'https://dontkillmyapp.com/';
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -64,16 +64,15 @@ class DeviceOptimizationService {
       'android':
           'Doze and App Standby may restrict background work; OEMs can add '
               'aggressive task killers that require manual exemptions.',
-      'ios':
-          'Background execution is limited; tasks may be suspended within '
-              'minutes when not actively tracking location.',
+      'ios': 'Background execution is limited; tasks may be suspended within '
+          'minutes when not actively tracking location.',
     };
   }
 
   static Future<String?> _readManufacturerFromDiagnostics() async {
     try {
-      final result = await LocusChannels.methods
-          .invokeMethod('getDiagnosticsMetadata');
+      final result =
+          await LocusChannels.methods.invokeMethod('getDiagnosticsMetadata');
       if (result is Map) {
         final metadata = Map<String, dynamic>.from(result);
         final manufacturer = metadata['manufacturer'] as String?;

@@ -92,8 +92,18 @@ class StorageManager {
         }
     }
     
-    func addToQueue(_ item: [String: Any]) {
+    func addToQueue(payload: [String: Any], type: String?, idempotencyKey: String?) -> String {
+        let id = UUID().uuidString
+        var item: [String: Any] = [
+            "id": id,
+            "payload": payload,
+            "created": ISO8601DateFormatter().string(from: Date())
+        ]
+        if let type = type { item["type"] = type }
+        if let key = idempotencyKey { item["idempotencyKey"] = key }
+        
         sqliteStorage.insertQueueItem(item)
+        return id
     }
     
     func removeQueueItems(_ ids: [String]) {
