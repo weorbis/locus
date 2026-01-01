@@ -50,6 +50,7 @@ public class ConfigManager {
     public String idempotencyHeader = "Idempotency-Key";
     public Map<String, Object> httpHeaders = new HashMap<>();
     public Map<String, Object> httpParams = new HashMap<>();
+    public Map<String, Object> httpExtras = new HashMap<>();
     public int httpTimeoutMs = 10000;
     public int maxRetry = 0;
     public int retryDelayMs = 5000;
@@ -246,6 +247,10 @@ public class ConfigManager {
         Object paramsValue = config.get("params");
         if (paramsValue instanceof Map) {
             httpParams = asMap(paramsValue);
+        }
+        Object extrasValue = config.get("extras");
+        if (extrasValue instanceof Map) {
+            httpExtras = asMap(extrasValue);
         }
         
         Object scheduleValue = config.get("schedule");

@@ -6,6 +6,8 @@
     <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Android 14+ requires specific foreground service type permissions -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SHORT_SERVICE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
@@ -16,21 +18,21 @@
     <application>
         <!-- Receives ActivityRecognition updates and forwards them to the plugin -->
         <receiver
-            android:name="dev.locus.ActivityRecognizedBroadcastReceiver"
+            android:name="dev.locus.receiver.ActivityRecognizedBroadcastReceiver"
             android:exported="false" />
 
         <!-- Receives Geofence transitions -->
         <receiver
-            android:name="dev.locus.GeofenceBroadcastReceiver"
+            android:name="dev.locus.receiver.GeofenceBroadcastReceiver"
             android:exported="false" />
 
         <!-- Receives notification action button clicks -->
         <receiver
-            android:name="dev.locus.NotificationActionReceiver"
+            android:name="dev.locus.receiver.NotificationActionReceiver"
             android:exported="false" />
 
         <receiver
-            android:name="dev.locus.BootReceiver"
+            android:name="dev.locus.receiver.BootReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -40,14 +42,16 @@
         </receiver>
 
         <!-- Foreground service used for continuous background monitoring -->
+        <!-- foregroundServiceType="location" requires API 29+, but is ignored on older APIs -->
         <service
-            android:name="dev.locus.ForegroundService"
+            android:name="dev.locus.service.ForegroundService"
             android:foregroundServiceType="location"
             android:exported="false" />
 
         <service
-            android:name="dev.locus.HeadlessService"
+            android:name="dev.locus.service.HeadlessService"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>
 </manifest>
+

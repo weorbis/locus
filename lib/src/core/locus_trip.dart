@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:locus/src/events/events.dart';
-// import 'package:flutter/services.dart'; // Unused
 import 'package:locus/src/models/models.dart';
 import 'package:locus/src/services/services.dart';
 import 'locus_channels.dart';
@@ -10,13 +9,11 @@ import 'locus_streams.dart';
 class _MethodChannelTripStore implements TripStore {
   @override
   Future<void> save(TripState state) async {
-    // Renamed from saveTripState
     await LocusChannels.methods.invokeMethod('storeTripState', state.toMap());
   }
 
   @override
   Future<TripState?> load() async {
-    // Renamed from loadTripState
     final result = await LocusChannels.methods.invokeMethod('readTripState');
     if (result is Map) {
       return TripState.fromMap(Map<String, dynamic>.from(result));
@@ -26,7 +23,6 @@ class _MethodChannelTripStore implements TripStore {
 
   @override
   Future<void> clear() async {
-    // Renamed from clearTripState
     await LocusChannels.methods.invokeMethod('clearTripState');
   }
 }

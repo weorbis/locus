@@ -8,7 +8,13 @@ import 'package:locus/src/models/models.dart';
 /// Main configuration class for the background geolocation service.
 class Config {
   /// SDK version.
-  static const String version = '2.0.0';
+  static const String version = '1.1.0';
+
+  /// Fitness/trail preset (high accuracy, frequent updates).
+  factory Config.fitness() => ConfigPresets.trail;
+
+  /// Passive preset (lowest power usage).
+  factory Config.passive() => ConfigPresets.lowPower;
 
   // Location settings
   final DesiredAccuracy? desiredAccuracy;
@@ -567,4 +573,50 @@ class Config {
     }
     return null;
   }
+}
+
+/// Ready-to-use configuration presets for common tracking scenarios.
+class ConfigPresets {
+  const ConfigPresets._();
+
+  /// Lowest power usage with coarse updates.
+  static const Config lowPower = Config(
+    desiredAccuracy: DesiredAccuracy.low,
+    distanceFilter: 200,
+    stopTimeout: 15,
+    heartbeatInterval: 300,
+    autoSync: true,
+    batchSync: true,
+  );
+
+  /// Balanced accuracy and battery usage.
+  static const Config balanced = Config(
+    desiredAccuracy: DesiredAccuracy.medium,
+    distanceFilter: 50,
+    stopTimeout: 8,
+    heartbeatInterval: 120,
+    autoSync: true,
+    batchSync: true,
+  );
+
+  /// High accuracy for active tracking.
+  static const Config tracking = Config(
+    desiredAccuracy: DesiredAccuracy.high,
+    distanceFilter: 10,
+    stopTimeout: 5,
+    heartbeatInterval: 60,
+    autoSync: true,
+    batchSync: true,
+  );
+
+  /// Highest accuracy, frequent updates (fitness/trails).
+  static const Config trail = Config(
+    desiredAccuracy: DesiredAccuracy.navigation,
+    distanceFilter: 5,
+    stopTimeout: 2,
+    activityRecognitionInterval: 5000,
+    heartbeatInterval: 30,
+    autoSync: true,
+    batchSync: false,
+  );
 }

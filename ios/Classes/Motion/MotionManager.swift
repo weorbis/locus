@@ -44,6 +44,11 @@ class MotionManager {
         let type = motionType(from: activity)
         let confidence = motionConfidence(activity.confidence)
         
+        // Filter out low-confidence activities (parity with Android)
+        if confidence < config.minimumActivityRecognitionConfidence {
+            return
+        }
+        
         let changed = type != lastActivityType || confidence != lastActivityConfidence
         lastActivityType = type
         lastActivityConfidence = confidence

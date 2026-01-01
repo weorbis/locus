@@ -1,48 +1,34 @@
-Locus Community License v1.0
+PolyForm Small Business License 1.0.0
 
-Copyright (c) 2025 Mehmet Koksal
+Licensor: Mehmet Koksal
+Software: Locus Background Geolocation SDK
 
-Permission is hereby granted, free of charge, to any person or entity obtaining a copy
-of this software and associated documentation files (the "Software"), to use, copy,
-modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
-subject to the following conditions:
+Acceptance
+In order to get any license under these terms, you must agree to them as strict obligations and conditions. Any use of the software other than as permitted under these terms and conditions terminates all your rights.
 
-1. Definitions
+Copyright License
+The licensor grants you a non-exclusive, worldwide, royalty-free, individual, non-sublicensable, non-transferable, and revocable copyright license, for any permitted purpose, to:
 
-"Individual" means a natural person acting in a personal capacity or as a solo
-developer.
+1. reproduce and share the software; and
+2. make changes and create new works based on the software, and share them.
 
-"Enterprise" means any person or entity (including affiliates) with gross annual
-revenue of USD 250,000 or more.
+Patent License
+The licensor grants you a non-exclusive, worldwide, royalty-free, individual, non-sublicensable, non-transferable, and revocable patent license to make, have made, use, sell, offer for sale, import, and otherwise transfer the software, as far as the licensor can, to the extent that you would otherwise infringe any patent claims that the licensor can license.
 
-"Open Source" means the Software is used only within a product whose code that
-includes or links to the Software is made publicly available under an OSI-approved
-license, at no charge, for the duration of the use.
+Notices
+You must ensure that anyone who receives a copy of any part of the software from you also receives a copy of these terms or their URL.
 
-2. License Grant
+Small Business Limit
+Use of the software is a permitted purpose only if your company:
 
-Individuals may use the Software for any purpose, including commercial, closed-source,
-open-source, distribution, and monetization.
+1. has fewer than 100 total individuals, including employees and independent contractors; and
+2. has less than USD 250,000 in total revenue in its prior tax year.
 
-Enterprises may use the Software only if the portion of their product that includes
-or links to the Software is Open Source. This requirement applies to each product
-that includes or links to the Software.
+No Other Rights
+These terms do not allow you to sublicense or transfer the licenses. These terms do not prevent the licensor from granting licenses to others. These terms do not grant any other licenses.
 
-3. Commercial License
+Defense of Claims
+If you or your company make a written claim that the software infringes a patent, your patent license ends immediately. If your company makes such a claim, your patent license also ends immediately.
 
-Enterprises who wish to use the Software in a closed-source product must obtain a
-commercial license. Contact: hello@mkoksal.dev
-
-4. Notices
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-5. Disclaimer
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+Disclaimer
+AS FAR AS THE LAW ALLOWS, THE SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY OR CONDITION, AND THE LICENSOR WILL NOT BE LIABLE TO YOU FOR ANY DAMAGES ARISING OUT OF THESE TERMS OR THE USE OR INABILITY TO USE THE SOFTWARE, EVEN IF THE LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY OF THOSE DAMAGES.

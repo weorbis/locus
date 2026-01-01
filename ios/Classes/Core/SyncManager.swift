@@ -3,6 +3,7 @@ import Network
 
 protocol SyncManagerDelegate: AnyObject {
     func onHttpEvent(_ event: [String: Any])
+    func onSyncEvent(_ event: [String: Any])
     func onLog(level: String, message: String)
 }
 
@@ -14,29 +15,63 @@ class SyncManager {
     private let config = ConfigManager.shared
     
     // Simple network monitor
-    private let monitor = NWPathMonitor()
+    private var monitor: NWPathMonitor?
     private let queue = DispatchQueue(label: "dev.locus.network")
     private var isConnected = true
     private var isCellular = false
+    private var isMonitorRunning = false
+    private var isSyncPaused = false
     
     private init() {
-        monitor.pathUpdateHandler = { [weak self] path in
-            self?.isConnected = path.status == .satisfied
-            self?.isCellular = path.usesInterfaceType(.cellular)
-        }
-        monitor.start(queue: queue)
+        startNetworkMonitor()
     }
     
     deinit {
-        monitor.cancel()
+        stopNetworkMonitor()
     }
     
+    /// Starts the network monitor if not already running.
+    private func startNetworkMonitor() {
+        guard !isMonitorRunning else { return }
+        
+        monitor = NWPathMonitor()
+        monitor?.pathUpdateHandler = { [weak self] path in
+            self?.isConnected = path.status == .satisfied
+            self?.isCellular = path.usesInterfaceType(.cellular)
+        }
+        monitor?.start(queue: queue)
+        isMonitorRunning = true
+    }
+    
+    /// Stops the network monitor.
+    private func stopNetworkMonitor() {
+        guard isMonitorRunning else { return }
+        monitor?.cancel()
+        monitor = nil
+        isMonitorRunning = false
+    }
+    
+    /// Releases resources. Call when plugin detaches.
+    /// The monitor can be restarted by calling restart().
     func release() {
-        monitor.cancel()
+        stopNetworkMonitor()
     }
     
+    /// Restarts the network monitor after a release.
+    /// Call when plugin re-attaches.
+    func restart() {
+        startNetworkMonitor()
+    }
+
     func syncNow(currentPayload: [String: Any]? = nil) {
-        guard let url = config.httpUrl, !url.isEmpty else { return }
+        guard let url = config.httpUrl, !url.isEmpty else {
+            delegate?.onLog(level: "debug", message: "syncNow skipped: No URL configured. Set Config.url to enable sync.")
+            return
+        }
+        guard !isSyncPaused else {
+            delegate?.onLog(level: "debug", message: "syncNow skipped: Sync is paused (401 received). Call resumeSync() after token refresh.")
+            return
+        }
         
         if config.batchSync {
             attemptBatchSync()
@@ -47,9 +82,16 @@ class SyncManager {
             enqueueHttp(locationPayload: payload, idsToDelete: nil, attempt: 0)
         }
     }
+
+    func resumeSync() {
+        isSyncPaused = false
+        syncStoredLocations(limit: config.maxBatchSize)
+        _ = syncQueue(limit: 0)
+    }
     
     func attemptBatchSync() {
         guard let url = config.httpUrl, !url.isEmpty, isAutoSyncAllowed() else { return }
+        guard !isSyncPaused else { return }
         
         let threshold = config.autoSyncThreshold > 0 ? config.autoSyncThreshold : config.maxBatchSize
         let stored = storage.readLocations()
@@ -67,6 +109,7 @@ class SyncManager {
     
     func syncStoredLocations(limit: Int) {
         guard let url = config.httpUrl, !url.isEmpty else { return }
+        guard !isSyncPaused else { return }
         
         let stored = storage.readLocations()
         if stored.isEmpty { return }
@@ -80,6 +123,7 @@ class SyncManager {
     
     func syncQueue(limit: Int) -> Int {
         guard let url = config.httpUrl, !url.isEmpty else { return 0 }
+        guard !isSyncPaused else { return 0 }
         
         let fetchLimit = limit > 0 ? limit : config.maxBatchSize
         let stored = storage.readQueue()
@@ -144,6 +188,7 @@ class SyncManager {
     
     private func enqueueHttp(locationPayload: [String: Any], idsToDelete: [String]?, attempt: Int) {
         guard let urlString = config.httpUrl else { return }
+        guard !isSyncPaused else { return }
         
         queue.async {
             var body = self.buildHttpBody(locationPayload: locationPayload, locations: nil)
@@ -160,6 +205,7 @@ class SyncManager {
     
     private func enqueueHttpBatch(payloads: [[String: Any]], idsToDelete: [String]?, attempt: Int) {
         guard let urlString = config.httpUrl else { return }
+        guard !isSyncPaused else { return }
         
         queue.async {
             var body = self.buildHttpBody(locationPayload: nil, locations: payloads)
@@ -176,6 +222,7 @@ class SyncManager {
     
     private func enqueueQueueHttp(payload: [String: Any], id: String, type: String?, idempotencyKey: String, attempt: Int) {
         guard let urlString = config.httpUrl else { return }
+        guard !isSyncPaused else { return }
         
         queue.async {
             var body = self.buildQueueBody(payload: payload, id: id, type: type, idempotencyKey: idempotencyKey)
@@ -223,7 +270,13 @@ class SyncManager {
         ]
         delegate?.onHttpEvent(event)
         delegate?.onLog(level: ok ? "info" : "error", message: "http \(status) \(ok ? "" : responseText)")
-        
+
+        if status == 401 {
+            isSyncPaused = true
+            delegate?.onLog(level: "error", message: "http 401 - sync paused")
+            return
+        }
+
         if !ok {
             if isBatch, let batch = batchPayloads {
                 scheduleBatchRetry(payloads: batch, idsToDelete: idsToDelete, attempt: attempt + 1)
@@ -261,14 +314,24 @@ class SyncManager {
         ]
         delegate?.onHttpEvent(event)
         delegate?.onLog(level: ok ? "info" : "error", message: "http \(status) \(ok ? "" : responseText)")
-        
+
+        if status == 401 {
+            isSyncPaused = true
+            delegate?.onLog(level: "error", message: "http 401 - sync paused")
+            return
+        }
+
         if !ok {
             scheduleQueueRetry(payload: payload, id: id, type: type, idempotencyKey: idempotencyKey, attempt: attempt + 1)
         }
     }
     
     private func scheduleRetry(payload: [String: Any], idsToDelete: [String]?, attempt: Int) {
-        if attempt > config.maxRetry { return }
+        if attempt > config.maxRetry {
+            // Max retries exhausted - emit abandoned event
+            emitDeadLetterEvent(payload: payload, reason: "max_retries_exhausted", attempts: attempt)
+            return
+        }
         
         let delay = calculateDelay(attempt)
         queue.asyncAfter(deadline: .now() + delay) {
@@ -277,7 +340,13 @@ class SyncManager {
     }
     
     private func scheduleBatchRetry(payloads: [[String: Any]], idsToDelete: [String]?, attempt: Int) {
-        if attempt > config.maxRetry { return }
+        if attempt > config.maxRetry {
+            // Max retries exhausted - emit abandoned event for batch
+            for payload in payloads {
+                emitDeadLetterEvent(payload: payload, reason: "max_retries_exhausted", attempts: attempt)
+            }
+            return
+        }
         
         let delay = calculateDelay(attempt)
         queue.asyncAfter(deadline: .now() + delay) {
@@ -286,7 +355,12 @@ class SyncManager {
     }
     
     private func scheduleQueueRetry(payload: [String: Any], id: String, type: String?, idempotencyKey: String, attempt: Int) {
-        if attempt > config.maxRetry { return }
+        if attempt > config.maxRetry {
+            // Max retries exhausted - move to dead letter and emit event
+            storage.moveToDeadLetter(id)
+            emitDeadLetterEvent(payload: payload, reason: "max_retries_exhausted", attempts: attempt)
+            return
+        }
         
         let delay = calculateDelay(attempt)
         let nextRetryAt = ISO8601DateFormatter().string(from: Date().addingTimeInterval(delay))
@@ -295,6 +369,18 @@ class SyncManager {
         queue.asyncAfter(deadline: .now() + delay) {
             self.enqueueQueueHttp(payload: payload, id: id, type: type, idempotencyKey: idempotencyKey, attempt: attempt)
         }
+    }
+    
+    private func emitDeadLetterEvent(payload: [String: Any], reason: String, attempts: Int) {
+        delegate?.onSyncEvent([
+            "type": "deadletter",
+            "data": [
+                "reason": reason,
+                "attempts": attempts,
+                "payload": payload,
+                "timestamp": ISO8601DateFormatter().string(from: Date())
+            ]
+        ])
     }
     
     private func calculateDelay(_ attempt: Int) -> TimeInterval {
@@ -308,15 +394,21 @@ class SyncManager {
     private func buildHttpBody(locationPayload: [String: Any]?, locations: [[String: Any]]?) -> [String: Any] {
         var body: [String: Any] = [:]
         
+        // Merge extras at top level first (user-defined envelope fields)
+        for (k, v) in config.extras {
+            body[k] = v
+        }
+        
+        // Add locations under the specified root property
         if let locations = locations {
             let key = (config.httpRootProperty?.isEmpty == false) ? config.httpRootProperty! : "locations"
-            // We might need to transform or clean locations if needed
             body[key] = locations
         } else if let locationPayload = locationPayload {
             let key = (config.httpRootProperty?.isEmpty == false) ? config.httpRootProperty! : "location"
             body[key] = locationPayload
         }
         
+        // Merge params (for URL params that also go in body)
         for (k, v) in config.httpParams {
             body[k] = v
         }

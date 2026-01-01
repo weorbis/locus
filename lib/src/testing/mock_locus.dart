@@ -22,80 +22,14 @@ library;
 
 import 'dart:async';
 
-import 'package:locus/src/config/geolocation_config.dart';
+import 'package:locus/src/battery/battery.dart';
+import 'package:locus/src/config/config.dart';
+import 'package:locus/src/core/locus_interface.dart';
+import 'package:locus/src/events/events.dart';
 import 'package:locus/src/models/models.dart';
+import 'package:locus/src/services/services.dart';
 
-/// Abstract interface for Locus functionality.
-///
-/// This interface allows swapping real implementation with mocks for testing.
-abstract class LocusInterface {
-  /// Initializes the SDK with the given configuration.
-  Future<GeolocationState> ready(Config config);
-
-  /// Starts location tracking.
-  Future<GeolocationState> start();
-
-  /// Stops location tracking.
-  Future<GeolocationState> stop();
-
-  /// Gets the current state.
-  Future<GeolocationState> getState();
-
-  /// Gets the current position.
-  Future<Location> getCurrentPosition({
-    int? samples,
-    int? timeout,
-    int? maximumAge,
-    bool? persist,
-    int? desiredAccuracy,
-    Map<String, dynamic>? extras,
-  });
-
-  /// Changes the motion state.
-  Future<void> changePace(bool isMoving);
-
-  /// Sets the odometer value.
-  Future<double> setOdometer(double value);
-
-  /// Adds a geofence.
-  Future<void> addGeofence(Geofence geofence);
-
-  /// Removes a geofence.
-  Future<void> removeGeofence(String identifier);
-
-  /// Gets all geofences.
-  Future<List<Geofence>> getGeofences();
-
-  /// Checks if a geofence exists.
-  Future<bool> geofenceExists(String identifier);
-
-  /// Gets stored locations.
-  Future<List<Location>> getLocations({int? limit});
-
-  /// Destroys all stored locations.
-  Future<void> destroyLocations();
-
-  /// Stream of location updates.
-  Stream<Location> get locationStream;
-
-  /// Stream of motion change events.
-  Stream<Location> get motionChangeStream;
-
-  /// Stream of activity changes.
-  Stream<Activity> get activityChangeStream;
-
-  /// Stream of provider changes.
-  Stream<ProviderChangeEvent> get providerChangeStream;
-
-  /// Stream of geofence events.
-  Stream<GeofenceEvent> get geofenceStream;
-
-  /// Stream of connectivity changes.
-  Stream<ConnectivityChangeEvent> get connectivityChangeStream;
-
-  /// Stream of HTTP events.
-  Stream<HttpEvent> get httpStream;
-}
+export 'package:locus/src/core/locus_interface.dart';
 
 /// Mock implementation of Locus for unit testing.
 ///
@@ -147,10 +81,39 @@ class MockLocus implements LocusInterface {
   final _httpController = StreamController<HttpEvent>.broadcast();
   final _heartbeatController = StreamController<Location>.broadcast();
   final _enabledChangeController = StreamController<bool>.broadcast();
+  final _powerSaveController = StreamController<bool>.broadcast();
+  final _powerStateController =
+      StreamController<PowerStateChangeEvent>.broadcast();
   final _tripEventController = StreamController<TripEvent>.broadcast();
+  final _workflowController =
+      StreamController<GeofenceWorkflowEvent>.broadcast();
+  final _eventsController =
+      StreamController<GeolocationEvent<dynamic>>.broadcast();
+  final _errorController = StreamController<LocusError>.broadcast();
 
   // Call tracking for verification
   final List<String> _methodCalls = [];
+
+  AdaptiveTrackingConfig? _adaptiveTrackingConfig;
+  SpoofDetectionConfig? _spoofDetectionConfig;
+  ErrorRecoveryConfig? _errorRecoveryConfig;
+  TrackingProfile? _currentTrackingProfile;
+  final Map<TrackingProfile, Config> _trackingProfiles = {};
+  bool _trackingAutomationEnabled = false;
+  bool _significantChangeMonitoring = false;
+  bool _isForeground = true;
+  PowerState _powerState = PowerState.unknown;
+  BatteryStats _batteryStats = const BatteryStats.empty();
+  BatteryBenchmark? _activeBenchmark;
+  final List<LogEntry> _logEntries = [];
+  final List<GeofenceWorkflow> _workflows = [];
+  final Map<String, GeofenceWorkflowState> _workflowStates = {};
+  Future<Map<String, String>> Function()? _headersCallback;
+  SyncPolicy? _syncPolicy;
+  int _backgroundTaskId = 0;
+  TripState? _tripState;
+  TripSummary? _tripSummary;
+  ErrorRecoveryManager? _errorRecoveryManager;
 
   /// List of method calls made to this mock.
   ///
@@ -171,50 +134,63 @@ class MockLocus implements LocusInterface {
     _state = state;
   }
 
+  void _emitEvent(EventType type, dynamic data) {
+    _eventsController.add(GeolocationEvent(type: type, data: data));
+  }
+
   /// Emits a mock location to all location listeners.
   void emitLocation(Location location) {
     _storedLocations.add(location);
     _locationController.add(location);
+    _emitEvent(EventType.location, location);
   }
 
   /// Emits a mock motion change event.
   void emitMotionChange(Location location) {
     _motionChangeController.add(location);
+    _emitEvent(EventType.motionChange, location);
   }
 
   /// Emits a mock activity change.
   void emitActivityChange(Activity activity) {
     _activityChangeController.add(activity);
+    _emitEvent(EventType.activityChange, activity);
   }
 
   /// Emits a mock provider change.
   void emitProviderChange(ProviderChangeEvent event) {
     _providerChangeController.add(event);
+    _emitEvent(EventType.providerChange, event);
   }
 
   /// Emits a mock geofence event.
   void emitGeofenceEvent(GeofenceEvent event) {
     _geofenceController.add(event);
+    _emitEvent(EventType.geofence, event);
   }
 
   /// Emits a mock connectivity change.
   void emitConnectivityChange(ConnectivityChangeEvent event) {
     _connectivityController.add(event);
+    _emitEvent(EventType.connectivityChange, event);
   }
 
   /// Emits a mock HTTP event.
   void emitHttpEvent(HttpEvent event) {
     _httpController.add(event);
+    _emitEvent(EventType.http, event);
   }
 
   /// Emits a mock heartbeat.
   void emitHeartbeat(Location location) {
     _heartbeatController.add(location);
+    _emitEvent(EventType.heartbeat, location);
   }
 
   /// Emits an enabled change event.
   void emitEnabledChange(bool enabled) {
     _enabledChangeController.add(enabled);
+    _emitEvent(EventType.enabledChange, enabled);
   }
 
   /// Emits a trip event.
@@ -236,7 +212,10 @@ class MockLocus implements LocusInterface {
   }
 
   @override
-  Future<GeolocationState> ready(Config config) async {
+  Future<GeolocationState> ready(
+    Config config, {
+    bool skipValidation = false,
+  }) async {
     _methodCalls.add('ready');
     _config = config;
     _isReady = true;
@@ -297,9 +276,10 @@ class MockLocus implements LocusInterface {
   }
 
   @override
-  Future<void> changePace(bool isMoving) async {
+  Future<bool> changePace(bool isMoving) async {
     _methodCalls.add('changePace:$isMoving');
     _state = _state.copyWith(isMoving: isMoving);
+    return true;
   }
 
   @override
@@ -310,16 +290,18 @@ class MockLocus implements LocusInterface {
   }
 
   @override
-  Future<void> addGeofence(Geofence geofence) async {
+  Future<bool> addGeofence(Geofence geofence) async {
     _methodCalls.add('addGeofence:${geofence.identifier}');
     _geofences.removeWhere((g) => g.identifier == geofence.identifier);
     _geofences.add(geofence);
+    return true;
   }
 
   @override
-  Future<void> removeGeofence(String identifier) async {
+  Future<bool> removeGeofence(String identifier) async {
     _methodCalls.add('removeGeofence:$identifier');
     _geofences.removeWhere((g) => g.identifier == identifier);
+    return true;
   }
 
   @override
@@ -344,27 +326,37 @@ class MockLocus implements LocusInterface {
   }
 
   @override
-  Future<void> destroyLocations() async {
+  Future<bool> destroyLocations() async {
     _methodCalls.add('destroyLocations');
     _storedLocations.clear();
+    return true;
   }
 
   /// Adds multiple geofences.
-  Future<void> addGeofences(List<Geofence> geofences) async {
+  @override
+  Future<bool> addGeofences(List<Geofence> geofences) async {
     _methodCalls.add('addGeofences');
     for (final geofence in geofences) {
       await addGeofence(geofence);
     }
+    return true;
   }
 
   /// Removes all geofences.
-  Future<void> removeGeofences() async {
+  @override
+  Future<bool> removeGeofences() async {
     _methodCalls.add('removeGeofences');
     _geofences.clear();
+    return true;
   }
 
   /// Enqueues a custom payload.
-  Future<String> enqueue(Map<String, dynamic> payload) async {
+  @override
+  Future<String> enqueue(
+    Map<String, dynamic> payload, {
+    String? type,
+    String? idempotencyKey,
+  }) async {
     _methodCalls.add('enqueue');
     final id = 'mock-queue-${_queue.length}';
     _queue.add(QueueItem(
@@ -377,16 +369,688 @@ class MockLocus implements LocusInterface {
   }
 
   /// Gets the queue.
+  @override
   Future<List<QueueItem>> getQueue({int? limit}) async {
     _methodCalls.add('getQueue');
+    if (limit != null && limit < _queue.length) {
+      return List.unmodifiable(_queue.sublist(_queue.length - limit));
+    }
     return List.unmodifiable(_queue);
   }
 
   /// Clears the queue.
+  @override
   Future<void> clearQueue() async {
     _methodCalls.add('clearQueue');
     _queue.clear();
   }
+
+  @override
+  Future<Geofence?> getGeofence(String identifier) async {
+    _methodCalls.add('getGeofence:$identifier');
+    for (final geofence in _geofences) {
+      if (geofence.identifier == identifier) {
+        return geofence;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<bool> startGeofences() async {
+    _methodCalls.add('startGeofences');
+    return true;
+  }
+
+  @override
+  Future<void> setConfig(Config config) async {
+    _methodCalls.add('setConfig');
+    _config = config;
+  }
+
+  @override
+  Future<void> destroy() async {
+    _methodCalls.add('destroy');
+    _isReady = false;
+    _state = const GeolocationState(enabled: false);
+    _storedLocations.clear();
+    _queue.clear();
+    _geofences.clear();
+  }
+
+  @override
+  Future<void> reset(Config config) async {
+    _methodCalls.add('reset');
+    await destroy();
+    _config = config;
+    _isReady = true;
+  }
+
+  @override
+  Future<bool> startSchedule() async {
+    _methodCalls.add('startSchedule');
+    return true;
+  }
+
+  @override
+  Future<bool> stopSchedule() async {
+    _methodCalls.add('stopSchedule');
+    return true;
+  }
+
+  @override
+  Future<bool> sync() async {
+    _methodCalls.add('sync');
+    return true;
+  }
+
+  @override
+  Future<bool> resumeSync() async {
+    _methodCalls.add('resumeSync');
+    return true;
+  }
+
+  // ============================================================
+  // Sync Body Builder (Mock)
+  // ============================================================
+  SyncBodyBuilder? _syncBodyBuilder;
+
+  @override
+  void setSyncBodyBuilder(SyncBodyBuilder? builder) {
+    _methodCalls.add('setSyncBodyBuilder');
+    _syncBodyBuilder = builder;
+  }
+
+  @override
+  void clearSyncBodyBuilder() {
+    _methodCalls.add('clearSyncBodyBuilder');
+    _syncBodyBuilder = null;
+  }
+
+  @override
+  Future<bool> registerHeadlessSyncBodyBuilder(
+    Future<JsonMap> Function(SyncBodyContext context) builder,
+  ) async {
+    _methodCalls.add('registerHeadlessSyncBodyBuilder');
+    return true;
+  }
+
+  /// The current sync body builder (for test verification).
+  SyncBodyBuilder? get syncBodyBuilder => _syncBodyBuilder;
+
+  /// Invokes the sync body builder if set (for testing).
+  Future<JsonMap?> invokeSyncBodyBuilder(
+    List<Location> locations,
+    JsonMap extras,
+  ) async {
+    if (_syncBodyBuilder == null) return null;
+    return _syncBodyBuilder!(locations, extras);
+  }
+
+  @override
+  Future<bool> registerHeadlessTask(HeadlessEventCallback callback) async {
+    _methodCalls.add('registerHeadlessTask');
+    return true;
+  }
+
+  @override
+  Future<int> startBackgroundTask() async {
+    _methodCalls.add('startBackgroundTask');
+    _backgroundTaskId += 1;
+    return _backgroundTaskId;
+  }
+
+  @override
+  Future<void> stopBackgroundTask(int taskId) async {
+    _methodCalls.add('stopBackgroundTask:$taskId');
+  }
+
+  @override
+  Future<List<LogEntry>> getLog() async {
+    _methodCalls.add('getLog');
+    return List.unmodifiable(_logEntries);
+  }
+
+  @override
+  Future<void> emailLog(String email) async {
+    _methodCalls.add('emailLog:$email');
+  }
+
+  @override
+  Future<void> playSound(String name) async {
+    _methodCalls.add('playSound:$name');
+  }
+
+  @override
+  Future<int> syncQueue({int? limit}) async {
+    _methodCalls.add('syncQueue');
+    return _queue.length;
+  }
+
+  @override
+  Future<bool> requestPermission() async {
+    _methodCalls.add('requestPermission');
+    return true;
+  }
+
+  @override
+  void setHeadersCallback(Future<Map<String, String>> Function()? callback) {
+    _headersCallback = callback;
+  }
+
+  @override
+  void clearHeadersCallback() {
+    _headersCallback = null;
+  }
+
+  @override
+  Future<void> refreshHeaders() async {
+    if (_headersCallback == null) return;
+    await _headersCallback!();
+  }
+
+  @override
+  StreamSubscription<Location> onLocation(
+    void Function(Location) callback, {
+    Function? onError,
+  }) {
+    return locationStream.listen(callback, onError: onError);
+  }
+
+  @override
+  StreamSubscription<Location> onMotionChange(
+    void Function(Location) callback, {
+    Function? onError,
+  }) {
+    return motionChangeStream.listen(callback, onError: onError);
+  }
+
+  @override
+  StreamSubscription<Activity> onActivityChange(
+    void Function(Activity) callback, {
+    Function? onError,
+  }) {
+    return activityStream.listen(callback, onError: onError);
+  }
+
+  @override
+  StreamSubscription<ProviderChangeEvent> onProviderChange(
+    void Function(ProviderChangeEvent) callback, {
+    Function? onError,
+  }) {
+    return providerStream.listen(callback, onError: onError);
+  }
+
+  @override
+  StreamSubscription<GeofenceEvent> onGeofence(
+    void Function(GeofenceEvent) callback, {
+    Function? onError,
+  }) {
+    return geofenceStream.listen(callback, onError: onError);
+  }
+
+  @override
+  StreamSubscription<dynamic> onGeofencesChange(
+    void Function(dynamic) callback, {
+    Function? onError,
+  }) {
+    return events
+        .where((event) => event.type == EventType.geofencesChange)
+        .map((event) => event.data)
+        .listen(callback, onError: onError);
+  }
+
+  @override
+  StreamSubscription<Location> onHeartbeat(
+    void Function(Location) callback, {
+    Function? onError,
+  }) {
+    return heartbeatStream.listen(callback, onError: onError);
+  }
+
+  @override
+  StreamSubscription<Location> onSchedule(
+    void Function(Location) callback, {
+    Function? onError,
+  }) {
+    return events
+        .where((event) => event.type == EventType.schedule)
+        .map((event) => event.data)
+        .where((data) => data is Location)
+        .cast<Location>()
+        .listen(callback, onError: onError);
+  }
+
+  @override
+  StreamSubscription<ConnectivityChangeEvent> onConnectivityChange(
+    void Function(ConnectivityChangeEvent) callback, {
+    Function? onError,
+  }) {
+    return connectivityStream.listen(callback, onError: onError);
+  }
+
+  @override
+  StreamSubscription<bool> onPowerSaveChange(
+    void Function(bool) callback, {
+    Function? onError,
+  }) {
+    return powerSaveStream.listen(callback, onError: onError);
+  }
+
+  @override
+  StreamSubscription<bool> onEnabledChange(
+    void Function(bool) callback, {
+    Function? onError,
+  }) {
+    return enabledStream.listen(callback, onError: onError);
+  }
+
+  @override
+  StreamSubscription<String> onNotificationAction(
+    void Function(String) callback, {
+    Function? onError,
+  }) {
+    return events
+        .where((event) => event.type == EventType.notificationAction)
+        .map((event) => event.data?.toString() ?? '')
+        .listen(callback, onError: onError);
+  }
+
+  @override
+  StreamSubscription<HttpEvent> onHttp(
+    void Function(HttpEvent) callback, {
+    Function? onError,
+  }) {
+    return httpStream.listen(callback, onError: onError);
+  }
+
+  @override
+  Future<void> startTrip(TripConfig config) async {
+    _methodCalls.add('startTrip');
+    final now = DateTime.now();
+    _tripState = TripState(
+      tripId: config.tripId ?? 'mock-trip',
+      createdAt: now,
+      startedAt: now,
+      startLocation: null,
+      lastLocation: null,
+      distanceMeters: 0,
+      idleSeconds: 0,
+      maxSpeedKph: 0,
+      started: true,
+      ended: false,
+    );
+  }
+
+  @override
+  TripSummary? stopTrip() {
+    _methodCalls.add('stopTrip');
+    _tripSummary ??= TripSummary(
+      tripId: _tripState?.tripId ?? 'mock-trip',
+      distanceMeters: 0,
+      durationSeconds: 0,
+      averageSpeedKph: 0,
+      maxSpeedKph: 0,
+      idleSeconds: 0,
+      startedAt: _tripState?.startedAt ?? DateTime.now(),
+      endedAt: DateTime.now(),
+    );
+    return _tripSummary;
+  }
+
+  @override
+  TripState? getTripState() {
+    _methodCalls.add('getTripState');
+    return _tripState;
+  }
+
+  @override
+  StreamSubscription<TripEvent> onTripEvent(
+    void Function(TripEvent event) callback, {
+    Function? onError,
+  }) {
+    return tripEvents.listen(callback, onError: onError);
+  }
+
+  @override
+  TrackingProfile? get currentTrackingProfile => _currentTrackingProfile;
+
+  /// Whether tracking automation is enabled.
+  bool get trackingAutomationEnabled => _trackingAutomationEnabled;
+
+  @override
+  Future<void> setTrackingProfiles(
+    Map<TrackingProfile, Config> profiles, {
+    TrackingProfile? initialProfile,
+    List<TrackingProfileRule> rules = const [],
+    bool enableAutomation = false,
+  }) async {
+    _methodCalls.add('setTrackingProfiles');
+    _trackingProfiles
+      ..clear()
+      ..addAll(profiles);
+    _currentTrackingProfile =
+        initialProfile ?? (profiles.isNotEmpty ? profiles.keys.first : null);
+    _trackingAutomationEnabled = enableAutomation;
+  }
+
+  @override
+  Future<void> setTrackingProfile(TrackingProfile profile) async {
+    _methodCalls.add('setTrackingProfile:$profile');
+    _currentTrackingProfile = profile;
+  }
+
+  @override
+  void startTrackingAutomation() {
+    _methodCalls.add('startTrackingAutomation');
+    _trackingAutomationEnabled = true;
+  }
+
+  @override
+  void stopTrackingAutomation() {
+    _methodCalls.add('stopTrackingAutomation');
+    _trackingAutomationEnabled = false;
+  }
+
+  @override
+  void clearTrackingProfiles() {
+    _methodCalls.add('clearTrackingProfiles');
+    _trackingProfiles.clear();
+    _currentTrackingProfile = null;
+  }
+
+  @override
+  StreamSubscription<GeofenceWorkflowEvent> onWorkflowEvent(
+    void Function(GeofenceWorkflowEvent event) callback, {
+    Function? onError,
+  }) {
+    return workflowEvents.listen(callback, onError: onError);
+  }
+
+  @override
+  void registerGeofenceWorkflows(List<GeofenceWorkflow> workflows) {
+    _methodCalls.add('registerGeofenceWorkflows');
+    _workflows
+      ..clear()
+      ..addAll(workflows);
+  }
+
+  @override
+  GeofenceWorkflowState? getWorkflowState(String workflowId) {
+    return _workflowStates[workflowId];
+  }
+
+  @override
+  void clearGeofenceWorkflows() {
+    _methodCalls.add('clearGeofenceWorkflows');
+    _workflows.clear();
+    _workflowStates.clear();
+  }
+
+  @override
+  void stopGeofenceWorkflows() {
+    _methodCalls.add('stopGeofenceWorkflows');
+  }
+
+  @override
+  Future<BatteryStats> getBatteryStats() async {
+    _methodCalls.add('getBatteryStats');
+    return _batteryStats;
+  }
+
+  /// Sets mock battery stats.
+  void setBatteryStats(BatteryStats stats) {
+    _batteryStats = stats;
+  }
+
+  @override
+  Future<PowerState> getPowerState() async {
+    _methodCalls.add('getPowerState');
+    return _powerState;
+  }
+
+  /// Sets mock power state and emits a change event.
+  void setPowerState(
+    PowerState state, {
+    PowerStateChangeType changeType = PowerStateChangeType.batteryLevel,
+  }) {
+    final previous = _powerState;
+    _powerState = state;
+    _powerStateController.add(PowerStateChangeEvent(
+      previous: previous,
+      current: state,
+      changeType: changeType,
+    ));
+  }
+
+  @override
+  StreamSubscription<PowerStateChangeEvent> onPowerStateChangeWithObj(
+    void Function(PowerStateChangeEvent event) callback, {
+    Function? onError,
+  }) {
+    return powerStateStream.listen(callback, onError: onError);
+  }
+
+  @override
+  Future<void> setAdaptiveTracking(AdaptiveTrackingConfig config) async {
+    _methodCalls.add('setAdaptiveTracking');
+    _adaptiveTrackingConfig = config;
+  }
+
+  @override
+  AdaptiveTrackingConfig? get adaptiveTrackingConfig => _adaptiveTrackingConfig;
+
+  @override
+  Future<AdaptiveSettings> calculateAdaptiveSettings() async {
+    return const AdaptiveSettings(
+      distanceFilter: 0,
+      desiredAccuracy: DesiredAccuracy.low,
+      heartbeatInterval: 0,
+      gpsEnabled: true,
+      reason: 'mock',
+    );
+  }
+
+  @override
+  Future<void> setSpoofDetection(SpoofDetectionConfig config) async {
+    _methodCalls.add('setSpoofDetection');
+    _spoofDetectionConfig = config;
+  }
+
+  @override
+  SpoofDetectionConfig? get spoofDetectionConfig => _spoofDetectionConfig;
+
+  @override
+  SpoofDetectionEvent? analyzeForSpoofing(
+    Location location, {
+    bool? isMockProvider,
+  }) {
+    return null;
+  }
+
+  @override
+  Future<void> startSignificantChangeMonitoring([
+    SignificantChangeConfig config = const SignificantChangeConfig(),
+  ]) async {
+    _methodCalls.add('startSignificantChangeMonitoring');
+    _significantChangeMonitoring = true;
+  }
+
+  @override
+  Future<void> stopSignificantChangeMonitoring() async {
+    _methodCalls.add('stopSignificantChangeMonitoring');
+    _significantChangeMonitoring = false;
+  }
+
+  @override
+  bool get isSignificantChangeMonitoringActive => _significantChangeMonitoring;
+
+  @override
+  void setErrorHandler(ErrorRecoveryConfig config) {
+    _methodCalls.add('setErrorHandler');
+    _errorRecoveryConfig = config;
+    _errorRecoveryManager ??= ErrorRecoveryManager(config);
+    _errorRecoveryManager!.configure(config);
+  }
+
+  @override
+  ErrorRecoveryManager? get errorRecoveryManager => _errorRecoveryManager;
+
+  /// Last configured error recovery settings.
+  ErrorRecoveryConfig? get errorRecoveryConfig => _errorRecoveryConfig;
+
+  @override
+  Future<RecoveryAction> handleError(LocusError error) async {
+    if (_errorRecoveryManager != null) {
+      return _errorRecoveryManager!.handleError(error);
+    }
+    _errorController.add(error);
+    return RecoveryAction.ignore;
+  }
+
+  @override
+  Future<bool> isTracking() async {
+    return _state.enabled;
+  }
+
+  @override
+  bool get isForeground => _isForeground;
+
+  /// Sets whether the app is foregrounded.
+  void setIsForeground(bool isForeground) {
+    _isForeground = isForeground;
+  }
+
+  @override
+  void startLifecycleObserving() {
+    _methodCalls.add('startLifecycleObserving');
+  }
+
+  @override
+  void stopLifecycleObserving() {
+    _methodCalls.add('stopLifecycleObserving');
+  }
+
+  @override
+  Future<bool> isInActiveGeofence() async {
+    return false;
+  }
+
+  @override
+  Future<DiagnosticsSnapshot> getDiagnostics() async {
+    return DiagnosticsSnapshot(
+      capturedAt: DateTime.now().toUtc(),
+      state: _state,
+      config: _config.toMap(),
+      queue: List.unmodifiable(_queue),
+      metadata: const {},
+    );
+  }
+
+  @override
+  Future<bool> applyRemoteCommand(RemoteCommand command) async {
+    _methodCalls.add('applyRemoteCommand:${command.type}');
+    return true;
+  }
+
+  @override
+  Stream<LocationAnomaly> locationAnomalies({
+    LocationAnomalyConfig config = const LocationAnomalyConfig(),
+  }) {
+    return Stream.empty();
+  }
+
+  @override
+  StreamSubscription<LocationAnomaly> onLocationAnomaly(
+    void Function(LocationAnomaly anomaly) callback, {
+    LocationAnomalyConfig config = const LocationAnomalyConfig(),
+    Function? onError,
+  }) {
+    return locationAnomalies(config: config).listen(callback, onError: onError);
+  }
+
+  @override
+  Stream<LocationQuality> locationQuality({
+    LocationQualityConfig config = const LocationQualityConfig(),
+  }) {
+    return Stream.empty();
+  }
+
+  @override
+  StreamSubscription<LocationQuality> onLocationQuality(
+    void Function(LocationQuality quality) callback, {
+    LocationQualityConfig config = const LocationQualityConfig(),
+    Function? onError,
+  }) {
+    return locationQuality(config: config).listen(callback, onError: onError);
+  }
+
+  @override
+  Future<void> startBatteryBenchmark() async {
+    _activeBenchmark = BatteryBenchmark();
+    _activeBenchmark!.start(initialBattery: _powerState.batteryLevel);
+  }
+
+  @override
+  Future<BenchmarkResult?> stopBatteryBenchmark() async {
+    if (_activeBenchmark == null || !_activeBenchmark!.isRunning) {
+      return null;
+    }
+    final result = _activeBenchmark!.finish(
+      currentBattery: _powerState.batteryLevel,
+    );
+    _activeBenchmark = null;
+    return result;
+  }
+
+  @override
+  void recordBenchmarkLocationUpdate({double? accuracy}) {
+    _activeBenchmark?.recordLocationUpdate(accuracy: accuracy);
+  }
+
+  @override
+  void recordBenchmarkSync() {
+    _activeBenchmark?.recordSync();
+  }
+
+  @override
+  Future<void> setSyncPolicy(SyncPolicy policy) async {
+    _syncPolicy = policy;
+  }
+
+  /// Returns the last sync policy configured on the mock.
+  SyncPolicy? get syncPolicy => _syncPolicy;
+
+  @override
+  Future<SyncDecision> evaluateSyncPolicy({
+    required SyncPolicy policy,
+  }) async {
+    final power = _powerState;
+    final behavior = policy.getBehavior(
+      networkType: NetworkType.wifi,
+      batteryPercent: power.batteryLevel,
+      isCharging: power.isCharging,
+      isMetered: false,
+      isForeground: _isForeground,
+    );
+
+    switch (behavior) {
+      case SyncBehavior.immediate:
+        return SyncDecision.proceed;
+      case SyncBehavior.batch:
+        return SyncDecision.batch(
+          policy.batchSize,
+          delay: policy.batchInterval,
+        );
+      case SyncBehavior.queue:
+        return SyncDecision.defer('Queued for later');
+      case SyncBehavior.manual:
+        return SyncDecision.defer('Manual sync required');
+    }
+  }
+
+  @override
+  Stream<GeolocationEvent<dynamic>> get events => _eventsController.stream;
 
   @override
   Stream<Location> get locationStream => _locationController.stream;
@@ -395,30 +1059,48 @@ class MockLocus implements LocusInterface {
   Stream<Location> get motionChangeStream => _motionChangeController.stream;
 
   @override
-  Stream<Activity> get activityChangeStream => _activityChangeController.stream;
+  Stream<Activity> get activityStream => _activityChangeController.stream;
 
   @override
-  Stream<ProviderChangeEvent> get providerChangeStream =>
+  Stream<ProviderChangeEvent> get providerStream =>
       _providerChangeController.stream;
 
   @override
   Stream<GeofenceEvent> get geofenceStream => _geofenceController.stream;
 
   @override
-  Stream<ConnectivityChangeEvent> get connectivityChangeStream =>
+  Stream<ConnectivityChangeEvent> get connectivityStream =>
       _connectivityController.stream;
 
   @override
   Stream<HttpEvent> get httpStream => _httpController.stream;
 
-  /// Stream of heartbeat events.
+  @override
   Stream<Location> get heartbeatStream => _heartbeatController.stream;
 
-  /// Stream of enabled change events.
-  Stream<bool> get enabledChangeStream => _enabledChangeController.stream;
+  @override
+  Stream<bool> get enabledStream => _enabledChangeController.stream;
 
-  /// Stream of trip events.
-  Stream<TripEvent> get tripEventStream => _tripEventController.stream;
+  @override
+  Stream<bool> get powerSaveStream => _powerSaveController.stream;
+
+  @override
+  Stream<TripEvent> get tripEvents => _tripEventController.stream;
+
+  @override
+  Stream<GeofenceWorkflowEvent> get workflowEvents =>
+      _workflowController.stream;
+
+  @override
+  Stream<PowerStateChangeEvent> get powerStateStream =>
+      _powerStateController.stream;
+
+  @override
+  Stream<SignificantChangeEvent>? get significantChangeStream => null;
+
+  @override
+  Stream<LocusError>? get errorStream =>
+      _errorRecoveryManager?.errors ?? _errorController.stream;
 
   /// Disposes all stream controllers.
   void dispose() {
@@ -431,7 +1113,12 @@ class MockLocus implements LocusInterface {
     _httpController.close();
     _heartbeatController.close();
     _enabledChangeController.close();
+    _powerSaveController.close();
+    _powerStateController.close();
     _tripEventController.close();
+    _workflowController.close();
+    _eventsController.close();
+    _errorController.close();
   }
 }
 

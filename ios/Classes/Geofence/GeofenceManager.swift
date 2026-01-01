@@ -4,6 +4,7 @@ import CoreLocation
 protocol GeofenceManagerDelegate: AnyObject {
     func onGeofencesChange(added: [String], removed: [String])
     func onGeofenceEvent(identifier: String, action: String)
+    func onGeofenceError(identifier: String, error: String)
 }
 
 class GeofenceManager: NSObject, CLLocationManagerDelegate {
@@ -117,4 +118,43 @@ class GeofenceManager: NSObject, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
         delegate?.onGeofenceEvent(identifier: region.identifier, action: "exit")
     }
+    
+    func locationManager(_ manager: CLLocationManager, didStartMonitoringFor region: CLRegion) {
+        // Successfully started monitoring
+    }
+    
+    func locationManager(_ manager: CLLocationManager, monitoringDidFailFor region: CLRegion?, withError error: Error) {
+        // Handle monitoring failure
+        let identifier = region?.identifier ?? "unknown"
+        let errorMessage = error.localizedDescription
+        
+        
+        // Remove the failed geofence from storage to prevent retrying
+        if let id = region?.identifier {
+            var stored = storage.readGeofences()
+            stored.removeAll { ($0["identifier"] as? String) == id }
+            storage.writeGeofences(stored)
+            delegate?.onGeofencesChange(added: [], removed: [id])
+        }
+        
+        // Emit error through delegate for Dart layer awareness
+        delegate?.onGeofenceError(identifier: identifier, error: errorMessage)
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didDetermineState state: CLRegionState, for region: CLRegion) {
+        // Initial state determination when monitoring starts
+        switch state {
+        case .inside:
+            delegate?.onGeofenceEvent(identifier: region.identifier, action: "dwell")
+        case .outside:
+            // Already outside, no event needed
+            break
+        case .unknown:
+            // State unknown, no event needed
+            break
+        @unknown default:
+            break
+        }
+    }
 }
+

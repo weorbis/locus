@@ -355,6 +355,121 @@ class ConfigValidator {
       ));
     }
 
+    // Validate HTTP method if provided
+    if (config.method != null) {
+      final validMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+      final method = config.method!.toUpperCase();
+      if (!validMethods.contains(method)) {
+        errors.add(ConfigValidationError(
+          field: 'method',
+          message: 'Invalid HTTP method: ${config.method}',
+          suggestion: 'Use one of: ${validMethods.join(", ")}',
+          example: 'Config(method: "POST")',
+        ));
+      }
+    }
+
+    // Note: desiredAccuracy is already type-safe as DesiredAccuracy enum
+    // No runtime validation needed - compiler ensures valid values
+
+    // Note: triggerActivities is List<ActivityType>? - already type-safe
+    // Compiler ensures only valid ActivityType values can be added
+
+    // Validate batchSync with autoSync
+    if (config.batchSync == true && config.autoSync != true) {
+      warnings.add(const ConfigValidationWarning(
+        field: 'batchSync',
+        message: 'batchSync=true has no effect when autoSync is disabled',
+        suggestion: 'Set autoSync: true to enable automatic syncing',
+      ));
+    }
+
+    // Validate iOS-specific geofence limits
+    if (config.maxMonitoredGeofences != null &&
+        config.maxMonitoredGeofences! > 20) {
+      warnings.add(const ConfigValidationWarning(
+        field: 'maxMonitoredGeofences',
+        message: 'iOS has a limit of 20 monitored geofences',
+        suggestion:
+            'Consider using 20 or fewer for cross-platform compatibility',
+      ));
+    }
+
+    // Validate speedJumpFilter
+    if (config.speedJumpFilter != null && config.speedJumpFilter! < 0) {
+      errors.add(const ConfigValidationError(
+        field: 'speedJumpFilter',
+        message: 'speedJumpFilter cannot be negative',
+        suggestion: 'Use a positive value in m/s',
+        example: 'Config(speedJumpFilter: 100)',
+      ));
+    }
+
+    // Validate URL if autoSync is enabled
+    if (config.autoSync == true &&
+        (config.url == null || config.url!.isEmpty)) {
+      warnings.add(const ConfigValidationWarning(
+        field: 'url',
+        message: 'autoSync is enabled but no URL is configured',
+        suggestion: 'Set a url for sync destination or disable autoSync',
+      ));
+    }
+
+    // Validate httpTimeout
+    if (config.httpTimeout != null && config.httpTimeout! < 0) {
+      errors.add(const ConfigValidationError(
+        field: 'httpTimeout',
+        message: 'httpTimeout cannot be negative',
+        suggestion: 'Use a positive value in milliseconds',
+        example: 'Config(httpTimeout: 30000)',
+      ));
+    }
+
+    // Validate locationTimeout
+    if (config.locationTimeout != null && config.locationTimeout! < 0) {
+      errors.add(const ConfigValidationError(
+        field: 'locationTimeout',
+        message: 'locationTimeout cannot be negative',
+        suggestion: 'Use a positive value in seconds',
+        example: 'Config(locationTimeout: 30)',
+      ));
+    }
+
+    // Warn about extras without httpRootProperty
+    if (config.extras != null &&
+        config.extras!.isNotEmpty &&
+        (config.httpRootProperty == null || config.httpRootProperty!.isEmpty)) {
+      warnings.add(const ConfigValidationWarning(
+        field: 'extras',
+        message:
+            'extras is configured without httpRootProperty. Locations will be under "locations" key.',
+        suggestion:
+            'Set httpRootProperty to customize the key (e.g., httpRootProperty: "polygons")',
+      ));
+    }
+
+    // Warn about autoSync without batchSync
+    if (config.autoSync == true && config.batchSync != true) {
+      warnings.add(const ConfigValidationWarning(
+        field: 'autoSync',
+        message:
+            'autoSync=true with batchSync=false causes immediate HTTP request per location',
+        suggestion:
+            'Consider batchSync: true with autoSyncThreshold for efficiency',
+      ));
+    }
+
+    // Warn about enableHeadless without stopOnTerminate false
+    if (config.enableHeadless == true && config.stopOnTerminate != false) {
+      warnings.add(const ConfigValidationWarning(
+        field: 'enableHeadless',
+        message:
+            'enableHeadless=true typically requires stopOnTerminate: false',
+        suggestion:
+            'Set stopOnTerminate: false if you want background tracking to persist',
+      ));
+    }
+
     // Return result
     if (errors.isEmpty) {
       return ConfigValidationResult.success(warnings: warnings);

@@ -33,6 +33,9 @@ class Location {
     this.extras,
   });
 
+  /// Whether this location has valid coordinates.
+  bool get hasValidCoords => coords.isValid && !coords.isNullIsland;
+
   JsonMap toMap() => {
         'uuid': uuid,
         'timestamp': timestamp.toIso8601String(),
@@ -54,6 +57,23 @@ class Location {
     final batteryMap = map['battery'];
     final geofenceMap = map['geofence'];
 
+    // Use non-strict mode for backward compatibility with existing data
+    // but still get range validation
+    Coords coords;
+    try {
+      coords = Coords.fromMap(
+        coordsMap is Map ? Map<String, dynamic>.from(coordsMap) : const {},
+        strict: false, // Don't throw on missing data for backward compat
+      );
+    } on InvalidCoordsException {
+      // If range validation fails, use default invalid coords
+      coords = const Coords(
+        latitude: 0.0,
+        longitude: 0.0,
+        accuracy: -1, // Mark as invalid with negative accuracy
+      );
+    }
+
     return Location(
       uuid: map['uuid'] as String? ?? '',
       timestamp: map['timestamp'] != null
@@ -63,9 +83,7 @@ class Location {
       event: map['event'] as String?,
       isMoving: map['is_moving'] as bool?,
       isHeartbeat: map['is_heartbeat'] as bool?,
-      coords: Coords.fromMap(
-        coordsMap is Map ? Map<String, dynamic>.from(coordsMap) : const {},
-      ),
+      coords: coords,
       activity: activityMap is Map
           ? Activity.fromMap(Map<String, dynamic>.from(activityMap))
           : null,
@@ -81,4 +99,17 @@ class Location {
           : null,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Location &&
+          runtimeType == other.runtimeType &&
+          uuid == other.uuid;
+
+  @override
+  int get hashCode => uuid.hashCode;
+
+  @override
+  String toString() => 'Location(uuid: $uuid, coords: $coords, event: $event)';
 }

@@ -226,7 +226,7 @@ void main() {
 
       test('emitActivityChange broadcasts event', () async {
         final events = <Activity>[];
-        mock.activityChangeStream.listen(events.add);
+        mock.activityStream.listen(events.add);
 
         mock.emitActivityChange(
           MockActivityExtension.mock(type: ActivityType.walking),
@@ -239,7 +239,7 @@ void main() {
 
       test('emitEnabledChange broadcasts event', () async {
         final events = <bool>[];
-        mock.enabledChangeStream.listen(events.add);
+        mock.enabledStream.listen(events.add);
 
         mock.emitEnabledChange(true);
         mock.emitEnabledChange(false);

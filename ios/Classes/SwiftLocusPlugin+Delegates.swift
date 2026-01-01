@@ -23,6 +23,10 @@ extension SwiftLocusPlugin {
     sendEvent(event)
   }
 
+  public func onSyncEvent(_ event: [String: Any]) {
+    sendEvent(event)
+  }
+
   public func onLog(level: String, message: String) {
     appendLog(message, level: level)
   }
@@ -77,6 +81,18 @@ extension SwiftLocusPlugin {
       "data": payload
     ]
     sendEvent(event)
+  }
+
+  public func onGeofenceError(identifier: String, error: String) {
+    let event: [String: Any] = [
+      "type": "geofenceerror",
+      "data": [
+        "identifier": identifier,
+        "error": error
+      ]
+    ]
+    sendEvent(event)
+    appendLog("Geofence error for '\(identifier)': \(error)", level: "error")
   }
 
   // MARK: - LocationClientDelegate

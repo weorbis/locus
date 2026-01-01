@@ -51,12 +51,16 @@ class TrackingProfileManager {
   TrackingProfile? _current;
   StreamSubscription<GeolocationEvent<dynamic>>? _subscription;
   DateTime? _lastSwitchAt;
+  bool _isDisposed = false;
 
   final _profileChangeController =
       StreamController<ProfileChangeEvent>.broadcast();
   final _errorController = StreamController<ProfileSwitchError>.broadcast();
 
   TrackingProfile? get currentProfile => _current;
+
+  /// Whether this manager has been disposed.
+  bool get isDisposed => _isDisposed;
 
   /// Stream of profile change events.
   Stream<ProfileChangeEvent> get profileChanges =>
@@ -78,6 +82,12 @@ class TrackingProfileManager {
   }
 
   Future<void> setProfile(TrackingProfile profile, {String? reason}) async {
+    if (_isDisposed) {
+      debugPrint(
+          'TrackingProfileManager: Cannot set profile, manager is disposed');
+      return;
+    }
+
     final config = _profiles[profile];
     if (config == null) {
       return;
@@ -87,15 +97,18 @@ class TrackingProfileManager {
     _current = profile;
     _lastSwitchAt = DateTime.now();
 
-    // Emit profile change event
-    _profileChangeController.add(ProfileChangeEvent(
-      previousProfile: previousProfile,
-      newProfile: profile,
-      reason: reason,
-    ));
+    // Emit profile change event (check disposed again after await)
+    if (!_isDisposed) {
+      _profileChangeController.add(ProfileChangeEvent(
+        previousProfile: previousProfile,
+        newProfile: profile,
+        reason: reason,
+      ));
+    }
   }
 
   void startAutomation() {
+    if (_isDisposed) return;
     _subscription?.cancel();
     _subscription = _events.listen(_handleEvent);
   }
@@ -105,14 +118,18 @@ class TrackingProfileManager {
     _subscription = null;
   }
 
+  /// Disposes of this manager and releases all resources.
+  /// After calling dispose, this manager should not be used.
   void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
     stopAutomation();
     _profileChangeController.close();
     _errorController.close();
   }
 
   void _handleEvent(GeolocationEvent<dynamic> event) {
-    if (_rules.isEmpty) {
+    if (_isDisposed || _rules.isEmpty) {
       return;
     }
     switch (event.type) {
@@ -236,6 +253,7 @@ class TrackingProfileManager {
   }
 
   void _applyRule(TrackingProfileRule rule) {
+    if (_isDisposed) return;
     if (_current == rule.profile) {
       return;
     }
@@ -247,12 +265,14 @@ class TrackingProfileManager {
       reason: 'Automation: ${rule.type.name}',
     ).catchError((Object e, StackTrace stack) {
       debugPrint('TrackingProfileManager: Failed to switch profile: $e');
-      // Emit error to stream for observability
-      _errorController.add(ProfileSwitchError(
-        targetProfile: rule.profile,
-        error: e,
-        stackTrace: stack,
-      ));
+      // Emit error to stream for observability (if not disposed)
+      if (!_isDisposed) {
+        _errorController.add(ProfileSwitchError(
+          targetProfile: rule.profile,
+          error: e,
+          stackTrace: stack,
+        ));
+      }
     });
   }
 

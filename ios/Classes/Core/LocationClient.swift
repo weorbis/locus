@@ -57,7 +57,27 @@ class LocationClient: NSObject, CLLocationManagerDelegate {
     }
     
     func requestPermissions() {
-        // This is usually handled by UI/Flutter call, but good to have helper
+        let status = getAuthorizationStatus()
+        
+        switch status {
+        case .notDetermined:
+            // First, request "when in use" permission
+            locationManager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse:
+            // Already have when in use, request "always" for background
+            locationManager.requestAlwaysAuthorization()
+        default:
+            // Permission already granted or denied
+            break
+        }
+    }
+    
+    func requestAlwaysAuthorization() {
+        locationManager.requestAlwaysAuthorization()
+    }
+    
+    func requestWhenInUseAuthorization() {
+        locationManager.requestWhenInUseAuthorization()
     }
     
     func getAuthorizationStatus() -> CLAuthorizationStatus {

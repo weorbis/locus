@@ -62,7 +62,6 @@ public class LocationClient {
             return;
         }
         
-        // Ensure not already running to avoid duplicates
         stop(); 
         
         locationRequest = buildLocationRequest(config.desiredAccuracy, config.stationaryRadius); // Default to stationary
@@ -94,13 +93,9 @@ public class LocationClient {
             return;
         }
         float minDistance = isMoving ? config.distanceFilter : config.stationaryRadius;
-        // Don't restart if parameters haven't changed effectively? 
-        // For simplicity, we just rebuild and re-request.
-        // Google Play Services handles re-request gracefully.
         
         LocationRequest newRequest = buildLocationRequest(config.desiredAccuracy, minDistance);
         
-        // Remove old and add new - simple way to update
         fusedLocationClient.removeLocationUpdates(locationCallback);
         fusedLocationClient.requestLocationUpdates(newRequest, locationCallback, Looper.getMainLooper());
         
@@ -114,7 +109,6 @@ public class LocationClient {
             return;
         }
         
-        // Using current priority
         CancellationTokenSource cancellationToken = new CancellationTokenSource();
         fusedLocationClient.getCurrentLocation(currentPriority, cancellationToken.getToken())
                 .addOnSuccessListener(location -> {

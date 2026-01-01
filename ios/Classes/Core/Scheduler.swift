@@ -13,7 +13,11 @@ class Scheduler {
     private var scheduleTimer: Timer?
     
     func start() {
-        guard config.scheduleEnabled, scheduleTimer == nil else { return }
+        guard config.scheduleEnabled else {
+            // Schedule not enabled - this is normal, no need to log
+            return
+        }
+        guard scheduleTimer == nil else { return }
         
         scheduleTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.applyScheduleState()

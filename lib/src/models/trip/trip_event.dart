@@ -8,6 +8,7 @@ enum TripEventType {
   tripEnd,
   dwell,
   routeDeviation,
+  diagnostic,
 }
 
 class TripEvent {
@@ -18,6 +19,8 @@ class TripEvent {
   final TripSummary? summary;
   final double? distanceFromRouteMeters;
   final bool? isMoving;
+  final String? message;
+  final JsonMap? data;
 
   const TripEvent({
     required this.type,
@@ -27,7 +30,24 @@ class TripEvent {
     this.summary,
     this.distanceFromRouteMeters,
     this.isMoving,
+    this.message,
+    this.data,
   });
+
+  /// Creates a diagnostic event for internal trip engine issues.
+  factory TripEvent.diagnostic({
+    required String tripId,
+    required String message,
+    JsonMap? data,
+  }) {
+    return TripEvent(
+      type: TripEventType.diagnostic,
+      tripId: tripId,
+      timestamp: DateTime.now().toUtc(),
+      message: message,
+      data: data,
+    );
+  }
 
   JsonMap toMap() => {
         'type': type.name,
@@ -38,5 +58,7 @@ class TripEvent {
         if (distanceFromRouteMeters != null)
           'distanceFromRouteMeters': distanceFromRouteMeters,
         if (isMoving != null) 'isMoving': isMoving,
+        if (message != null) 'message': message,
+        if (data != null) 'data': data,
       };
 }

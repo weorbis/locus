@@ -4,6 +4,7 @@
 /// attempts using multiple detection vectors.
 library;
 
+import 'package:locus/src/config/constants.dart';
 import 'package:locus/src/models/models.dart';
 import 'package:locus/src/utils/location_utils.dart';
 
@@ -79,9 +80,9 @@ class SpoofDetectionConfig {
     this.enabled = true,
     this.blockMockLocations = false,
     this.sensitivity = SpoofSensitivity.balanced,
-    this.maxPossibleSpeedKph = 1200, // Commercial jet speed
-    this.maxAltitudeChangePerSecond = 100, // ~360 km/h vertical
-    this.minFactorsForDetection = 2,
+    this.maxPossibleSpeedKph = kMaxPossibleSpeedKph,
+    this.maxAltitudeChangePerSecond = kMaxAltitudeChangePerSecondMeters,
+    this.minFactorsForDetection = kDefaultMinSpoofFactors,
     this.onSpoofDetected,
     this.checkMockProvider = true,
     this.checkDeveloperOptions = false,

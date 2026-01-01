@@ -42,4 +42,7 @@ class GeofenceEvent {
           : null,
     );
   }
+
+  @override
+  String toString() => 'GeofenceEvent(${action.name}: ${geofence.identifier})';
 }

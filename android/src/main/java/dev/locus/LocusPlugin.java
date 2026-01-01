@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.location.Location;
 import android.os.Build;
+import android.os.PowerManager;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -362,13 +363,13 @@ public class LocusPlugin implements FlutterPlugin,
                                 .apply();
                         result.success(true);
                     } else {
-                        result.success(false);
+                        result.error("INVALID_ARGUMENT", "Expected dispatcher and callback handles", null);
                     }
                 } else if (call.arguments instanceof Number) {
                     prefs.edit().putLong("bg_headless_callback", ((Number) call.arguments).longValue()).apply();
                     result.success(true);
                 } else {
-                    result.success(false);
+                    result.error("INVALID_ARGUMENT", "Expected headless callback handle", null);
                 }
                 break;
             case "startGeofences":
@@ -387,7 +388,12 @@ public class LocusPlugin implements FlutterPlugin,
                 result.success(true);
                 break;
             case "sync":
+                syncManager.resumeSync();
                 locationTracker.syncNow();
+                result.success(true);
+                break;
+            case "resumeSync":
+                syncManager.resumeSync();
                 result.success(true);
                 break;
             case "startBackgroundTask":
@@ -400,7 +406,7 @@ public class LocusPlugin implements FlutterPlugin,
                 result.success(true);
                 break;
             case "getLog":
-                result.success(stateManager.readLog());
+                result.success(stateManager.readLogEntries(0));
                 break;
             case "emailLog":
             case "playSound":
@@ -414,6 +420,9 @@ public class LocusPlugin implements FlutterPlugin,
                 break;
             case "getNetworkType":
                 result.success(getNetworkType());
+                break;
+            case "isIgnoringBatteryOptimizations":
+                result.success(isIgnoringBatteryOptimizations());
                 break;
             case "setSpoofDetection":
                 // Spoof detection is handled on Dart side, just acknowledge
@@ -489,7 +498,21 @@ public class LocusPlugin implements FlutterPlugin,
             JSONObject json = new JSONObject(configJson);
             locationTracker.applyConfig(toMap(json));
         } catch (JSONException e) {
-            Log.w(TAG, "Failed to restore config: " + e.getMessage());
+            Log.e(TAG, "Failed to restore config - clearing corrupted data: " + e.getMessage());
+            
+            // Clear the corrupted config to prevent repeated failures
+            prefs.edit().remove("bg_last_config").apply();
+            
+            // Emit error event to Dart layer for visibility
+            Map<String, Object> errorData = new HashMap<>();
+            errorData.put("type", "configError");
+            errorData.put("message", "Failed to restore stored config: " + e.getMessage());
+            errorData.put("action", "cleared");
+            
+            Map<String, Object> event = new HashMap<>();
+            event.put("type", "error");
+            event.put("data", errorData);
+            eventDispatcher.sendEvent(event);
         }
     }
 
@@ -542,6 +565,17 @@ public class LocusPlugin implements FlutterPlugin,
                 == android.content.pm.PackageManager.PERMISSION_GRANTED;
     }
 
+    private boolean isIgnoringBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return true;
+        }
+        PowerManager powerManager = (PowerManager) androidContext.getSystemService(Context.POWER_SERVICE);
+        if (powerManager == null) {
+            return false;
+        }
+        return powerManager.isIgnoringBatteryOptimizations(androidContext.getPackageName());
+    }
+
     private Map<String, Object> buildBatteryStats() {
         Map<String, Object> stats = new HashMap<>();
         android.content.Intent batteryStatus = androidContext.registerReceiver(null,
@@ -550,12 +584,21 @@ public class LocusPlugin implements FlutterPlugin,
             int level = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1);
             int scale = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1);
             double batteryLevel = level >= 0 && scale > 0 ? (level / (double) scale) * 100.0 : -1;
-            stats.put("batteryLevel", (int) batteryLevel);
+            stats.put("currentBatteryLevel", (int) batteryLevel);
             stats.put("isCharging", batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
                     == android.os.BatteryManager.BATTERY_STATUS_CHARGING);
         }
-        stats.put("estimatedDrainPerHour", 0.0); // Would require tracking over time
-        stats.put("locationCount", 0);
+        stats.put("gpsOnTimePercent", 0.0);
+        stats.put("locationUpdatesCount", 0);
+        stats.put("syncRequestsCount", 0);
+        stats.put("averageAccuracyMeters", 0.0);
+        stats.put("trackingDurationMinutes", 0);
+        stats.put("estimatedDrainPercent", 0.0);
+        stats.put("estimatedDrainPerHour", 0.0);
+        stats.put("optimizationLevel", "none");
+        stats.put("timeByState", new HashMap<String, Object>());
+        stats.put("accuracyDowngradeCount", 0);
+        stats.put("gpsDisabledCount", 0);
         return stats;
     }
 

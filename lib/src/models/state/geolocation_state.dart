@@ -61,4 +61,9 @@ class GeolocationState {
       extras: extrasData is Map ? Map<String, dynamic>.from(extrasData) : null,
     );
   }
+
+  @override
+  String toString() =>
+      'GeolocationState(enabled: $enabled, isMoving: $isMoving, '
+      'odometer: ${odometer?.toStringAsFixed(0) ?? "null"}m)';
 }

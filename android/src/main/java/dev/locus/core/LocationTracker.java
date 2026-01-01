@@ -131,6 +131,9 @@ public class LocationTracker {
         if (configMap == null) {
             return;
         }
+        
+        int previousHeartbeatInterval = config.heartbeatIntervalSeconds;
+        
         config.applyConfig(configMap);
 
         if (configMap.containsKey("maxMonitoredGeofences")) {
@@ -144,6 +147,11 @@ public class LocationTracker {
                 motionManager.start();
             }
             locationClient.updateRequest(motionManager.isMoving());
+            
+            if (configMap.containsKey("heartbeatInterval") && 
+                previousHeartbeatInterval != config.heartbeatIntervalSeconds) {
+                restartHeartbeat();
+            }
         }
     }
 
@@ -226,6 +234,15 @@ public class LocationTracker {
             mainHandler.removeCallbacks(heartbeatRunnable);
             heartbeatRunnable = null;
         }
+    }
+
+    /**
+     * Restarts the heartbeat with the current configuration.
+     * Call when heartbeat interval changes dynamically.
+     */
+    public void restartHeartbeat() {
+        stopHeartbeat();
+        startHeartbeat();
     }
 
     public Map<String, Object> buildLocationPayload(Location location, String eventName) {

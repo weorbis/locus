@@ -50,7 +50,7 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
   HttpEvent? _lastHttp;
   GeolocationState? _lastState;
   String? _lastNotificationAction;
-  String? _lastLog;
+  List<LogEntry>? _lastLog;
   TripSummary? _lastTripSummary;
 
   PowerState? _powerState;
@@ -526,7 +526,6 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
                 Tab(text: 'Overview', icon: Icon(Icons.route)),
                 Tab(text: 'Events', icon: Icon(Icons.timeline)),
                 Tab(text: 'Storage', icon: Icon(Icons.storage)),
-                Tab(text: 'Storage', icon: Icon(Icons.storage)),
                 Tab(text: 'Diagnostics', icon: Icon(Icons.tune)),
                 Tab(text: 'Advanced', icon: Icon(Icons.science)),
               ],
@@ -547,7 +546,6 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
               children: [
                 _buildOverviewTab(),
                 _buildEventsTab(),
-                _buildStorageTab(),
                 _buildStorageTab(),
                 _buildDiagnosticsTab(),
                 _buildAdvancedTab(),
@@ -1037,7 +1035,9 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  _lastLog!,
+                  _lastLog!.isEmpty
+                      ? 'No logs yet.'
+                      : _formatLogEntries(_lastLog!),
                   maxLines: 12,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1270,5 +1270,17 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
     final minutes = time.minute.toString().padLeft(2, '0');
     final seconds = time.second.toString().padLeft(2, '0');
     return '$hours:$minutes:$seconds';
+  }
+
+  String _formatLogEntries(List<LogEntry> entries) {
+    return entries
+        .take(12)
+        .map((entry) {
+          final timestamp = _formatTimestamp(entry.timestamp.toLocal());
+          final tag = entry.tag;
+          final level = tag == null ? entry.level : '${entry.level}/$tag';
+          return '[$timestamp] $level ${entry.message}';
+        })
+        .join('\n');
   }
 }

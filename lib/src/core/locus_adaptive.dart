@@ -2,8 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:locus/src/battery/battery.dart';
 import 'package:locus/src/config/config.dart';
-import 'package:locus/src/events/events.dart'; // Added import
-// import 'package:locus/src/models/models.dart'; // Unused
+import 'package:locus/src/events/events.dart';
 import 'locus_config.dart';
 import 'locus_lifecycle.dart';
 import 'locus_streams.dart';
@@ -61,8 +60,21 @@ class LocusAdaptive {
     _lastKnownMovingState = true;
   }
 
+  /// Evaluates current conditions and updates tracking settings if needed.
+  ///
+  /// This method:
+  /// 1. Checks if adaptive tracking is enabled
+  /// 2. Prevents re-entrancy during evaluation
+  /// 3. Calculates optimal settings based on speed, battery, location, etc.
+  /// 4. Applies settings only if they differ from current (debouncing)
+  /// 5. Updates the native config via [LocusConfig.setConfig]
+  ///
+  /// Called automatically on location/activity/motion events.
   static Future<void> evaluateAdaptiveSettings() async {
-    if (_adaptiveConfig == null || !_adaptiveConfig!.enabled) return;
+    if (_adaptiveConfig == null || !_adaptiveConfig!.enabled) {
+      // Only log once, not on every evaluation attempt
+      return;
+    }
     if (_isEvaluatingAdaptiveSettings) return;
 
     _isEvaluatingAdaptiveSettings = true;
@@ -91,7 +103,10 @@ class LocusAdaptive {
         heartbeatInterval: settings.heartbeatInterval,
       ));
     } catch (e) {
-      debugPrint('[Locus] Adaptive tracking error: $e');
+      // Only log for unexpected errors, not MissingPluginException in tests
+      if (!e.toString().contains('MissingPluginException')) {
+        debugPrint('[Locus] Adaptive tracking error: $e');
+      }
     } finally {
       _isEvaluatingAdaptiveSettings = false;
     }

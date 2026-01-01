@@ -2,12 +2,14 @@ package dev.locus.service;
 
 import android.content.Intent;
 import android.content.Context;
+import android.content.pm.ServiceInfo;
 import android.app.Service;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.os.IBinder;
 import android.os.Bundle;
+import android.os.Build;
 import android.annotation.TargetApi;
 import android.util.Log;
 import android.app.PendingIntent;
@@ -99,7 +101,16 @@ public class ForegroundService extends Service {
         int id = extras.getInt("id", 197812504);
 
         // Put service in foreground and show notification
-        startForeground(id, notification);
+        // Android 14 (API 34) requires specifying the foreground service type
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Android 10+ supports foreground service types
+            startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+        } else {
+            // Fallback for older Android versions
+            startForeground(id, notification);
+        }
     }
 
     @Override
@@ -107,3 +118,4 @@ public class ForegroundService extends Service {
         return null;
     }
 }
+

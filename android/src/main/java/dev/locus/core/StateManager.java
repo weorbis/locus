@@ -103,8 +103,8 @@ public class StateManager {
         logStore.append(level, message, maxDays);
     }
 
-    public String readLog() {
-        return logStore.read();
+    public List<Map<String, Object>> readLogEntries(int limit) {
+        return logStore.readEntries(limit);
     }
 
     public void storeTripState(Map<String, Object> tripState) {

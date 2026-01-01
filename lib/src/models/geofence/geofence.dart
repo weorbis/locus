@@ -85,4 +85,8 @@ class Geofence {
       extras: extrasData is Map ? Map<String, dynamic>.from(extrasData) : null,
     );
   }
+
+  @override
+  String toString() =>
+      'Geofence($identifier, lat: $latitude, lng: $longitude, radius: ${radius}m)';
 }

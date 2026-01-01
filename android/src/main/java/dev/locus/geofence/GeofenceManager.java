@@ -125,7 +125,7 @@ public class GeofenceManager {
 
     public void removeGeofence(Object identifier, MethodChannel.Result result) {
         if (!(identifier instanceof String)) {
-            result.success(false);
+            result.error("INVALID_ARGUMENT", "Expected geofence identifier string", null);
             return;
         }
         List<String> ids = new ArrayList<>();
@@ -194,7 +194,7 @@ public class GeofenceManager {
 
     public void geofenceExists(Object identifier, MethodChannel.Result result) {
         if (!(identifier instanceof String)) {
-            result.success(false);
+            result.error("INVALID_ARGUMENT", "Expected geofence identifier string", null);
             return;
         }
         JSONArray array = readGeofenceStore();

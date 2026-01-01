@@ -36,6 +36,7 @@ public class SyncManager {
     private final ExecutorService executor;
     private final SyncListener listener;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private volatile boolean isSyncPaused = false;
 
     public interface SyncListener {
         void onHttpEvent(Map<String, Object> eventData);
@@ -57,6 +58,11 @@ public class SyncManager {
 
     public void syncNow(Map<String, Object> currentPayload) {
         if (config.httpUrl == null || config.httpUrl.isEmpty()) {
+            log("debug", "syncNow skipped: No URL configured. Set Config.url to enable sync.");
+            return;
+        }
+        if (isSyncPaused) {
+            log("debug", "syncNow skipped: Sync is paused (401 received). Call resumeSync() after token refresh.");
             return;
         }
         if (config.batchSync) {
@@ -67,8 +73,17 @@ public class SyncManager {
             enqueueHttp(currentPayload, null, 0);
         }
     }
+
+    public void resumeSync() {
+        isSyncPaused = false;
+        syncStoredLocations(config.maxBatchSize);
+        syncQueue(0);
+    }
     
     public void attemptBatchSync() {
+        if (isSyncPaused) {
+            return;
+        }
         int threshold = config.autoSyncThreshold > 0 ? config.autoSyncThreshold : config.maxBatchSize;
         if (threshold <= 0) {
             threshold = config.maxBatchSize;
@@ -98,6 +113,9 @@ public class SyncManager {
     }
 
     public void syncStoredLocations(int limit) {
+        if (isSyncPaused) {
+            return;
+        }
         if (limit <= 0) {
             limit = config.maxBatchSize;
         }
@@ -124,6 +142,9 @@ public class SyncManager {
     
     public int syncQueue(int limit) {
         if (config.httpUrl == null || config.httpUrl.isEmpty()) {
+            return 0;
+        }
+        if (isSyncPaused) {
             return 0;
         }
         int fetchLimit = limit > 0 ? limit : config.maxBatchSize;
@@ -158,6 +179,9 @@ public class SyncManager {
     }
 
     public void enqueueHttp(Map<String, Object> locationPayload, List<String> idsToDelete, int attempt) {
+        if (isSyncPaused) {
+            return;
+        }
         executor.execute(() -> {
             try {
                 JSONObject body = buildHttpBody(locationPayload, null);
@@ -206,6 +230,11 @@ public class SyncManager {
                 httpEvent.put("data", data);
                 if (listener != null) listener.onHttpEvent(httpEvent);
                 log("info", "http " + status);
+                if (status == 401) {
+                    isSyncPaused = true;
+                    log("error", "http 401 - sync paused");
+                    return;
+                }
                 if (!ok) {
                     scheduleHttpRetry(locationPayload, idsToDelete, attempt + 1);
                 }
@@ -226,6 +255,9 @@ public class SyncManager {
     }
 
     private void enqueueHttpBatch(List<Map<String, Object>> payloads, List<String> idsToDelete, int attempt) {
+        if (isSyncPaused) {
+            return;
+        }
         executor.execute(() -> {
             try {
                 JSONObject body = buildHttpBody(null, payloads);
@@ -274,6 +306,11 @@ public class SyncManager {
                 httpEvent.put("data", data);
                 if (listener != null) listener.onHttpEvent(httpEvent);
                 log("info", "http " + status);
+                if (status == 401) {
+                    isSyncPaused = true;
+                    log("error", "http 401 - sync paused");
+                    return;
+                }
                 if (!ok) {
                     scheduleBatchRetry(payloads, idsToDelete, attempt + 1);
                 }
@@ -294,6 +331,9 @@ public class SyncManager {
     }
 
     private void enqueueQueueHttp(Map<String, Object> payload, String id, String type, String idempotencyKey, int attempt) {
+        if (isSyncPaused) {
+            return;
+        }
         executor.execute(() -> {
             try {
                 JSONObject body = buildQueueBody(payload, id, type, idempotencyKey);
@@ -347,6 +387,11 @@ public class SyncManager {
                 httpEvent.put("data", data);
                 if (listener != null) listener.onHttpEvent(httpEvent);
                 log("info", "http " + status);
+                if (status == 401) {
+                    isSyncPaused = true;
+                    log("error", "http 401 - sync paused");
+                    return;
+                }
                 if (!ok) {
                     scheduleQueueRetry(payload, id, type, idempotencyKey, attempt + 1);
                 }
@@ -368,6 +413,15 @@ public class SyncManager {
 
     private JSONObject buildHttpBody(Map<String, Object> locationPayload, List<Map<String, Object>> locations) throws JSONException {
         JSONObject body = new JSONObject();
+        
+        // Merge extras at top level first (these are user-defined envelope fields)
+        if (config.httpExtras != null) {
+            for (Map.Entry<String, Object> entry : config.httpExtras.entrySet()) {
+                body.put(entry.getKey(), entry.getValue());
+            }
+        }
+        
+        // Add locations under the specified root property
         if (locations != null) {
             JSONArray list = new JSONArray();
             for (Map<String, Object> payload : locations) {

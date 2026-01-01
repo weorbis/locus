@@ -203,7 +203,7 @@ void main() {
     test('getLog retrieves log entries', () async {
       final log = await Locus.getLog();
 
-      expect(log, isA<String>());
+      expect(log, isA<List<LogEntry>>());
     });
   });
 
@@ -388,6 +388,7 @@ dynamic _handleMethodCall(MethodCall call) {
     case 'removeGeofences':
     case 'setSpoofDetection':
     case 'setSyncPolicy':
+    case 'setAdaptiveTracking':
     case 'startSignificantChangeMonitoring':
     case 'stopSignificantChangeMonitoring':
       return null;
@@ -422,7 +423,13 @@ dynamic _handleMethodCall(MethodCall call) {
       return <Map<String, dynamic>>[];
 
     case 'getLog':
-      return 'Log entries...';
+      return [
+        {
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+          'level': 'info',
+          'message': 'Log entries...',
+        }
+      ];
 
     case 'getPowerState':
       return {
@@ -438,6 +445,10 @@ dynamic _handleMethodCall(MethodCall call) {
         'locationUpdatesCount': 100,
         'syncRequestsCount': 5,
         'trackingDurationMinutes': 60,
+        'currentBatteryLevel': 75,
+        'isCharging': false,
+        'estimatedDrainPercent': 5.0,
+        'estimatedDrainPerHour': 5.0,
       };
 
     case 'getNetworkType':

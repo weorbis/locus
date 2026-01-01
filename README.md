@@ -1,176 +1,51 @@
-# Locus Background Geolocation
+# Locus
 
-[![CI](https://github.com/koksalmehmet/locus/actions/workflows/ci.yml/badge.svg)](https://github.com/koksalmehmet/locus/actions/workflows/ci.yml)
-[![License: Locus Community](https://img.shields.io/badge/license-Locus%20Community-blue)](LICENSE)
+[![License: PolyForm Small Business](https://img.shields.io/badge/license-PolyForm%20Small%20Business-blue)](LICENSE)
 
-A Flutter background geolocation SDK for Android and iOS. This package provides continuous location tracking, motion/activity updates, geofencing, schedule-based tracking, and HTTP auto-sync so you can build apps with background location features without a paid license.
-
----
+A background geolocation SDK for Flutter providing persistent tracking, motion activity recognition, geofencing, and automated data synchronization for Android and iOS.
 
 ## Features
 
-- Continuous location tracking with motion state changes.
-- Activity recognition updates (walking, running, in-vehicle, etc.).
-- Geofencing with enter/exit events and stored geofence management.
-- Configurable accuracy, distance filters, and update intervals.
-- Optional HTTP auto-sync with custom headers and params.
-- Batch sync with persisted locations when enabled.
-- Configurable HTTP retries with exponential backoff.
-- Odometer tracking and basic log capture.
-- Foreground service notification controls on Android.
-- Connectivity, power-save, enabled-change, and geofences-change events.
-- Heartbeat events (interval-based) and schedule windows (HH:mm-HH:mm).
-- Headless execution with start-on-boot (Android) and background relaunch handling.
-- Motion tuning: stationary radius and motion trigger/stop timeouts.
-- Log levels with basic retention (`logMaxDays`).
-- Activity filters (`triggerActivities`), and state diagnostics via `getState()`.
-- Config presets for common tracking profiles.
-- Location anomaly detection helpers for implausible jumps.
-- Offline-first queue for custom payload sync with idempotency.
-- Trip lifecycle events (start/update/end) with route deviation detection.
-- Adaptive tracking profiles for job states (off-duty/standby/en-route/arrived).
-- Geofence workflows with sequencing and cooldown enforcement.
-- Diagnostics snapshot and remote command helpers.
-- Location quality scoring with spoof-suspicion flags.
-- **Battery optimization** with adaptive tracking, sync policies, and power state monitoring.
-- **Speed-based GPS tuning** to reduce updates when stationary or walking.
-- **Network-aware sync policies** for WiFi, cellular, and metered connections.
-- **Battery benchmarking** for measuring power consumption during testing.
-- **Enhanced spoof detection** with multi-factor analysis and confidence scoring.
-- **Significant location changes** for ultra-low power monitoring (~500m movements).
-- **Error recovery API** with automatic retries, exponential backoff, and custom handlers.
-
----
+- **Continuous Tracking**: Reliable background location updates with configurable accuracy and distance filters.
+- **Motion Recognition**: Detects physical activities such as walking, running, driving, and stationary states.
+- **Native Geofencing**: High-performance entry, exit, and dwell event detection.
+- **Automated Sync**: Built-in HTTP synchronization with configurable retry logic and exponential backoff.
+- **Battery Optimization**: Adaptive tracking based on speed and battery level to minimize power consumption.
+- **Offline Reliability**: Persistent SQLite storage on iOS and local storage on Android to prevent data loss.
+- **Headless Execution**: Support for background events even when the application is terminated.
+- **Project Tooling**: CLI utilities for automated project setup and configuration diagnostics.
 
 ## Platform Support
 
 | Platform | Minimum Version      |
-| -------- | -------------------- |
+| :------- | :------------------- |
 | Android  | API 26 (Android 8.0) |
 | iOS      | iOS 14.0             |
 
----
-
 ## Installation
 
-Add this to your `pubspec.yaml`:
+Add `locus` to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  locus: ^1.0.0
+  locus: ^1.1.0
 ```
 
-Then run `flutter pub get`.
+### Automated Setup
 
-### Quick Setup with CLI
-
-After adding the package, run the setup wizard to automatically configure your Android and iOS project:
+Locus provides a CLI tool to automate the configuration of native permissions and project settings:
 
 ```bash
 dart run locus:setup
 ```
 
-To verify your configuration is correct:
+To verify your environment:
 
 ```bash
 dart run locus:doctor
 ```
 
-If issues are found, the doctor can auto-fix most of them:
-
-```bash
-dart run locus:doctor --fix
-```
-
----
-
-## CLI Tools
-
-Locus includes command-line tools to simplify project setup and debugging:
-
-### Setup Wizard
-
-```bash
-dart run locus:setup [options]
-
-Options:
-  --android-only       Only configure Android
-  --ios-only           Only configure iOS
-  --with-activity      Include activity recognition permissions
-  -h, --help           Show usage information
-```
-
-The setup wizard automatically:
-
-- Adds required permissions to `AndroidManifest.xml`
-- Configures `Info.plist` with location usage descriptions
-- Adds `UIBackgroundModes` for background location
-- Checks `minSdkVersion` and iOS deployment target
-
-### Doctor Command
-
-```bash
-dart run locus:doctor [options]
-
-Options:
-  --fix                Attempt to auto-fix any issues found
-  -h, --help           Show usage information
-```
-
-The doctor command checks:
-
-- All required Android permissions
-- Android `minSdkVersion >= 26`
-- iOS location usage description keys
-- iOS `UIBackgroundModes` contains `location`
-- iOS deployment target >= 14.0
-
----
-
-## Configuration
-
-### Android
-
-The plugin declares required permissions and components via manifest merging. For Android 10+ you must request runtime background location and activity recognition permissions.
-
-If you need to override or explicitly declare them, add to `android/app/src/main/AndroidManifest.xml`:
-
-```xml
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-<uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-```
-
-### iOS
-
-Add the following keys to `ios/Runner/Info.plist`:
-
-```xml
-<key>NSLocationWhenInUseUsageDescription</key>
-<string>This app needs location access to track your route.</string>
-<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-<string>This app needs background location access to track your route.</string>
-<key>NSMotionUsageDescription</key>
-<string>This app uses motion data to improve activity detection.</string>
-<key>UIBackgroundModes</key>
-<array>
-  <string>location</string>
-</array>
-<key>BGTaskSchedulerPermittedIdentifiers</key>
-<array>
-  <string>dev.locus.motionDetector.refresh</string>
-</array>
-```
-
-If you override `bgTaskId` in `Config`, make sure the same identifier is listed in `BGTaskSchedulerPermittedIdentifiers`.
-
----
-
-## Usage
+## Quick Start
 
 ### 1. Request Permissions
 
@@ -178,729 +53,204 @@ If you override `bgTaskId` in `Config`, make sure the same identifier is listed 
 import 'package:locus/locus.dart';
 
 final granted = await Locus.requestPermission();
-if (!granted) {
-  // Handle denied permissions.
-}
 ```
 
-### 2. Configure and Start Tracking
+### 2. Basic Configuration
+
+Initialize the SDK with your desired tracking parameters:
 
 ```dart
-final state = await Locus.ready(const Config(
-  desiredAccuracy: DesiredAccuracy.high,
-  distanceFilter: 25,
-  heartbeatInterval: 60,
-  activityRecognitionInterval: 10000,
-  stopTimeout: 5,
-  stationaryRadius: 25,
-  motionTriggerDelay: 15000,
-  enableHeadless: true,
-  startOnBoot: true,
-  stopOnTerminate: false,
-  autoSync: true,
-  disableAutoSyncOnCellular: true,
-  maxRetry: 3,
-  retryDelay: 5000,
-  retryDelayMultiplier: 2.0,
-  maxRetryDelay: 60000,
-  logLevel: LogLevel.info,
-  logMaxDays: 7,
-  url: 'https://example.com/locations',
+await Locus.ready(Config.balanced(
+  url: 'https://api.yourservice.com/locations',
   notification: NotificationConfig(
-    title: 'Tracking enabled',
-    text: 'Locus is tracking your location',
-    actions: ['PAUSE', 'STOP'],
+    title: 'Location Service',
+    text: 'Tracking is active',
   ),
 ));
 
-if (!state.enabled) {
-  await Locus.start();
-}
+await Locus.start();
 ```
 
-### 2a. Use Config Presets
+Or use a preset for quick setup:
 
 ```dart
-final config = ConfigPresets.tracking.copyWith(
-  url: 'https://example.com/locations',
-  notification: const NotificationConfig(
-    title: 'Tracking enabled',
-    text: 'Locus is tracking your location',
-  ),
-);
-await Locus.ready(config);
+// Fitness/High Accuracy
+await Locus.ready(Config.fitness());
+
+// Low Power/Passive
+await Locus.ready(Config.passive());
 ```
 
-### 3. Subscribe to Events
+````
+
+### 3. Handle Events
+
+Subscribe to location updates and platform events:
 
 ```dart
-final locationSub = Locus.onLocation((location) {
+Locus.onLocation((location) {
   print('Location: ${location.coords.latitude}, ${location.coords.longitude}');
 });
 
-final motionSub = Locus.onMotionChange((location) {
-  print('Motion change: ${location.isMoving}');
+Locus.onMotionChange((location) {
+  print('Is Moving: ${location.isMoving}');
 });
+````
 
-final providerSub = Locus.onProviderChange((event) {
-  print('Provider: ${event.authorizationStatus}');
-});
-```
-
-### 3a. Detect Location Anomalies
-
-```dart
-Locus.onLocationAnomaly((anomaly) {
-  print('Anomalous speed: ${anomaly.speedKph} kph');
-});
-```
-
-### 3b. Queue Custom Payloads
-
-```dart
-final id = await Locus.enqueue({
-  'event': 'tripstart',
-  'tripId': 'trip-123',
-});
-
-await Locus.syncQueue();
-```
-
-### 3c. Trip Lifecycle Events
-
-```dart
-await Locus.startTrip(TripConfig(
-  startOnMoving: true,
-  route: const [
-    RoutePoint(latitude: 37.42, longitude: -122.08),
-    RoutePoint(latitude: 37.43, longitude: -122.09),
-  ],
-));
-
-Locus.onTripEvent((event) {
-  print('Trip event: ${event.type}');
-});
-```
-
-### 3d. Adaptive Tracking Profiles
-
-```dart
-await Locus.setTrackingProfiles(
-  {
-    TrackingProfile.offDuty: ConfigPresets.lowPower,
-    TrackingProfile.standby: ConfigPresets.balanced,
-    TrackingProfile.enRoute: ConfigPresets.tracking,
-    TrackingProfile.arrived: ConfigPresets.trail,
-  },
-  initialProfile: TrackingProfile.standby,
-);
-
-await Locus.setTrackingProfile(TrackingProfile.enRoute);
-```
-
-### 3e. Geofence Workflows
-
-```dart
-Locus.registerGeofenceWorkflows(const [
-  GeofenceWorkflow(
-    id: 'pickup_dropoff',
-    steps: [
-      GeofenceWorkflowStep(
-        id: 'pickup',
-        geofenceIdentifier: 'pickup_zone',
-        action: GeofenceAction.enter,
-      ),
-      GeofenceWorkflowStep(
-        id: 'dropoff',
-        geofenceIdentifier: 'dropoff_zone',
-        action: GeofenceAction.enter,
-      ),
-    ],
-  ),
-]);
-
-Locus.onWorkflowEvent((event) {
-  print('Workflow ${event.workflowId} ${event.status}');
-});
-```
-
-### 3f. Diagnostics + Remote Commands
-
-```dart
-final snapshot = await Locus.getDiagnostics();
-print(snapshot.toMap());
-
-await Locus.applyRemoteCommand(
-  RemoteCommand(
-    id: 'cmd-1',
-    type: RemoteCommandType.syncQueue,
-  ),
-);
-```
-
-### 3g. Location Quality Scoring
-
-```dart
-Locus.onLocationQuality((quality) {
-  print('Quality score: ${quality.overallScore}');
-  if (quality.isSpoofSuspected) {
-    print('Potential spoof detected');
-  }
-});
-```
-
-### 4. Geofencing
-
-```dart
-await Locus.addGeofence(const Geofence(
-  identifier: 'home',
-  radius: 100,
-  latitude: 37.4219983,
-  longitude: -122.084,
-  notifyOnEntry: true,
-  notifyOnExit: true,
-));
-
-final geofenceSub = Locus.onGeofence((event) {
-  print('Geofence ${event.geofence.identifier} ${event.action}');
-});
-```
-
-### 5. Stop Tracking
-
-```dart
-await Locus.stop();
-await locationSub.cancel();
-```
-
-### 6. Schedule Windows
-
-Schedule strings are in `HH:mm-HH:mm` format (24-hour), and can span midnight.
-
-```dart
-await Locus.ready(const Config(
-  schedule: ['08:00-12:00', '13:00-18:00'],
-));
-await Locus.startSchedule();
-```
-
-### 7. Headless Tasks (Android)
-
-Register a top-level callback to receive events while the app is terminated.
-
-```dart
-@pragma('vm:entry-point')
-Future<void> backgroundGeolocationHeadlessTask(HeadlessEvent event) async {
-  if (event.name == 'boot') {
-    await Locus.ready(const Config(
-      enableHeadless: true,
-      startOnBoot: true,
-      stopOnTerminate: false,
-    ));
-    await Locus.start();
-  }
-}
-
-await Locus.registerHeadlessTask(
-  backgroundGeolocationHeadlessTask,
-);
-```
-
-### 8. Background Tasks
-
-```dart
-final taskId = await Locus.startBackgroundTask();
-// Do short background work here.
-await Locus.stopBackgroundTask(taskId);
-```
-
-### 9. Stored Locations
-
-```dart
-final stored = await Locus.getLocations(limit: 50);
-await Locus.destroyLocations();
-```
-
-### 10. Diagnostics
-
-```dart
-final state = await Locus.getState();
-```
-
----
-
-## API Reference
-
-For detailed documentation of all classes and methods, please refer to the [official documentation](https://pub.dev/documentation/locus/latest/).
-
-### Core Classes
-
-- `Locus`: Main SDK entry point.
-- `Config`: Global configuration options.
-- `Location`: Recorded location data point.
-- `Geofence`: Geofence definition and state.
-- `TripConfig`: configuration for the Trip Lifestyle engine.
-- `MockLocus`: Testing mock for unit tests.
-- `ConfigValidator`: Configuration validation utility.
-
----
-
-## Testing
-
-Locus provides testing utilities to enable unit testing without platform channels.
-
-### MockLocus
-
-```dart
-import 'package:locus/locus.dart';
-
-void main() {
-  late MockLocus mock;
-
-  setUp(() {
-    mock = MockLocus();
-  });
-
-  tearDown(() {
-    mock.dispose();
-  });
-
-  test('handles location updates', () async {
-    final locations = <Location>[];
-    mock.locationStream.listen(locations.add);
-
-    // Emit a mock location
-    mock.emitLocation(MockLocationExtension.mock(
-      latitude: 37.4219,
-      longitude: -122.084,
-      speed: 15.5,
-    ));
-
-    await Future.delayed(Duration.zero);
-    expect(locations.length, 1);
-    expect(locations.first.coords.latitude, 37.4219);
-  });
-
-  test('tracks method calls', () async {
-    await mock.ready(const Config());
-    await mock.start();
-    await mock.getCurrentPosition();
-
-    expect(mock.methodCalls, ['ready', 'start', 'getCurrentPosition']);
-  });
-}
-```
-
-### Mock Extensions
-
-```dart
-// Create mock locations easily
-final location = MockLocationExtension.mock(
-  latitude: 40.7128,
-  longitude: -74.006,
-  activityType: ActivityType.inVehicle,
-);
-
-// Create mock geofences
-final geofence = MockGeofenceExtension.mock(
-  identifier: 'home',
-  latitude: 37.4219,
-  longitude: -122.084,
-  radius: 100,
-);
-```
-
----
-
-## Debug Overlay
-
-Add a visual debug overlay during development to monitor location tracking:
-
-```dart
-import 'package:flutter/foundation.dart';
-import 'package:locus/locus.dart';
-
-class MyApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Stack(
-        children: [
-          YourMainWidget(),
-          // Only show in debug mode
-          if (kDebugMode)
-            const LocusDebugOverlay(
-              position: DebugOverlayPosition.bottomRight,
-              expanded: false,
-            ),
-        ],
-      ),
-    );
-  }
-}
-```
-
-The debug overlay shows:
-
-- Tracking status (ON/OFF)
-- Current location coordinates
-- Accuracy, speed, heading, altitude
-- Activity recognition state
-- Odometer distance
-- Recent location history
-- Start/Stop controls
-
----
-
-## State-Agnostic Streams
-
-Locus provides stream getters that work with any state management solution:
-
-### With Riverpod
-
-```dart
-final locationProvider = StreamProvider.autoDispose((ref) {
-  return Locus.locationStream;
-});
-
-final activityProvider = StreamProvider.autoDispose((ref) {
-  return Locus.activityStream;
-});
-```
-
-### With BLoC
-
-```dart
-class LocationBloc extends Bloc<LocationEvent, LocationState> {
-  StreamSubscription? _subscription;
-
-  LocationBloc() : super(LocationInitial()) {
-    _subscription = Locus.locationStream.listen((location) {
-      emit(LocationLoaded(location));
-    });
-  }
-
-  @override
-  Future<void> close() {
-    _subscription?.cancel();
-    return super.close();
-  }
-}
-```
-
-### Available Streams
-
-| Stream               | Type                              | Description               |
-| -------------------- | --------------------------------- | ------------------------- |
-| `locationStream`     | `Stream<Location>`                | Location updates          |
-| `motionChangeStream` | `Stream<Location>`                | Motion state changes      |
-| `activityStream`     | `Stream<Activity>`                | Activity recognition      |
-| `geofenceStream`     | `Stream<GeofenceEvent>`           | Geofence crossings        |
-| `providerStream`     | `Stream<ProviderChangeEvent>`     | GPS/authorization changes |
-| `connectivityStream` | `Stream<ConnectivityChangeEvent>` | Network changes           |
-| `heartbeatStream`    | `Stream<Location>`                | Heartbeat pings           |
-| `httpStream`         | `Stream<HttpEvent>`               | HTTP sync events          |
-| `enabledStream`      | `Stream<bool>`                    | Tracking enabled/disabled |
-| `powerSaveStream`    | `Stream<bool>`                    | Power save mode changes   |
-
----
-
-## Dynamic HTTP Headers
-
-Add authentication tokens or session IDs that change at runtime:
-
-```dart
-// Set a callback that provides fresh headers before each request
-Locus.setHeadersCallback(() async {
-  final token = await authService.getAccessToken();
-  return {
-    'Authorization': 'Bearer $token',
-    'X-Session-Id': sessionId,
-    'X-Device-Id': deviceId,
-  };
-});
-
-// Manually refresh headers after login/token refresh
-await Locus.refreshHeaders();
-
-// Clear the callback on logout
-Locus.clearHeadersCallback();
-```
-
----
-
-## Config Validation
-
-Validate configurations before applying them:
-
-```dart
-final config = Config(
-  distanceFilter: -10, // Invalid!
-  autoSync: true,      // No URL set!
-);
-
-final result = ConfigValidator.validate(config);
-if (!result.isValid) {
-  for (final error in result.errors) {
-    print('${error.field}: ${error.message}');
-    if (error.suggestion != null) {
-      print('  Suggestion: ${error.suggestion}');
-    }
-  }
-}
-
-// Or throw on invalid config
-try {
-  ConfigValidator.assertValid(config);
-} on ConfigValidationException catch (e) {
-  print('Invalid config: $e');
-}
-```
-
----
-
-## Battery Optimization
-
-Locus includes comprehensive battery optimization features to minimize power consumption while maintaining tracking quality.
+## Advanced Usage
 
 ### Adaptive Tracking
 
-Automatically adjusts GPS settings based on speed, battery level, and motion state:
+Optimize battery usage by automatically adjusting tracking parameters based on the device state:
 
 ```dart
-// Enable adaptive tracking
 await Locus.setAdaptiveTracking(AdaptiveTrackingConfig.balanced);
+```
 
-// Or use aggressive power saving
-await Locus.setAdaptiveTracking(AdaptiveTrackingConfig.aggressive);
+### Geofencing
 
-// Custom configuration
-await Locus.setAdaptiveTracking(AdaptiveTrackingConfig(
-  enabled: true,
-  speedTiers: SpeedTiers.driving,
-  batteryThresholds: BatteryThresholds.conservative,
-  stationaryGpsOff: true,
-  stationaryDelay: Duration(seconds: 30),
-  smartHeartbeat: true,
+Register geofences directly through the SDK:
+
+```dart
+await Locus.addGeofence(const Geofence(
+  identifier: 'office_zone',
+  radius: 100,
+  latitude: 37.7749,
+  longitude: -122.4194,
+  notifyOnEntry: true,
+  notifyOnExit: true,
 ));
 ```
 
-### Speed-Based Tuning
+### Custom Payloads
 
-GPS polling frequency adjusts based on current speed:
-
-| Speed (km/h)     | Update Interval | Distance Filter | Rationale           |
-| ---------------- | --------------- | --------------- | ------------------- |
-| 0 (stationary)   | 60s             | 50m             | Minimal movement    |
-| <5 (walking)     | 20s             | 15m             | Slow movement       |
-| 5-30 (city)      | 10s             | 10m             | Turns, stops        |
-| 30-80 (suburban) | 7s              | 15m             | Consistent movement |
-| >80 (highway)    | 5s              | 25m             | Need route accuracy |
-
-### Sync Policies
-
-Control when location data is synchronized based on network and battery:
+Enqueue custom data to be synchronized along with location updates:
 
 ```dart
-// Use a preset policy
-await Locus.setSyncPolicy(SyncPolicy.balanced);
-
-// Custom policy
-await Locus.setSyncPolicy(SyncPolicy(
-  onWifi: SyncBehavior.immediate,
-  onCellular: SyncBehavior.batch,
-  onMetered: SyncBehavior.manual,
-  batchSize: 50,
-  batchInterval: Duration(minutes: 5),
-  lowBatteryThreshold: 20,
-  lowBatteryBehavior: SyncBehavior.manual,
-));
-```
-
-### Power State Monitoring
-
-React to battery and charging state changes:
-
-```dart
-// Get current power state
-final power = await Locus.getPowerState();
-print('Battery: ${power.batteryLevel}%');
-print('Charging: ${power.isCharging}');
-print('Power save: ${power.isPowerSaveMode}');
-
-// Listen to power state changes
-Locus.onPowerStateChange((event) {
-  if (event.current.isCriticalBattery) {
-    Locus.stop();
-  }
+await Locus.enqueue({
+  'event_type': 'check_in',
+  'user_id': 'user_123',
 });
 ```
 
-### Battery Statistics
+### Custom Sync Body (Advanced)
 
-Monitor tracking impact on battery:
-
-```dart
-final stats = await Locus.getBatteryStats();
-print('GPS active: ${stats.gpsOnTimePercent.toStringAsFixed(1)}%');
-print('Updates: ${stats.locationUpdatesCount}');
-print('Drain rate: ${stats.estimatedDrainPerHour}%/hr');
-```
-
-### Battery Benchmarking
-
-Compare battery usage between configurations:
+For backends that require a specific JSON structure (e.g., a wrapper object with metadata), use the sync body builder:
 
 ```dart
-await Locus.startBatteryBenchmark();
-// ... run tracking test ...
-final result = await Locus.stopBatteryBenchmark();
-print('Drain per hour: ${result?.drainPerHour.toStringAsFixed(1)}%/hr');
-```
+// Set a custom body builder
+Locus.setSyncBodyBuilder((locations, extras) async {
+  return {
+    'ownerId': extras['ownerId'],
+    'taskId': extras['taskId'],
+    'driverId': extras['driverId'],
+    'polygons': locations.map((l) => {
+      'lat': l.coords.latitude,
+      'lng': l.coords.longitude,
+      'speed': l.coords.speed,
+      'timestamp': l.timestamp.toIso8601String(),
+    }).toList(),
+  };
+});
 
----
-
-## Advanced Features
-
-### Spoof Detection
-
-Multi-factor detection of mock/spoofed locations:
-
-```dart
-// Enable spoof detection
-await Locus.setSpoofDetection(SpoofDetectionConfig.balanced);
-
-// High security mode
-await Locus.setSpoofDetection(SpoofDetectionConfig(
-  enabled: true,
-  blockMockLocations: true,
-  sensitivity: SpoofSensitivity.high,
-  onSpoofDetected: (event) {
-    logSecurityEvent('Spoof detected: ${event.factors}');
+// Configure with your metadata in extras
+await Locus.ready(Config.balanced(
+  url: 'https://api.yourservice.com/v1/tracking',
+  extras: {
+    'ownerId': 'owner_123',
+    'taskId': 'task_456',
+    'driverId': 'driver_789',
   },
 ));
+```
 
-// Manually analyze a location
-final event = Locus.analyzeForSpoofing(location, isMockProvider: false);
-if (event != null) {
-  print('Confidence: ${event.confidence}');
-  print('Factors: ${event.factors.map((f) => f.description)}');
+For headless (background) operation, register a top-level function:
+
+```dart
+@pragma('vm:entry-point')
+Future<JsonMap> buildSyncBody(SyncBodyContext context) async {
+  final prefs = await SharedPreferences.getInstance();
+  return {
+    'ownerId': prefs.getString('ownerId') ?? '',
+    'locations': context.locations.map((l) => l.toJson()).toList(),
+  };
+}
+
+// In main()
+await Locus.registerHeadlessSyncBodyBuilder(buildSyncBody);
+```
+
+### Testing
+
+Locus is designed to be testable. You can inject a mock instance in your tests:
+
+```dart
+// In your test file
+void main() {
+  setUp(() {
+    Locus.setMockInstance(MockLocus());
+  });
+
+  test('tracking starts correctly', () async {
+    await Locus.start();
+    // Assert against your mock
+  });
 }
 ```
 
-Detection factors include: mock provider, impossible speed, altitude anomalies, repeated coordinates, timestamp mismatches, and more.
+### Production Features
 
-### Significant Location Changes
+**Structured Logs:**
 
-Ultra-low power monitoring for large movements (~500m):
+Retrieve structured logs (backed by SQLite) for debugging in production:
 
 ```dart
-// Start monitoring
-await Locus.startSignificantChangeMonitoring(
-  SignificantChangeConfig(
-    minDisplacementMeters: 500,
-    onSignificantChange: (location) {
-      print('Significant move: ${location.coords.latitude}');
+final logs = await Locus.getLog();
+for (final entry in logs) {
+  print('[${entry.level}] ${entry.message}');
+}
+```
+
+**Permission Workflow:**
+
+Use the built-in assistant to handle complex permission flows (Location -> Background -> Notification) with rationales:
+
+```dart
+final result = await PermissionAssistant.requestBackgroundWorkflow(
+  config: config,
+  delegate: PermissionFlowDelegate(
+    onShowRationale: (rationale) async {
+       // Show your UI dialog here
+       return true; // User agreed
+    },
+    onOpenSettings: () async {
+      // Prompt user to open settings
     },
   ),
 );
-
-// Or use preset for maximum battery savings
-await Locus.startSignificantChangeMonitoring(
-  SignificantChangeConfig.ultraLowPower,
-);
-
-// Check status
-if (Locus.isSignificantChangeMonitoringActive) {
-  // Listen to stream
-  Locus.significantChangeStream?.listen((event) {
-    print('Moved ${event.displacementMeters}m');
-  });
-}
-
-// Stop monitoring
-await Locus.stopSignificantChangeMonitoring();
 ```
 
-### Error Recovery
+**Device Optimization:**
 
-Centralized error handling with automatic retries:
+Detect if the app is being stifled by aggressive OEM battery savers (Android):
 
 ```dart
-// Configure error handling
-Locus.setErrorHandler(ErrorRecoveryConfig(
-  maxRetries: 3,
-  retryDelay: Duration(seconds: 5),
-  retryBackoff: 2.0,
-  onError: (error, context) {
-    if (error.type == LocusErrorType.permissionDenied) {
-      showPermissionDialog();
-      return RecoveryAction.requestUserAction;
-    }
-    return error.suggestedRecovery ?? RecoveryAction.retry;
-  },
-  onExhausted: (error) {
-    analytics.logError(error);
-  },
-));
-
-// Handle errors manually
-try {
-  await Locus.start();
-} catch (e) {
-  final action = await Locus.handleError(LocusError.fromException(e));
-  if (action == RecoveryAction.retry) {
-    // Retry logic
-  }
+final isIgnored = await DeviceOptimizationService.isIgnoringBatteryOptimizations();
+if (!isIgnored) {
+  // Direct user to instructions for their specific device manufacturer
+  await DeviceOptimizationService.showManufacturerInstructions();
 }
-
-// Listen to error stream
-Locus.errorStream?.listen((error) {
-  print('Error: ${error.type} - ${error.message}');
-});
 ```
 
-Error types: `permissionDenied`, `servicesDisabled`, `locationTimeout`, `networkError`, `serviceDisconnected`, `configError`, and more.
-
----
-
-## Example
-
-A complete example application is available in the [example](example/) directory, demonstrating:
-
-- Real-time location updates
-- Geofence management
-- Trip tracking
-- Configuration UI
-- Log viewing
-
-To run the example:
-
-```bash
-cd example
-flutter run
 ```
-
----
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](doc/CONTRIBUTING.md) for guidelines.
-
----
-
-## Security
-
-For security policy and vulnerability reporting, please see [SECURITY.md](doc/SECURITY.md).
-
----
 
 ## License
 
-Locus Community License v1.0 (see `LICENSE` and [`doc/LICENSING.md`](doc/LICENSING.md)).
+This project is licensed under the **PolyForm Small Business License 1.0.0**. It is free for individuals and organizations with less than $250,000 in annual revenue. See the [LICENSE](LICENSE) and [LICENSING.md](LICENSING.md) files for details.
 
-**Licensing summary**
+## Related Resources
 
-- Individuals: free to use for any purpose, including commercial and closed-source.
-- Enterprises (USD 250k+ revenue): free only if the part of the product that includes or links to this package is open-sourced under an OSI-approved license.
-- Closed-source enterprise use requires a commercial license (contact: hello@mkoksal.dev).
+- [Official Documentation](https://pub.dev/documentation/locus/latest/)
+- [Contributing Guide](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
+```

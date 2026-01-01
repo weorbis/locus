@@ -49,8 +49,6 @@ public class ActivityRecognizedBroadcastReceiver extends BroadcastReceiver {
         int confidence = mostLikely.getConfidence();
         String data = type + "," + confidence;
 
-        Log.d(TAG, "Detected: " + data);
-
         // Forward to plugin via SharedPreferences
         SharedPreferences preferences =
                 context.getSharedPreferences(LocusPlugin.PREFS_NAME, Context.MODE_PRIVATE);

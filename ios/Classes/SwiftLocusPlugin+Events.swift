@@ -209,10 +209,19 @@ extension SwiftLocusPlugin {
     let batteryLevel = UIDevice.current.batteryLevel
     let batteryState = UIDevice.current.batteryState
     return [
-      "batteryLevel": batteryLevel >= 0 ? Int(batteryLevel * 100) : -1,
+      "currentBatteryLevel": batteryLevel >= 0 ? Int(batteryLevel * 100) : -1,
       "isCharging": batteryState == .charging || batteryState == .full,
+      "gpsOnTimePercent": 0.0,
+      "locationUpdatesCount": 0,
+      "syncRequestsCount": 0,
+      "averageAccuracyMeters": 0.0,
+      "trackingDurationMinutes": 0,
+      "estimatedDrainPercent": 0.0,
       "estimatedDrainPerHour": 0.0,
-      "locationCount": 0
+      "optimizationLevel": "none",
+      "timeByState": [:],
+      "accuracyDowngradeCount": 0,
+      "gpsDisabledCount": 0
     ]
   }
 
@@ -244,4 +253,3 @@ extension SwiftLocusPlugin {
     return "unknown"
   }
 }
-

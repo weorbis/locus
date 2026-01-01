@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:locus/src/config/config.dart';
-// import 'package:locus/src/config/config_validator.dart'; // Unnecessary
 import 'package:locus/src/models/models.dart';
 import 'package:locus/src/utils/location_utils.dart';
 import 'locus_channels.dart';
@@ -154,8 +153,13 @@ class LocusLifecycle {
       }
       return false;
     } catch (e, stack) {
-      debugPrint('[Locus] Error checking geofence status: $e');
-      debugPrint('[Locus] Stack trace: $stack');
+      // Only log verbose stack trace for unexpected errors
+      if (e.toString().contains('MissingPluginException')) {
+        // Expected in test environments - silently return false
+      } else {
+        debugPrint('[Locus] Error checking geofence status: $e');
+        debugPrint('[Locus] Stack trace: $stack');
+      }
       return false;
     }
   }

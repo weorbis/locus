@@ -5,6 +5,7 @@ import 'package:locus/src/services/services.dart';
 import 'locus_channels.dart';
 import 'locus_battery.dart'; // For getPowerState
 import 'locus_lifecycle.dart'; // For isTracking
+import 'locus_streams.dart'; // For spoof detection integration
 
 /// Advanced Features (Spoof, Significant Change, Error Recovery).
 class LocusFeatures {
@@ -14,14 +15,31 @@ class LocusFeatures {
 
   // --- Spoof Detection ---
 
+  /// Sets spoof detection configuration.
+  ///
+  /// When [config.blockMockLocations] is true, spoofed locations will be
+  /// filtered from the event stream and available via [blockedLocationEvents].
   static Future<void> setSpoofDetection(SpoofDetectionConfig config) async {
     _spoofDetector = SpoofDetector(config);
+
+    // Enable spoof detection in the event stream
+    if (config.enabled) {
+      LocusStreams.enableSpoofDetection(config);
+    } else {
+      LocusStreams.disableSpoofDetection();
+    }
+
     await LocusChannels.methods
         .invokeMethod('setSpoofDetection', config.toMap());
   }
 
   static SpoofDetectionConfig? get spoofDetectionConfig =>
       _spoofDetector?.config;
+
+  /// Stream of blocked/spoofed location events.
+  /// Listen to this to monitor locations that were blocked by spoof detection.
+  static Stream<SpoofDetectionEvent> get blockedLocationEvents =>
+      LocusStreams.blockedEvents;
 
   static SpoofDetectionEvent? analyzeForSpoofing(
     Location location, {
@@ -33,6 +51,7 @@ class LocusFeatures {
   static void resetSpoofDetector() {
     _spoofDetector?.reset();
     _spoofDetector = null;
+    LocusStreams.disableSpoofDetection();
   }
 
   // --- Significant Change ---
@@ -66,9 +85,16 @@ class LocusFeatures {
 
   // --- Error Recovery ---
 
+  /// Sets the error recovery configuration.
+  ///
+  /// When configured, stream errors will be handled through the
+  /// error recovery system, respecting retry policies and callbacks.
   static void setErrorHandler(ErrorRecoveryConfig config) {
     _errorRecoveryManager ??= ErrorRecoveryManager();
     _errorRecoveryManager!.configure(config);
+
+    // Wire error recovery into stream error handling
+    LocusStreams.setErrorRecoveryManager(_errorRecoveryManager);
   }
 
   static ErrorRecoveryManager? get errorRecoveryManager =>
@@ -98,6 +124,8 @@ class LocusFeatures {
   }
 
   static void disposeErrorRecoveryManager() {
+    // Disconnect from LocusStreams
+    LocusStreams.setErrorRecoveryManager(null);
     _errorRecoveryManager?.dispose();
     _errorRecoveryManager = null;
   }

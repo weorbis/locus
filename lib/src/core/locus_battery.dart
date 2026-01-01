@@ -1,6 +1,5 @@
 import 'package:locus/src/battery/battery.dart';
-import 'package:locus/src/events/events.dart'; // Added import
-// import 'package:locus/src/models/models.dart'; // Unused
+import 'package:locus/src/events/events.dart';
 import 'locus_channels.dart';
 import 'locus_streams.dart';
 

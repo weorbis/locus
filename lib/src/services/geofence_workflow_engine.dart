@@ -1,17 +1,37 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:locus/src/events/events.dart';
 import 'package:locus/src/models/models.dart';
 
+/// Abstraction for workflow state persistence.
+abstract class WorkflowStateStore {
+  /// Saves serialized workflow state.
+  Future<void> save(String key, String jsonData);
+
+  /// Loads serialized workflow state.
+  Future<String?> load(String key);
+
+  /// Removes persisted workflow state.
+  Future<void> remove(String key);
+}
+
 class GeofenceWorkflowEngine {
-  GeofenceWorkflowEngine({required Stream<GeolocationEvent<dynamic>> events})
-      : _events = events;
+  GeofenceWorkflowEngine({
+    required Stream<GeolocationEvent<dynamic>> events,
+    this.stateStore,
+  }) : _events = events;
 
   final Stream<GeolocationEvent<dynamic>> _events;
   final StreamController<GeofenceWorkflowEvent> _controller =
       StreamController<GeofenceWorkflowEvent>.broadcast();
+
+  /// Optional state store for persistence.
+  final WorkflowStateStore? stateStore;
+
+  static const _stateStoreKey = 'locus_workflow_states';
 
   final Map<String, GeofenceWorkflow> _workflows = {};
   final Map<String, _WorkflowRuntimeState> _states = {};
@@ -36,6 +56,49 @@ class GeofenceWorkflowEngine {
     return runtime?.snapshot();
   }
 
+  /// Saves current workflow states to persistent storage.
+  Future<void> saveState() async {
+    if (stateStore == null) return;
+
+    final statesData = <String, Map<String, dynamic>>{};
+    for (final entry in _states.entries) {
+      statesData[entry.key] = entry.value.toMap();
+    }
+
+    await stateStore!.save(_stateStoreKey, jsonEncode(statesData));
+  }
+
+  /// Loads workflow states from persistent storage.
+  ///
+  /// Call this after [registerWorkflows] to restore previous state.
+  Future<void> loadState() async {
+    if (stateStore == null) return;
+
+    final jsonData = await stateStore!.load(_stateStoreKey);
+    if (jsonData == null) return;
+
+    try {
+      final statesData = jsonDecode(jsonData) as Map<String, dynamic>;
+
+      for (final entry in statesData.entries) {
+        final workflow = _workflows[entry.key];
+        if (workflow == null) continue;
+
+        final stateMap = entry.value as Map<String, dynamic>;
+        final runtime = _states[entry.key];
+        runtime?.restoreFromMap(stateMap);
+      }
+    } catch (_) {
+      // Invalid stored state - clear it
+      await clearPersistedState();
+    }
+  }
+
+  /// Clears persisted workflow state.
+  Future<void> clearPersistedState() async {
+    await stateStore?.remove(_stateStoreKey);
+  }
+
   void start() {
     _subscription?.cancel();
     _subscription = _events.listen(_handleEvent);
@@ -47,6 +110,8 @@ class GeofenceWorkflowEngine {
   }
 
   Future<void> dispose() async {
+    // Save state before disposing
+    await saveState();
     stop();
     await _controller.close();
   }
@@ -184,6 +249,41 @@ class _WorkflowRuntimeState {
       final stepIndex = workflow.steps.indexWhere((s) => s.id == step.id);
       if (stepIndex >= 0 && stepIndex >= currentIndex) {
         currentIndex = stepIndex + 1;
+      }
+    }
+  }
+
+  /// Serializes runtime state to a map for persistence.
+  Map<String, dynamic> toMap() {
+    return {
+      'currentIndex': currentIndex,
+      'completedStepIds': completedStepIds.toList(),
+      'lastCompletedAt': _lastCompletedAt.map(
+        (key, value) => MapEntry(key, value.toIso8601String()),
+      ),
+    };
+  }
+
+  /// Restores runtime state from a persisted map.
+  void restoreFromMap(Map<String, dynamic> map) {
+    currentIndex = (map['currentIndex'] as num?)?.toInt() ?? 0;
+
+    final completedIds = map['completedStepIds'] as List<dynamic>?;
+    if (completedIds != null) {
+      completedStepIds.clear();
+      for (final id in completedIds) {
+        completedStepIds.add(id as String);
+      }
+    }
+
+    final lastCompletedMap = map['lastCompletedAt'] as Map<String, dynamic>?;
+    if (lastCompletedMap != null) {
+      _lastCompletedAt.clear();
+      for (final entry in lastCompletedMap.entries) {
+        final dt = DateTime.tryParse(entry.value as String);
+        if (dt != null) {
+          _lastCompletedAt[entry.key] = dt;
+        }
       }
     }
   }

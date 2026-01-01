@@ -1,3 +1,4 @@
+import 'package:locus/src/config/constants.dart';
 import '../common/json_map.dart';
 import 'route_point.dart';
 
@@ -23,11 +24,11 @@ class TripConfig {
     this.stopOnStationary = true,
     this.stopTimeoutMinutes = 5,
     this.stationarySpeedKph = 1.5,
-    this.updateIntervalSeconds = 60,
+    this.updateIntervalSeconds = kDefaultUpdateIntervalSeconds,
     this.dwellMinutes = 5,
     this.route = const [],
-    this.routeDeviationThresholdMeters = 100,
-    this.routeDeviationCooldownSeconds = 60,
+    this.routeDeviationThresholdMeters = kDefaultRouteDeviationThresholdMeters,
+    this.routeDeviationCooldownSeconds = kDefaultUpdateIntervalSeconds,
   });
 
   JsonMap toMap() => {
@@ -56,8 +57,8 @@ class TripConfig {
       stopTimeoutMinutes: (map['stopTimeoutMinutes'] as num?)?.toInt() ?? 5,
       stationarySpeedKph:
           (map['stationarySpeedKph'] as num?)?.toDouble() ?? 1.5,
-      updateIntervalSeconds:
-          (map['updateIntervalSeconds'] as num?)?.toInt() ?? 60,
+      updateIntervalSeconds: (map['updateIntervalSeconds'] as num?)?.toInt() ??
+          kDefaultUpdateIntervalSeconds,
       dwellMinutes: (map['dwellMinutes'] as num?)?.toInt() ?? 5,
       route: (map['route'] as List?)
               ?.map((item) =>
@@ -65,9 +66,11 @@ class TripConfig {
               .toList() ??
           const [],
       routeDeviationThresholdMeters:
-          (map['routeDeviationThresholdMeters'] as num?)?.toDouble() ?? 100,
+          (map['routeDeviationThresholdMeters'] as num?)?.toDouble() ??
+              kDefaultRouteDeviationThresholdMeters,
       routeDeviationCooldownSeconds:
-          (map['routeDeviationCooldownSeconds'] as num?)?.toInt() ?? 60,
+          (map['routeDeviationCooldownSeconds'] as num?)?.toInt() ??
+              kDefaultUpdateIntervalSeconds,
     );
   }
 }

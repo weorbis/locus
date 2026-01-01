@@ -87,4 +87,9 @@ class TripState {
       averageSpeedKph: averageSpeedKph,
     );
   }
+
+  @override
+  String toString() =>
+      'TripState($tripId, distance: ${(distanceMeters / 1000).toStringAsFixed(2)}km, '
+      'started: $started, ended: $ended)';
 }

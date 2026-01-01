@@ -5,6 +5,7 @@
 library;
 
 import 'dart:async';
+import 'package:locus/src/config/constants.dart';
 import 'package:locus/src/models/models.dart';
 import 'package:locus/src/utils/location_utils.dart';
 
@@ -77,7 +78,7 @@ class SignificantChangeConfig {
 
   /// Maximum battery savings - larger threshold.
   static const SignificantChangeConfig ultraLowPower = SignificantChangeConfig(
-    minDisplacementMeters: 1000,
+    minDisplacementMeters: kDefaultSignificantChangeDisplacementMeters,
     deferUntilMoved: true,
     maxUpdateInterval: Duration(hours: 1),
   );

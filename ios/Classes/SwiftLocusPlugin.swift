@@ -159,7 +159,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       if let identifier = call.arguments as? String {
         result(geofenceManager.getGeofence(identifier) != nil)
       } else {
-        result(false)
+        result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected geofence identifier string", details: nil))
       }
     case "startGeofences":
       geofenceManager.startStoredGeofences()
@@ -193,6 +193,9 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       result(true)
     case "syncQueue":
       result(syncManager.syncQueue(limit: (call.arguments as? [String: Any])?["limit"] as? Int ?? 0))
+    case "resumeSync":
+      syncManager.resumeSync()
+      result(true)
     case "storeTripState":
       if let state = call.arguments as? [String: Any] {
         UserDefaults.standard.setValue(state, forKey: SwiftLocusPlugin.tripStateKey)
@@ -221,6 +224,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
         scheduler.stop()
         result(true)
       } else if call.method == "sync" {
+        syncManager.resumeSync()
         syncManager.syncNow()
         result(true)
       } else if call.method == "destroyLocations" {
@@ -244,12 +248,12 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
           UserDefaults.standard.setValue(handle, forKey: SwiftLocusPlugin.headlessCallbackKey)
           result(true)
         } else {
-          result(false)
+          result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected headless callback handle", details: nil))
         }
       } else if call.method == "getLog" {
         result(readLog())
       } else {
-        result(false)
+        result(FlutterError(code: "NOT_IMPLEMENTED", message: "Unknown headless method", details: nil))
       }
     case "startBackgroundTask":
       result(startBackgroundTask())
@@ -264,6 +268,8 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       result(buildPowerState())
     case "getNetworkType":
       result(getNetworkTypeString())
+    case "isIgnoringBatteryOptimizations":
+      result(false)
     case "setSpoofDetection":
       // Spoof detection is handled on Dart side
       result(true)

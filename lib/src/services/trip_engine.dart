@@ -201,6 +201,39 @@ class TripEngine {
     // Guard against out-of-order timestamps (e.g., device time changes)
     // Skip this update if timestamp is not newer than last location
     if (deltaTime.isNegative || deltaTime == Duration.zero) {
+      // Emit diagnostic event for clock anomaly
+      _controller.add(TripEvent.diagnostic(
+        tripId: state.tripId,
+        message: 'Clock anomaly detected',
+        data: {
+          'lastTimestamp': lastLocation.timestamp.toIso8601String(),
+          'currentTimestamp': location.timestamp.toIso8601String(),
+          'deltaMs': deltaTime.inMilliseconds,
+          'action': 'skipped_update',
+        },
+      ));
+
+      // If clock jumped backwards significantly (>1 hour), reset the trip's
+      // last location timestamp to the current location to allow recovery
+      if (deltaTime.inHours < -1) {
+        _state = TripState(
+          tripId: state.tripId,
+          createdAt: state.createdAt,
+          startedAt: state.startedAt,
+          startLocation: state.startLocation,
+          lastLocation: location, // Reset to current location
+          distanceMeters: state.distanceMeters,
+          idleSeconds: state.idleSeconds,
+          maxSpeedKph: state.maxSpeedKph,
+          started: state.started,
+          ended: state.ended,
+        );
+        _controller.add(TripEvent.diagnostic(
+          tripId: state.tripId,
+          message: 'Trip state reset due to significant clock change',
+          data: {'newBaseline': location.timestamp.toIso8601String()},
+        ));
+      }
       return;
     }
 

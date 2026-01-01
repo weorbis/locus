@@ -42,6 +42,32 @@ class PermissionService {
     return location.isGranted && motion.isGranted;
   }
 
+  /// Requests foreground (when-in-use) location permission.
+  static Future<PermissionStatus> requestWhenInUse() {
+    return Permission.locationWhenInUse.request();
+  }
+
+  /// Requests background (always) location permission.
+  static Future<PermissionStatus> requestAlways() {
+    return Permission.locationAlways.request();
+  }
+
+  /// Requests activity/motion permission.
+  static Future<PermissionStatus> requestActivity() {
+    if (Platform.isAndroid) {
+      return Permission.activityRecognition.request();
+    }
+    return Permission.sensors.request();
+  }
+
+  /// Requests notification permission on Android 13+.
+  static Future<PermissionStatus> requestNotification() {
+    if (Platform.isAndroid) {
+      return Permission.notification.request();
+    }
+    return Future.value(PermissionStatus.granted);
+  }
+
   /// Checks if location permission is granted (when in use).
   static Future<bool> hasLocationPermission() async {
     return await Permission.locationWhenInUse.isGranted;

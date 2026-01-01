@@ -6,6 +6,8 @@ export 'event_mapper.dart';
 export 'geofence_workflow_engine.dart';
 export 'location_anomaly_detector.dart';
 export 'location_quality_analyzer.dart';
+export 'device_optimization_service.dart';
+export 'permission_assistant.dart';
 export 'permission_service.dart';
 export 'significant_change.dart';
 export 'spoof_detection.dart';

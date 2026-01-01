@@ -15,6 +15,8 @@ export 'location/location.dart';
 export 'location/location_quality.dart';
 export 'location/provider_change_event.dart';
 
+export 'logs/log_entry.dart';
+
 export 'state/diagnostics.dart';
 export 'state/geolocation_state.dart';
 export 'state/headless_event.dart';
