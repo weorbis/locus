@@ -150,8 +150,9 @@ jobs:
             exit 1
           fi
 
-          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-            echo "Tag v$VERSION already exists. Skipping release."
+          # Use ls-remote for a reliable remote tag check
+          if git ls-remote --tags origin | grep -q "refs/tags/v$VERSION"; then
+            echo "Tag v$VERSION already exists on remote. Skipping release."
             echo "do_release=false" >> $GITHUB_OUTPUT
           else
             echo "New version $VERSION detected. Proceeding with release."
@@ -159,10 +160,21 @@ jobs:
             echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           fi
 
-      - uses: dart-lang/setup-dart@v1
+      - uses: subosito/flutter-action@v2
         if: steps.check_version.outputs.do_release == 'true'
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
 
-      - run: dart pub get
+      - name: Verify Token Availability
+        if: steps.check_version.outputs.do_release == 'true'
+        run: |
+          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
+            echo "✅ OIDC Token Request URL is present"
+          else
+            echo "❌ OIDC Token Request URL is MISSING. Check GitHub environment permissions."
+          fi
+
+      - run: flutter pub get
         if: steps.check_version.outputs.do_release == 'true'
 
       - name: Create Git Tag
