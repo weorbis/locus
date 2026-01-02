@@ -122,24 +122,12 @@ jobs:
           echo "All quality checks passed!"
 
   # -----------------------------------------------------------------
-  # STAGE 3: APPROVAL
-  # -----------------------------------------------------------------
-  approve-release:
-    name: Approve Release
-    needs: [quality-gate]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-    runs-on: ubuntu-latest
-    environment: release-gate
-    steps:
-      - name: Release Authorized
-        run: echo "Release authorized by administrator"
-
-  # -----------------------------------------------------------------
-  # STAGE 4: RELEASE
+  # STAGE 3: RELEASE (Single Approval Gate via 'production' environment)
   # -----------------------------------------------------------------
   release:
     name: Release
-    needs: [approve-release]
+    needs: [quality-gate]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     environment: production
     permissions:
