@@ -162,15 +162,6 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         if: steps.check_version.outputs.do_release == 'true'
 
-      - name: Verify Token Availability
-        if: steps.check_version.outputs.do_release == 'true'
-        run: |
-          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
-            echo "✅ OIDC Token Request URL is present"
-          else
-            echo "❌ OIDC Token Request URL is MISSING. Check GitHub environment permissions."
-          fi
-
       - run: dart pub get
         if: steps.check_version.outputs.do_release == 'true'
 
