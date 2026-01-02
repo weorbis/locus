@@ -177,10 +177,7 @@ jobs:
 
       - name: Publish to pub.dev
         if: steps.check_version.outputs.do_release == 'true'
-        run: |
-          # Use the OIDC token for automated publishing.
-          # Note: This requires the package to be linked in pub.dev Admin -> Automated Publishing.
-          dart pub publish --force
+        run: dart pub publish --force
 
       - name: Create GitHub Release
         if: steps.check_version.outputs.do_release == 'true'
