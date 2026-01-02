@@ -122,7 +122,7 @@ jobs:
           echo "All quality checks passed!"
 
   # -----------------------------------------------------------------
-  # STAGE 3: RELEASE (Single Approval Gate via 'production' environment)
+  # STAGE 3: RELEASE (GitHub Tag & Release only)
   # -----------------------------------------------------------------
   release:
     name: Release
@@ -158,14 +158,6 @@ jobs:
             echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           fi
 
-      - uses: subosito/flutter-action@v2
-        if: steps.check_version.outputs.do_release == 'true'
-        with:
-          channel: ${{ env.FLUTTER_VERSION }}
-
-      - run: flutter pub get
-        if: steps.check_version.outputs.do_release == 'true'
-
       - name: Create Git Tag
         if: steps.check_version.outputs.do_release == 'true'
         run: |
@@ -173,14 +165,6 @@ jobs:
           git config user.email "actions@github.com"
           git tag -a "v${{ steps.check_version.outputs.VERSION }}" -m "Release v${{ steps.check_version.outputs.VERSION }}"
           git push origin "v${{ steps.check_version.outputs.VERSION }}"
-
-      - name: Publish to pub.dev
-        if: steps.check_version.outputs.do_release == 'true'
-        uses: k-paxian/dart-package-publisher@v1.6.2
-        with:
-          credentialJson: ${{ secrets.CREDENTIAL_JSON }}
-          flutter: true
-          skipTests: true
 
       - name: Create GitHub Release
         if: steps.check_version.outputs.do_release == 'true'
@@ -191,4 +175,5 @@ jobs:
           body: |
             Release v${{ steps.check_version.outputs.VERSION }}
             
+            Note: pub.dev publishing must be performed manually.
             See CHANGELOG.md for details.
