@@ -132,7 +132,6 @@ jobs:
     environment: production
     permissions:
       contents: write
-      id-token: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -150,7 +149,6 @@ jobs:
             exit 1
           fi
 
-          # Use ls-remote for a reliable remote tag check
           if git ls-remote --tags origin | grep -q "refs/tags/v$VERSION"; then
             echo "Tag v$VERSION already exists on remote. Skipping release."
             echo "do_release=false" >> $GITHUB_OUTPUT
@@ -165,15 +163,6 @@ jobs:
         with:
           channel: ${{ env.FLUTTER_VERSION }}
 
-      - name: Verify Token Availability
-        if: steps.check_version.outputs.do_release == 'true'
-        run: |
-          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
-            echo "✅ OIDC Token Request URL is present"
-          else
-            echo "❌ OIDC Token Request URL is MISSING. Check GitHub environment permissions."
-          fi
-
       - run: flutter pub get
         if: steps.check_version.outputs.do_release == 'true'
 
@@ -187,7 +176,11 @@ jobs:
 
       - name: Publish to pub.dev
         if: steps.check_version.outputs.do_release == 'true'
-        run: dart pub publish --force
+        uses: k-paxian/dart-package-publisher@v1.6.2
+        with:
+          credentialJson: ${{ secrets.CREDENTIAL_JSON }}
+          flutter: true
+          skipTests: true
 
       - name: Create GitHub Release
         if: steps.check_version.outputs.do_release == 'true'
