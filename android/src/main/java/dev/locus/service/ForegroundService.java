@@ -35,6 +35,8 @@ public class ForegroundService extends Service {
             startPluginForegroundService(intent.getExtras());
         } else {
             Log.e(TAG, "Attempted to start foreground service with null intent or extras.");
+            stopSelf(startId);
+            return START_NOT_STICKY;
         }
         return START_STICKY;
     }

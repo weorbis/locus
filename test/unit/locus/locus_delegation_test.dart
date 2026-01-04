@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:locus/locus.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late LocusInterface original;
   late MockLocus mock;
 

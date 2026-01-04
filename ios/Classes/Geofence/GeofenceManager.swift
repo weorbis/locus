@@ -78,20 +78,32 @@ class GeofenceManager: NSObject, CLLocationManagerDelegate {
     }
     
     func startStoredGeofences() {
-        let stored = enforceMaxMonitoredGeofences(storage.readGeofences())
-        for geofence in stored {
+        let stored = storage.readGeofences()
+        let trimmed = enforceMaxMonitoredGeofences(stored)
+
+        // Keep persisted store aligned with the enforced limit to avoid re-adding overflow geofences on next launch
+        if trimmed.count != stored.count {
+            storage.writeGeofences(trimmed)
+        }
+
+        for geofence in trimmed {
             addGeofence(geofence, store: false)
         }
     }
     
+    /// Enforces the maximum monitored geofences limit.
+    /// NOTE: iOS has a platform limit of 20 monitored regions per app.
+    /// See https://developer.apple.com/documentation/corelocation/monitoring_the_user_s_proximity_to_geographic_regions
     private func enforceMaxMonitoredGeofences(_ geofences: [[String: Any]]) -> [[String: Any]] {
-        if config.maxMonitoredGeofences <= 0 || geofences.count <= config.maxMonitoredGeofences {
+        let effectiveMax = min(config.maxMonitoredGeofences, 20) // iOS platform limit is 20
+        
+        if effectiveMax <= 0 || geofences.count <= effectiveMax {
             return geofences
         }
         
-        let overflow = geofences.count - config.maxMonitoredGeofences
+        let overflow = geofences.count - effectiveMax
         let removed = geofences.prefix(overflow)
-        let remaining = Array(geofences.suffix(config.maxMonitoredGeofences))
+        let remaining = Array(geofences.suffix(effectiveMax))
         
         for item in removed {
             if let identifier = item["identifier"] as? String {
@@ -103,6 +115,7 @@ class GeofenceManager: NSObject, CLLocationManagerDelegate {
         
         let removedIds = removed.compactMap { $0["identifier"] as? String }
         if !removedIds.isEmpty {
+            print("[locus] Geofence limit reached (\(effectiveMax)). Removed oldest: \(removedIds.joined(separator: ", "))")
             delegate?.onGeofencesChange(added: [], removed: removedIds)
         }
         

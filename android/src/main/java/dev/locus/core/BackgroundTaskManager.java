@@ -22,6 +22,9 @@ public class BackgroundTaskManager {
         if (powerManager == null) {
             return 0;
         }
+        if (tasks.size() > 50) {
+            release(); // defensive cleanup to avoid unbounded wake locks
+        }
         int taskId = taskCounter.getAndIncrement();
         PowerManager.WakeLock wakeLock = powerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,

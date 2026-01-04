@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'dart:ui' show CallbackHandle, PluginUtilities;
 
 import 'package:flutter/widgets.dart';
-import 'package:locus/src/models/models.dart';
-import 'locus_channels.dart';
+import 'package:locus/src/models.dart';
+import 'package:locus/src/core/locus_channels.dart';
 
 /// Callback type for headless background events.
 typedef HeadlessEventCallback = Future<void> Function(HeadlessEvent event);

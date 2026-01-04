@@ -370,6 +370,51 @@ void main() {
       expect(settings.reason, isNotEmpty);
     });
   });
+
+  group('Location Processing Integration', () {
+    test('polygon geofence service is registered with streams', () async {
+      // Adding a polygon geofence should work without errors
+      final polygon = PolygonGeofence(
+        identifier: 'test-polygon',
+        vertices: [
+          GeoPoint(latitude: 37.0, longitude: -122.0),
+          GeoPoint(latitude: 37.1, longitude: -122.0),
+          GeoPoint(latitude: 37.1, longitude: -122.1),
+          GeoPoint(latitude: 37.0, longitude: -122.1),
+        ],
+      );
+
+      final added = await Locus.addPolygonGeofence(polygon);
+      expect(added, isTrue);
+
+      final polygons = await Locus.getPolygonGeofences();
+      expect(polygons.length, 1);
+      expect(polygons.first.identifier, 'test-polygon');
+
+      // Clean up
+      await Locus.removeAllPolygonGeofences();
+    });
+
+    test('privacy zone service is registered with streams', () async {
+      // Adding a privacy zone should work without errors
+      final zone = PrivacyZone.create(
+        identifier: 'test-privacy-zone',
+        latitude: 37.7749,
+        longitude: -122.4194,
+        radius: 100.0,
+        action: PrivacyZoneAction.obfuscate,
+      );
+
+      await Locus.addPrivacyZone(zone);
+
+      final zones = await Locus.getPrivacyZones();
+      expect(zones.length, 1);
+      expect(zones.first.identifier, 'test-privacy-zone');
+
+      // Clean up
+      await Locus.removeAllPrivacyZones();
+    });
+  });
 }
 
 dynamic _handleMethodCall(MethodCall call) {

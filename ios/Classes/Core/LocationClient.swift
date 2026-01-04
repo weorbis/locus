@@ -46,7 +46,8 @@ class LocationClient: NSObject, CLLocationManagerDelegate {
     
     func start() {
         locationManager.startUpdatingLocation()
-        if !config.stopOnTerminate || config.startOnBoot {
+        let auth = getAuthorizationStatus()
+        if (!config.stopOnTerminate || config.startOnBoot) && auth == .authorizedAlways {
             locationManager.startMonitoringSignificantLocationChanges()
         }
     }

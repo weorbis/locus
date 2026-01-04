@@ -1,4 +1,4 @@
-import 'locus_channels.dart';
+import 'package:locus/src/core/locus_channels.dart';
 
 /// Scheduler management.
 class LocusScheduler {

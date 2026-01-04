@@ -21,9 +21,13 @@
 
 - **Continuous Tracking**: Reliable background updates with adaptive filters.
 - **Motion Recognition**: Activity detection (walking, running, driving, stationary).
-- **Native Geofencing**: High-performance entry/exit/dwell detection.
+- **Geofencing**: Circular and polygon geofences with enter/exit/dwell detection.
+- **Polygon Geofences**: Define complex boundaries with arbitrary shapes.
+- **Geofence Workflows**: Multi-step geofence sequences with timeouts.
+- **Privacy Zones**: Exclude, obfuscate, or reduce accuracy in sensitive areas.
+- **Trip Detection**: Automatic trip start/end detection with route recording.
+- **Battery Optimization**: Adaptive profiles based on speed, activity, and battery level.
 - **Automated Sync**: HTTP synchronization with retry logic and batching.
-- **Battery Optimization**: Adaptive profiles based on speed and battery level.
 - **Offline Reliability**: SQLite persistence to prevent data loss.
 - **Headless Execution**: Execute background logic even when the app is terminated.
 
@@ -32,8 +36,12 @@
 For full documentation, visit [locus.dev](https://pub.dev/documentation/locus/latest/) or check the local [docs](docs/intro.md) folder:
 
 - **[Quick Start](docs/guides/quickstart.md)** - Get running in 5 minutes.
-- **[Core Concepts](docs/core/configuration.md)** - Configuration, Syncing, and Adaptation.
-- **[Advanced Features](docs/advanced/geofencing.md)** - Geofencing, Headless, and Diagnostics.
+- **[Architecture](docs/core/architecture.md)** - Project structure and design.
+- **[Configuration](docs/core/configuration.md)** - Configuration options and presets.
+- **[Geofencing](docs/advanced/geofencing.md)** - Circular and polygon geofences.
+- **[Privacy Zones](docs/advanced/privacy-zones.md)** - Location privacy features.
+- **[Trip Tracking](docs/advanced/trips.md)** - Trip detection and recording.
+- **[Battery Optimization](docs/advanced/battery-optimization.md)** - Adaptive tracking.
 - **[Platform Setup](docs/setup/platform-configuration.md)** - iOS & Android permissions.
 
 ## Quick Start
@@ -66,6 +74,30 @@ void main() async {
 }
 ```
 
+### 3. Add Geofences
+
+```dart
+// Circular geofence
+await Locus.addGeofence(Geofence(
+  identifier: 'office',
+  latitude: 37.7749,
+  longitude: -122.4194,
+  radius: 100,
+  notifyOnEntry: true,
+  notifyOnExit: true,
+));
+
+// Polygon geofence
+await Locus.addPolygonGeofence(PolygonGeofence(
+  identifier: 'campus',
+  vertices: [
+    GeoPoint(latitude: 37.7749, longitude: -122.4194),
+    GeoPoint(latitude: 37.7759, longitude: -122.4184),
+    GeoPoint(latitude: 37.7769, longitude: -122.4204),
+  ],
+));
+```
+
 ## Project Tooling
 
 Locus includes a CLI to help with configuration and diagnostics:
@@ -76,6 +108,26 @@ dart run locus:setup
 
 # Run environment diagnostics
 dart run locus:doctor
+```
+
+## Architecture
+
+Locus uses a **feature-first** architecture:
+
+```
+lib/src/
+├── features/
+│   ├── location/      # Core location tracking
+│   ├── geofencing/    # Circular & polygon geofences
+│   ├── battery/       # Battery optimization
+│   ├── privacy/       # Privacy zones
+│   ├── trips/         # Trip detection
+│   ├── sync/          # HTTP sync
+│   ├── tracking/      # Tracking profiles
+│   └── diagnostics/   # Debug tools
+├── shared/            # Common models
+├── core/              # Infrastructure
+└── config/            # Configuration
 ```
 
 ## License

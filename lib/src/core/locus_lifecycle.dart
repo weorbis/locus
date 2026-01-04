@@ -1,16 +1,17 @@
 import 'dart:async';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:locus/src/config/config.dart';
-import 'package:locus/src/models/models.dart';
-import 'package:locus/src/utils/location_utils.dart';
-import 'locus_channels.dart';
-import 'locus_adaptive.dart';
-import 'locus_streams.dart';
-import 'locus_trip.dart';
-import 'locus_profiles.dart';
-import 'locus_workflows.dart';
-import 'locus_features.dart';
-import 'locus_geofencing.dart';
+import 'package:locus/src/models.dart';
+import 'package:locus/src/shared/location_utils.dart';
+import 'package:locus/src/core/locus_channels.dart';
+import 'package:locus/src/features/battery/services/locus_adaptive.dart';
+import 'package:locus/src/core/locus_streams.dart';
+import 'package:locus/src/features/trips/services/locus_trip.dart';
+import 'package:locus/src/features/tracking/services/locus_profiles.dart';
+import 'package:locus/src/features/geofencing/services/locus_workflows.dart';
+import 'package:locus/src/core/locus_features.dart';
+import 'package:locus/src/features/geofencing/services/locus_geofencing.dart';
 
 /// Lifecycle management of the Locus SDK.
 class LocusLifecycle {
@@ -57,7 +58,12 @@ class LocusLifecycle {
 
   /// Starts the background geolocation service.
   static Future<GeolocationState> start() async {
-    final result = await LocusChannels.methods.invokeMethod('start');
+    dynamic result;
+    try {
+      result = await LocusChannels.methods.invokeMethod('start');
+    } on MissingPluginException {
+      return const GeolocationState(enabled: false, isMoving: false);
+    }
 
     // Start adaptive tracking if enabled
     if (LocusAdaptive.isEnabled) {
@@ -67,7 +73,8 @@ class LocusLifecycle {
     if (result is Map) {
       return GeolocationState.fromMap(Map<String, dynamic>.from(result));
     }
-    return const GeolocationState(enabled: true, isMoving: false);
+    debugPrint('[Locus] start failed: unexpected result ${result.runtimeType}');
+    return const GeolocationState(enabled: false, isMoving: false);
   }
 
   /// Stops the background geolocation service.
@@ -99,6 +106,20 @@ class LocusLifecycle {
   static Future<void> destroy() async {
     LocusAdaptive.stopAdaptiveTracking();
     await LocusStreams.stopNativeStream(force: true);
+
+    // Attempt to stop and clean native state; ignore missing plugin in tests
+    try {
+      await LocusChannels.methods.invokeMethod('stop');
+    } catch (_) {}
+    try {
+      await LocusChannels.methods.invokeMethod('removeGeofences');
+    } catch (_) {}
+    try {
+      await LocusChannels.methods.invokeMethod('clearQueue');
+    } catch (_) {}
+    try {
+      await LocusChannels.methods.invokeMethod('destroyLocations');
+    } catch (_) {}
 
     await LocusTrip.dispose();
     LocusProfiles.clearTrackingProfiles();

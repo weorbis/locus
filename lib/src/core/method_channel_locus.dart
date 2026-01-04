@@ -2,31 +2,31 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:locus/src/battery/battery.dart';
 import 'package:locus/src/config/config.dart';
-import 'package:locus/src/events/events.dart';
-import 'package:locus/src/models/models.dart';
-import 'package:locus/src/services/services.dart';
-import 'package:locus/src/core/locus_adaptive.dart';
-import 'package:locus/src/core/locus_battery.dart';
+import 'package:locus/src/shared/events.dart';
+import 'package:locus/src/models.dart';
+import 'package:locus/src/services.dart';
 import 'package:locus/src/core/locus_channels.dart';
 import 'package:locus/src/core/locus_config.dart';
-import 'package:locus/src/core/locus_diagnostics.dart';
 import 'package:locus/src/core/locus_features.dart';
-import 'package:locus/src/core/locus_geofencing.dart';
 import 'package:locus/src/core/locus_headless.dart' show LocusHeadless;
 import 'package:locus/src/core/locus_lifecycle.dart';
-import 'package:locus/src/core/locus_location.dart';
-import 'package:locus/src/core/locus_profiles.dart';
 import 'package:locus/src/core/locus_scheduler.dart';
 import 'package:locus/src/core/locus_streams.dart';
-import 'package:locus/src/core/locus_sync.dart';
-import 'package:locus/src/core/locus_trip.dart';
-import 'package:locus/src/core/locus_workflows.dart';
 import 'package:locus/src/core/locus_interface.dart';
 
 /// Method-channel backed implementation of [LocusInterface].
 class MethodChannelLocus implements LocusInterface {
+  /// Creates a new MethodChannelLocus instance.
+  /// 
+  /// Automatically registers polygon geofence and privacy zone services
+  /// with the event stream for location processing.
+  MethodChannelLocus() {
+    // Register services with LocusStreams for event processing
+    LocusStreams.setPolygonGeofenceService(_polygonGeofenceService);
+    LocusStreams.setPrivacyZoneService(_privacyZoneService);
+  }
+
   // ============================================================
   // Event Stream
   // ============================================================
@@ -81,6 +81,19 @@ class MethodChannelLocus implements LocusInterface {
   }
 
   @override
+  Future<List<Location>> queryLocations(LocationQuery query) {
+    return LocusLocation.queryLocations(query);
+  }
+
+  @override
+  Future<LocationSummary> getLocationSummary({
+    DateTime? date,
+    LocationQuery? query,
+  }) {
+    return LocusLocation.getLocationSummary(date: date, query: query);
+  }
+
+  @override
   Future<bool> changePace(bool isMoving) {
     return LocusLocation.changePace(isMoving);
   }
@@ -132,6 +145,97 @@ class MethodChannelLocus implements LocusInterface {
   Future<bool> startGeofences() {
     return LocusGeofencing.startGeofences();
   }
+
+  // ============================================================
+  // Polygon Geofencing Methods
+  // ============================================================
+  /// Polygon geofence service instance.
+  final PolygonGeofenceService _polygonGeofenceService =
+      PolygonGeofenceService();
+
+  @override
+  Future<bool> addPolygonGeofence(PolygonGeofence polygon) {
+    return _polygonGeofenceService.addPolygonGeofence(polygon);
+  }
+
+  @override
+  Future<int> addPolygonGeofences(List<PolygonGeofence> polygons) {
+    return _polygonGeofenceService.addPolygonGeofences(polygons);
+  }
+
+  @override
+  Future<bool> removePolygonGeofence(String identifier) {
+    return _polygonGeofenceService.removePolygonGeofence(identifier);
+  }
+
+  @override
+  Future<void> removeAllPolygonGeofences() {
+    return _polygonGeofenceService.removeAllPolygonGeofences();
+  }
+
+  @override
+  Future<List<PolygonGeofence>> getPolygonGeofences() async {
+    return _polygonGeofenceService.polygons;
+  }
+
+  @override
+  Future<PolygonGeofence?> getPolygonGeofence(String identifier) async {
+    return _polygonGeofenceService.getPolygonGeofence(identifier);
+  }
+
+  @override
+  Future<bool> polygonGeofenceExists(String identifier) async {
+    return _polygonGeofenceService.polygonExists(identifier);
+  }
+
+  @override
+  Stream<PolygonGeofenceEvent> get polygonGeofenceEvents =>
+      _polygonGeofenceService.events;
+
+  // ============================================================
+  // Privacy Zone Methods
+  // ============================================================
+  /// Privacy zone service instance.
+  final PrivacyZoneService _privacyZoneService = PrivacyZoneService();
+
+  @override
+  Future<void> addPrivacyZone(PrivacyZone zone) {
+    return _privacyZoneService.addZone(zone);
+  }
+
+  @override
+  Future<void> addPrivacyZones(List<PrivacyZone> zones) {
+    return _privacyZoneService.addZones(zones);
+  }
+
+  @override
+  Future<bool> removePrivacyZone(String identifier) {
+    return _privacyZoneService.removeZone(identifier);
+  }
+
+  @override
+  Future<void> removeAllPrivacyZones() {
+    return _privacyZoneService.removeAllZones();
+  }
+
+  @override
+  Future<PrivacyZone?> getPrivacyZone(String identifier) async {
+    return _privacyZoneService.getZone(identifier);
+  }
+
+  @override
+  Future<List<PrivacyZone>> getPrivacyZones() async {
+    return _privacyZoneService.zones;
+  }
+
+  @override
+  Future<bool> setPrivacyZoneEnabled(String identifier, bool enabled) {
+    return _privacyZoneService.setZoneEnabled(identifier, enabled);
+  }
+
+  @override
+  Stream<PrivacyZoneEvent> get privacyZoneEvents =>
+      _privacyZoneService.zoneChanges;
 
   // ============================================================
   // Configuration Methods
@@ -626,6 +730,10 @@ class MethodChannelLocus implements LocusInterface {
 
   @override
   Future<PowerState> getPowerState() => LocusBattery.getPowerState();
+
+  @override
+  Future<BatteryRunway> estimateBatteryRunway() =>
+      LocusBattery.estimateBatteryRunway();
 
   @override
   Stream<PowerStateChangeEvent> get powerStateStream =>

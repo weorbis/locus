@@ -26,7 +26,11 @@ extension SwiftLocusPlugin {
   }
 
   func startHeartbeatTimer() {
-    if configManager.heartbeatInterval <= 0 || heartbeatTimer != nil {
+    if configManager.heartbeatInterval <= 0 {
+      stopHeartbeatTimer()
+      return
+    }
+    if heartbeatTimer != nil {
       return
     }
     heartbeatTimer = Timer.scheduledTimer(withTimeInterval: configManager.heartbeatInterval, repeats: true) { [weak self] _ in
@@ -40,6 +44,19 @@ extension SwiftLocusPlugin {
   func stopHeartbeatTimer() {
     heartbeatTimer?.invalidate()
     heartbeatTimer = nil
+  }
+
+  func stopBackgroundRefresh() {
+    let taskId = configManager.bgTaskId.trimmingCharacters(in: .whitespacesAndNewlines)
+    if taskId.isEmpty {
+      return
+    }
+    if #available(iOS 13.0, *) {
+      BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: taskId)
+      BGTaskScheduler.shared.cancelAllTaskRequests()
+    } else {
+      UIApplication.shared.setMinimumBackgroundFetchInterval(UIApplication.backgroundFetchIntervalNever)
+    }
   }
 
   func registerBackgroundTasks() {

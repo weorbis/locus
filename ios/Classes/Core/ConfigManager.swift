@@ -72,6 +72,7 @@ class ConfigManager {
     var geofenceModeHighAccuracy = false
     var geofenceInitialTriggerEntry = true
     var geofenceProximityRadius: Int = 1000
+    var privacyModeEnabled = false
     
     // Constants shared across plugin
     static let startOnBootKey = "bg_start_on_boot"
@@ -174,6 +175,7 @@ class ConfigManager {
         // Persistence
         if let val = config["maxDaysToPersist"] as? NSNumber { maxDaysToPersist = val.intValue }
         if let val = config["maxRecordsToPersist"] as? NSNumber { maxRecordsToPersist = val.intValue }
+        if let val = config["privacyModeEnabled"] as? Bool { privacyModeEnabled = val }
         
         // Geofence settings
         if let val = config["maxMonitoredGeofences"] as? NSNumber { maxMonitoredGeofences = val.intValue }

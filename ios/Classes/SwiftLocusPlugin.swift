@@ -20,6 +20,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
   let scheduler = Scheduler.shared
   let storage = StorageManager.shared
   let geofenceManager = GeofenceManager.shared
+  let trackingStats = TrackingStats()
 
   // State
   let locationClient = LocationClient.shared
@@ -161,6 +162,11 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       } else {
         result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected geofence identifier string", details: nil))
       }
+    case "setPrivacyMode":
+      if let enabled = call.arguments as? Bool {
+        configManager.privacyModeEnabled = enabled
+      }
+      result(true)
     case "startGeofences":
       geofenceManager.startStoredGeofences()
       result(true)
@@ -302,7 +308,23 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
     if isEnabled {
       return
     }
+    let auth = locationClient.getAuthorizationStatus()
+      if auth == .notDetermined {
+        locationClient.requestPermissions()
+        emitProviderChange()
+        return
+      }
+      if auth == .authorizedWhenInUse {
+        locationClient.requestAlwaysAuthorization()
+        emitProviderChange()
+        return
+      }
+      if auth == .denied || auth == .restricted {
+      emitProviderChange()
+      return
+    }
     isEnabled = true
+    trackingStats.onTrackingStart()
     locationClient.start()
     motionDetector.start()
     geofenceManager.startStoredGeofences()
@@ -317,10 +339,12 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       return
     }
     isEnabled = false
+    trackingStats.onTrackingStop()
     locationClient.stop()
     motionDetector.stop()
     emitEnabledChange(false)
     stopHeartbeatTimer()
+    stopBackgroundRefresh()
   }
 
   func buildState() -> [String: Any] {

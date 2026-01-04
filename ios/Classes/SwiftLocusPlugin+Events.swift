@@ -42,11 +42,12 @@ extension SwiftLocusPlugin {
     ]
     sendEvent(event)
 
-    if shouldPersist(eventName: eventName) {
-      storage.saveLocation(payload, maxDays: configManager.maxDaysToPersist, maxRecords: configManager.maxRecordsToPersist)
+    if !configManager.privacyModeEnabled {
+      if shouldPersist(eventName: eventName) {
+        storage.saveLocation(payload, maxDays: configManager.maxDaysToPersist, maxRecords: configManager.maxRecordsToPersist)
+      }
+      syncManager.syncNow(currentPayload: payload)
     }
-
-    syncManager.syncNow(currentPayload: payload)
     completion?(true)
   }
 
@@ -208,21 +209,10 @@ extension SwiftLocusPlugin {
     UIDevice.current.isBatteryMonitoringEnabled = true
     let batteryLevel = UIDevice.current.batteryLevel
     let batteryState = UIDevice.current.batteryState
-    return [
-      "currentBatteryLevel": batteryLevel >= 0 ? Int(batteryLevel * 100) : -1,
-      "isCharging": batteryState == .charging || batteryState == .full,
-      "gpsOnTimePercent": 0.0,
-      "locationUpdatesCount": 0,
-      "syncRequestsCount": 0,
-      "averageAccuracyMeters": 0.0,
-      "trackingDurationMinutes": 0,
-      "estimatedDrainPercent": 0.0,
-      "estimatedDrainPerHour": 0.0,
-      "optimizationLevel": "none",
-      "timeByState": [:],
-      "accuracyDowngradeCount": 0,
-      "gpsDisabledCount": 0
-    ]
+    let currentLevel = batteryLevel >= 0 ? Int(batteryLevel * 100) : 50
+    let isCharging = batteryState == .charging || batteryState == .full
+    
+    return trackingStats.buildStats(currentBatteryLevel: currentLevel, isCharging: isCharging)
   }
 
   func buildPowerState() -> [String: Any] {

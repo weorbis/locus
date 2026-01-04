@@ -2,17 +2,20 @@ library;
 
 import 'dart:async';
 
-import 'package:locus/src/battery/battery.dart';
 import 'package:locus/src/config/config.dart';
-import 'package:locus/src/events/events.dart';
-import 'package:locus/src/models/models.dart';
-import 'package:locus/src/services/services.dart';
+import 'package:locus/src/shared/events.dart';
+import 'package:locus/src/models.dart';
+import 'package:locus/src/services.dart';
 import 'package:locus/src/core/locus_interface.dart';
 import 'package:locus/src/core/method_channel_locus.dart';
 
 // Export types needed for sync body builder
 export 'package:locus/src/core/locus_interface.dart'
     show SyncBodyBuilder, SyncBodyContext, HeadlessEventCallback;
+
+// Export location history types
+export 'package:locus/src/features/location/models/location_history.dart'
+    show LocationQuery, LocationSummary, FrequentLocation;
 
 /// Main class for interacting with background geolocation services.
 ///
@@ -83,6 +86,60 @@ class Locus {
     return _instance.getLocations(limit: limit);
   }
 
+  /// Queries stored locations with filtering and pagination.
+  ///
+  /// Use [query] to filter locations by time range, accuracy, bounding box,
+  /// and to limit/offset results.
+  ///
+  /// Example:
+  /// ```dart
+  /// // Get high-accuracy locations from the last hour
+  /// final query = LocationQuery(
+  ///   from: DateTime.now().subtract(Duration(hours: 1)),
+  ///   to: DateTime.now(),
+  ///   minAccuracy: 20,
+  ///   limit: 100,
+  /// );
+  /// final locations = await Locus.queryLocations(query);
+  /// ```
+  static Future<List<Location>> queryLocations(LocationQuery query) {
+    return _instance.queryLocations(query);
+  }
+
+  /// Gets a summary of location history.
+  ///
+  /// Returns statistics about locations including total distance traveled,
+  /// time moving vs stationary, frequently visited locations, and more.
+  ///
+  /// If [date] is provided, returns summary for that specific day.
+  /// If [query] is provided, returns summary for locations matching the query.
+  /// If neither is provided, returns summary for today.
+  ///
+  /// Example:
+  /// ```dart
+  /// // Get summary for today
+  /// final summary = await Locus.getLocationSummary();
+  /// print('Distance traveled: ${summary.totalDistance}m');
+  /// print('Time moving: ${summary.movingDuration.inMinutes} min');
+  ///
+  /// // Get summary for a specific date
+  /// final yesterday = DateTime.now().subtract(Duration(days: 1));
+  /// final yesterdaySummary = await Locus.getLocationSummary(date: yesterday);
+  ///
+  /// // Get summary with custom query
+  /// final query = LocationQuery(
+  ///   from: DateTime(2024, 1, 1),
+  ///   to: DateTime(2024, 1, 31),
+  /// );
+  /// final monthSummary = await Locus.getLocationSummary(query: query);
+  /// ```
+  static Future<LocationSummary> getLocationSummary({
+    DateTime? date,
+    LocationQuery? query,
+  }) {
+    return _instance.getLocationSummary(date: date, query: query);
+  }
+
   /// Changes the motion state (moving/stationary).
   static Future<bool> changePace(bool isMoving) {
     return _instance.changePace(isMoving);
@@ -135,6 +192,131 @@ class Locus {
   /// Starts geofence-only mode.
   static Future<bool> startGeofences() {
     return _instance.startGeofences();
+  }
+
+  // ============================================================
+  // Polygon Geofencing Methods
+  // ============================================================
+
+  /// Adds a polygon geofence.
+  ///
+  /// Polygon geofences allow defining irregular shapes for geofencing,
+  /// such as building outlines, parking lots, or delivery zones.
+  ///
+  /// Example:
+  /// ```dart
+  /// await Locus.addPolygonGeofence(PolygonGeofence(
+  ///   identifier: 'parking-lot',
+  ///   vertices: [
+  ///     GeoPoint(latitude: 37.4219, longitude: -122.0840),
+  ///     GeoPoint(latitude: 37.4220, longitude: -122.0830),
+  ///     GeoPoint(latitude: 37.4215, longitude: -122.0828),
+  ///     GeoPoint(latitude: 37.4214, longitude: -122.0838),
+  ///   ],
+  /// ));
+  /// ```
+  static Future<bool> addPolygonGeofence(PolygonGeofence polygon) {
+    return _instance.addPolygonGeofence(polygon);
+  }
+
+  /// Adds multiple polygon geofences.
+  ///
+  /// Returns the number of polygons successfully added.
+  static Future<int> addPolygonGeofences(List<PolygonGeofence> polygons) {
+    return _instance.addPolygonGeofences(polygons);
+  }
+
+  /// Removes a polygon geofence by identifier.
+  static Future<bool> removePolygonGeofence(String identifier) {
+    return _instance.removePolygonGeofence(identifier);
+  }
+
+  /// Removes all polygon geofences.
+  static Future<void> removeAllPolygonGeofences() {
+    return _instance.removeAllPolygonGeofences();
+  }
+
+  /// Gets all registered polygon geofences.
+  static Future<List<PolygonGeofence>> getPolygonGeofences() {
+    return _instance.getPolygonGeofences();
+  }
+
+  /// Gets a polygon geofence by identifier.
+  static Future<PolygonGeofence?> getPolygonGeofence(String identifier) {
+    return _instance.getPolygonGeofence(identifier);
+  }
+
+  /// Checks if a polygon geofence exists.
+  static Future<bool> polygonGeofenceExists(String identifier) {
+    return _instance.polygonGeofenceExists(identifier);
+  }
+
+  /// Stream of polygon geofence events (enter, exit, dwell).
+  static Stream<PolygonGeofenceEvent> get polygonGeofenceEvents {
+    return _instance.polygonGeofenceEvents;
+  }
+
+  // ============================================================
+  // Privacy Zone Methods
+  // ============================================================
+
+  /// Adds a privacy zone where location data will be obfuscated or excluded.
+  ///
+  /// Privacy zones support GDPR and privacy compliance by allowing users
+  /// to define areas where their location should be protected.
+  ///
+  /// Example:
+  /// ```dart
+  /// await Locus.addPrivacyZone(PrivacyZone.create(
+  ///   identifier: 'home',
+  ///   latitude: 37.7749,
+  ///   longitude: -122.4194,
+  ///   radius: 100.0,
+  ///   action: PrivacyZoneAction.obfuscate,
+  ///   obfuscationRadius: 500.0,
+  /// ));
+  /// ```
+  static Future<void> addPrivacyZone(PrivacyZone zone) {
+    return _instance.addPrivacyZone(zone);
+  }
+
+  /// Adds multiple privacy zones.
+  static Future<void> addPrivacyZones(List<PrivacyZone> zones) {
+    return _instance.addPrivacyZones(zones);
+  }
+
+  /// Removes a privacy zone by identifier.
+  static Future<bool> removePrivacyZone(String identifier) {
+    return _instance.removePrivacyZone(identifier);
+  }
+
+  /// Removes all privacy zones.
+  static Future<void> removeAllPrivacyZones() {
+    return _instance.removeAllPrivacyZones();
+  }
+
+  /// Gets a privacy zone by identifier.
+  static Future<PrivacyZone?> getPrivacyZone(String identifier) {
+    return _instance.getPrivacyZone(identifier);
+  }
+
+  /// Gets all registered privacy zones.
+  static Future<List<PrivacyZone>> getPrivacyZones() {
+    return _instance.getPrivacyZones();
+  }
+
+  /// Enables or disables a privacy zone.
+  static Future<bool> setPrivacyZoneEnabled(String identifier, bool enabled) {
+    return _instance.setPrivacyZoneEnabled(identifier, enabled);
+  }
+
+  /// Stream of privacy zone change events.
+  static Stream<PrivacyZoneEvent> get privacyZoneEvents =>
+      _instance.privacyZoneEvents;
+
+  /// Registers a callback for privacy zone changes.
+  static void onPrivacyZoneChange(void Function(PrivacyZoneEvent) callback) {
+    _instance.privacyZoneEvents.listen(callback);
   }
 
   // ============================================================
@@ -580,6 +762,25 @@ class Locus {
   static Future<BatteryStats> getBatteryStats() => _instance.getBatteryStats();
 
   static Future<PowerState> getPowerState() => _instance.getPowerState();
+
+  /// Estimates remaining battery runway for location tracking.
+  ///
+  /// Returns predictions for how long tracking can continue at current
+  /// and low power consumption rates, along with actionable recommendations.
+  ///
+  /// Example:
+  /// ```dart
+  /// final runway = await Locus.estimateBatteryRunway();
+  /// print('Current rate: ${runway.formattedDuration}');
+  /// print('Low power mode: ${runway.formattedLowPowerDuration}');
+  /// print('Recommendation: ${runway.recommendation}');
+  ///
+  /// if (runway.shouldSwitchToLowPower) {
+  ///   // Consider switching to a more battery-efficient profile
+  /// }
+  /// ```
+  static Future<BatteryRunway> estimateBatteryRunway() =>
+      _instance.estimateBatteryRunway();
 
   static Stream<PowerStateChangeEvent> get powerStateStream =>
       _instance.powerStateStream;

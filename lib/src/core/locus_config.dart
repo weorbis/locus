@@ -1,5 +1,5 @@
 import 'package:locus/src/config/config.dart';
-import 'locus_channels.dart';
+import 'package:locus/src/core/locus_channels.dart';
 
 /// Configuration management.
 class LocusConfig {

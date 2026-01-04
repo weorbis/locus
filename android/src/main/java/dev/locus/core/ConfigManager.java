@@ -73,6 +73,7 @@ public class ConfigManager {
     public List<String> triggerActivities = new ArrayList<>();
     public int maxMonitoredGeofences = 0;
     public String desiredAccuracy = "high";
+    public boolean privacyModeEnabled = false;
 
     public ConfigManager(Context context) {
         this.prefs = context.getSharedPreferences(LocusPlugin.PREFS_NAME, Context.MODE_PRIVATE);
@@ -303,6 +304,11 @@ public class ConfigManager {
         Object desiredAccuracyValue = config.get("desiredAccuracy");
         if (desiredAccuracyValue instanceof String) {
             desiredAccuracy = (String) desiredAccuracyValue;
+        }
+
+        Object privacyMode = config.get("privacyModeEnabled");
+        if (privacyMode instanceof Boolean) {
+            privacyModeEnabled = (Boolean) privacyMode;
         }
 
         prefs.edit()

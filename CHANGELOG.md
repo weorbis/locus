@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-01-03
+
+### Added
+
+- **Polygon Geofences**: Define complex boundaries with arbitrary shapes using `PolygonGeofence`. Supports enter/exit detection with efficient ray-casting algorithm.
+- **Privacy Zones**: New privacy protection feature allowing users to exclude, obfuscate, or reduce accuracy in sensitive areas.
+- **Trip Tracking**: Automatic trip detection with start/end events, route recording, and trip summaries.
+- **Geofence Workflows**: Multi-step geofence sequences with timeouts for complex location-based flows.
+- **Tracking Profiles**: Pre-defined and custom tracking profiles with automatic switching rules.
+- **Battery Runway**: Estimate remaining tracking time based on current battery drain rate.
+
+### Changed
+
+- **Architecture**: Restructured codebase to feature-first organization (MVVM pattern). Code is now organized by domain (location, geofencing, battery, etc.) rather than by layer (models, services).
+- **Import Paths**: Barrel exports simplified. Use `import 'package:locus/locus.dart'` for all public APIs.
+
+### Fixed
+
+- Android: guarded foreground service startup for null intents/notification permission errors and prevented stale geofence payloads from persisting when privacy mode is enabled; geofence restore now clears persisted entries on Play Services failures to keep Dart and native in sync.
+- Android: cleaned up cached headless Flutter engines after idle to avoid leaks.
+- iOS: startTracking now requests/validates permission before enabling, and significant-change monitoring runs only with Always authorization.
+- Dart: start returns disabled state when native start fails instead of assuming enabled; destroy now also invokes native stop/cleanup hooks.
+- Dart: location queries honor limit/offset without loading unbounded history; trip engine awaits persistence to avoid dropped saves; enqueue now surfaces native failures instead of returning empty ids.
+
 ## [1.1.0] - 2026-01-01
 
 ### Added

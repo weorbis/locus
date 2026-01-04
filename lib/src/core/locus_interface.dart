@@ -1,10 +1,9 @@
 import 'dart:async';
 
-import 'package:locus/src/battery/battery.dart';
 import 'package:locus/src/config/config.dart';
-import 'package:locus/src/events/events.dart';
-import 'package:locus/src/models/models.dart';
-import 'package:locus/src/services/services.dart';
+import 'package:locus/src/shared/events.dart';
+import 'package:locus/src/models.dart';
+import 'package:locus/src/services.dart';
 
 /// Callback type for headless background events.
 typedef HeadlessEventCallback = Future<void> Function(HeadlessEvent event);
@@ -77,6 +76,8 @@ abstract class LocusInterface {
   });
 
   Future<List<Location>> getLocations({int? limit});
+  Future<List<Location>> queryLocations(LocationQuery query);
+  Future<LocationSummary> getLocationSummary({DateTime? date, LocationQuery? query});
   Future<bool> changePace(bool isMoving);
   Future<double> setOdometer(double value);
 
@@ -91,6 +92,46 @@ abstract class LocusInterface {
   Future<Geofence?> getGeofence(String identifier);
   Future<bool> geofenceExists(String identifier);
   Future<bool> startGeofences();
+
+  // ============================================================
+  // Polygon Geofencing Methods
+  // ============================================================
+  Future<bool> addPolygonGeofence(PolygonGeofence polygon);
+  Future<int> addPolygonGeofences(List<PolygonGeofence> polygons);
+  Future<bool> removePolygonGeofence(String identifier);
+  Future<void> removeAllPolygonGeofences();
+  Future<List<PolygonGeofence>> getPolygonGeofences();
+  Future<PolygonGeofence?> getPolygonGeofence(String identifier);
+  Future<bool> polygonGeofenceExists(String identifier);
+  Stream<PolygonGeofenceEvent> get polygonGeofenceEvents;
+
+  // ============================================================
+  // Privacy Zone Methods
+  // ============================================================
+
+  /// Adds a privacy zone where location data will be obfuscated or excluded.
+  Future<void> addPrivacyZone(PrivacyZone zone);
+
+  /// Adds multiple privacy zones.
+  Future<void> addPrivacyZones(List<PrivacyZone> zones);
+
+  /// Removes a privacy zone by identifier.
+  Future<bool> removePrivacyZone(String identifier);
+
+  /// Removes all privacy zones.
+  Future<void> removeAllPrivacyZones();
+
+  /// Gets a privacy zone by identifier.
+  Future<PrivacyZone?> getPrivacyZone(String identifier);
+
+  /// Gets all registered privacy zones.
+  Future<List<PrivacyZone>> getPrivacyZones();
+
+  /// Enables or disables a privacy zone.
+  Future<bool> setPrivacyZoneEnabled(String identifier, bool enabled);
+
+  /// Stream of privacy zone change events.
+  Stream<PrivacyZoneEvent> get privacyZoneEvents;
 
   // ============================================================
   // Configuration Methods
@@ -322,6 +363,7 @@ abstract class LocusInterface {
   // ============================================================
   Future<BatteryStats> getBatteryStats();
   Future<PowerState> getPowerState();
+  Future<BatteryRunway> estimateBatteryRunway();
   Stream<PowerStateChangeEvent> get powerStateStream;
   StreamSubscription<PowerStateChangeEvent> onPowerStateChangeWithObj(
     void Function(PowerStateChangeEvent event) callback, {

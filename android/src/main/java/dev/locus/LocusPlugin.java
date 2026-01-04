@@ -34,6 +34,7 @@ import dev.locus.core.Scheduler;
 import dev.locus.core.StateManager;
 import dev.locus.core.SyncManager;
 import dev.locus.core.SystemMonitor;
+import dev.locus.core.TrackingStats;
 import dev.locus.geofence.GeofenceManager;
 import dev.locus.location.LocationClient;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
@@ -79,18 +80,23 @@ public class LocusPlugin implements FlutterPlugin,
     private LocationTracker locationTracker;
     private Scheduler scheduler;
     private PreferenceEventHandler preferenceEventHandler;
+    private boolean privacyModeEnabled = false;
+    private TrackingStats trackingStats;
 
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
         androidContext = binding.getApplicationContext();
         prefs = androidContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        privacyModeEnabled = prefs.getBoolean("bg_privacy_mode", false);
         methodChannel = new MethodChannel(binding.getBinaryMessenger(), METHOD_CHANNEL);
         methodChannel.setMethodCallHandler(this);
         eventChannel = new EventChannel(binding.getBinaryMessenger(), EVENT_CHANNEL);
         eventChannel.setStreamHandler(this);
 
         configManager = new ConfigManager(androidContext);
+        configManager.privacyModeEnabled = privacyModeEnabled;
         stateManager = new StateManager(androidContext);
+        trackingStats = new TrackingStats(androidContext);
         logManager = new LogManager(configManager, stateManager.getLogStore());
         headlessDispatcher = new HeadlessDispatcher(androidContext, configManager, prefs);
         eventDispatcher = new EventDispatcher(headlessDispatcher);
@@ -125,11 +131,16 @@ public class LocusPlugin implements FlutterPlugin,
                     public void onLog(String level, String message) {
                         logManager.log(level, message);
                     }
+
+                    @Override
+                    public void onSyncRequest() {
+                        trackingStats.onSyncRequest();
+                    }
                 });
 
         locationTracker = new LocationTracker(androidContext, configManager, locationClient, motionManager,
                 geofenceManager, syncManager, stateManager, foregroundServiceController, eventDispatcher,
-                logManager, () -> systemMonitor.isAutoSyncAllowed(configManager));
+                logManager, () -> systemMonitor.isAutoSyncAllowed(configManager), trackingStats);
 
         preferenceEventHandler = new PreferenceEventHandler(configManager, motionManager, geofenceManager,
                 stateManager, syncManager, eventDispatcher,
@@ -316,6 +327,15 @@ public class LocusPlugin implements FlutterPlugin,
                     queueLimit = ((Number) queueArgs.get("limit")).intValue();
                 }
                 result.success(stateManager.getQueue(queueLimit));
+                break;
+            case "setPrivacyMode":
+                Boolean enabled = call.arguments instanceof Boolean ? (Boolean) call.arguments : null;
+                if (enabled != null) {
+                    privacyModeEnabled = enabled;
+                    configManager.privacyModeEnabled = enabled;
+                    prefs.edit().putBoolean("bg_privacy_mode", enabled).apply();
+                }
+                result.success(true);
                 break;
             case "clearQueue":
                 stateManager.clearQueue();
@@ -577,29 +597,20 @@ public class LocusPlugin implements FlutterPlugin,
     }
 
     private Map<String, Object> buildBatteryStats() {
-        Map<String, Object> stats = new HashMap<>();
         android.content.Intent batteryStatus = androidContext.registerReceiver(null,
                 new android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED));
+        int batteryLevel = -1;
+        boolean isCharging = false;
+        
         if (batteryStatus != null) {
             int level = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1);
             int scale = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1);
-            double batteryLevel = level >= 0 && scale > 0 ? (level / (double) scale) * 100.0 : -1;
-            stats.put("currentBatteryLevel", (int) batteryLevel);
-            stats.put("isCharging", batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
-                    == android.os.BatteryManager.BATTERY_STATUS_CHARGING);
+            batteryLevel = (level >= 0 && scale > 0) ? (int) ((level / (double) scale) * 100.0) : 50;
+            isCharging = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+                    == android.os.BatteryManager.BATTERY_STATUS_CHARGING;
         }
-        stats.put("gpsOnTimePercent", 0.0);
-        stats.put("locationUpdatesCount", 0);
-        stats.put("syncRequestsCount", 0);
-        stats.put("averageAccuracyMeters", 0.0);
-        stats.put("trackingDurationMinutes", 0);
-        stats.put("estimatedDrainPercent", 0.0);
-        stats.put("estimatedDrainPerHour", 0.0);
-        stats.put("optimizationLevel", "none");
-        stats.put("timeByState", new HashMap<String, Object>());
-        stats.put("accuracyDowngradeCount", 0);
-        stats.put("gpsDisabledCount", 0);
-        return stats;
+
+        return trackingStats.buildStats(batteryLevel, isCharging);
     }
 
     private Map<String, Object> buildPowerState() {

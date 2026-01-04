@@ -41,6 +41,7 @@ public class LocationTracker {
     private final EventDispatcher eventDispatcher;
     private final LogManager logManager;
     private final AutoSyncChecker autoSyncChecker;
+    private final TrackingStats trackingStats;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private Location lastLocation;
@@ -58,7 +59,8 @@ public class LocationTracker {
                            ForegroundServiceController foregroundServiceController,
                            EventDispatcher eventDispatcher,
                            LogManager logManager,
-                           AutoSyncChecker autoSyncChecker) {
+                           AutoSyncChecker autoSyncChecker,
+                           TrackingStats trackingStats) {
         this.context = context;
         this.config = config;
         this.locationClient = locationClient;
@@ -70,6 +72,7 @@ public class LocationTracker {
         this.eventDispatcher = eventDispatcher;
         this.logManager = logManager;
         this.autoSyncChecker = autoSyncChecker;
+        this.trackingStats = trackingStats;
 
         this.locationClient.setListener(new LocationClient.LocationClientListener() {
             @Override
@@ -77,6 +80,7 @@ public class LocationTracker {
                 if (location == null) return;
                 lastLocation = location;
                 stateManager.updateOdometer(location);
+                trackingStats.onLocationUpdate(location.getAccuracy());
                 emitLocationEvent(location, "location");
             }
 
@@ -90,6 +94,7 @@ public class LocationTracker {
             @Override
             public void onMotionChange(boolean isMoving) {
                 locationClient.updateRequest(isMoving);
+                trackingStats.onMotionChange(isMoving);
                 if (lastLocation != null) {
                     emitLocationEvent(lastLocation, "motionchange");
                 }
@@ -165,6 +170,7 @@ public class LocationTracker {
             return;
         }
         enabled = true;
+        trackingStats.onTrackingStart();
 
         if (config.foregroundService && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             foregroundServiceController.start(config);
@@ -185,6 +191,7 @@ public class LocationTracker {
             return;
         }
         enabled = false;
+        trackingStats.onTrackingStop();
         motionManager.stop();
         locationClient.stop();
         foregroundServiceController.stop();
@@ -275,14 +282,16 @@ public class LocationTracker {
         event.put("type", eventName);
         event.put("data", payload);
         eventDispatcher.sendEvent(event);
-        if (PersistencePolicy.shouldPersist(config, eventName)) {
-            stateManager.storeLocationPayload(payload, config.maxDaysToPersist, config.maxRecordsToPersist);
-        }
-        if (config.autoSync && config.httpUrl != null && !config.httpUrl.isEmpty() && autoSyncChecker.isAutoSyncAllowed()) {
-            if (config.batchSync) {
-                syncManager.attemptBatchSync();
-            } else {
-                syncManager.syncNow(payload);
+        if (!config.privacyModeEnabled) {
+            if (PersistencePolicy.shouldPersist(config, eventName)) {
+                stateManager.storeLocationPayload(payload, config.maxDaysToPersist, config.maxRecordsToPersist);
+            }
+            if (config.autoSync && config.httpUrl != null && !config.httpUrl.isEmpty() && autoSyncChecker.isAutoSyncAllowed()) {
+                if (config.batchSync) {
+                    syncManager.attemptBatchSync();
+                } else {
+                    syncManager.syncNow(payload);
+                }
             }
         }
     }

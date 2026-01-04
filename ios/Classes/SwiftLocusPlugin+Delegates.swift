@@ -11,6 +11,7 @@ extension SwiftLocusPlugin {
 
   public func onMotionStateChange(isMoving: Bool) {
     locationClient.setDistanceFilter(isMoving ? configManager.distanceFilter : configManager.stationaryRadius)
+    trackingStats.onMotionChange(isMoving: isMoving)
 
     // Only emit event if we have a location to attach to it
     if let location = lastLocation {
@@ -20,6 +21,7 @@ extension SwiftLocusPlugin {
 
   // MARK: - SyncManagerDelegate
   public func onHttpEvent(_ event: [String: Any]) {
+    trackingStats.onSyncRequest()
     sendEvent(event)
   }
 
@@ -70,10 +72,12 @@ extension SwiftLocusPlugin {
     if let location = lastLocation {
       let locationPayload = buildLocationPayload(location, eventName: "geofence")
       payload["location"] = locationPayload
-      if shouldPersist(eventName: "geofence") {
-        storage.saveLocation(locationPayload, maxDays: configManager.maxDaysToPersist, maxRecords: configManager.maxRecordsToPersist)
+      if !configManager.privacyModeEnabled {
+        if shouldPersist(eventName: "geofence") {
+          storage.saveLocation(locationPayload, maxDays: configManager.maxDaysToPersist, maxRecords: configManager.maxRecordsToPersist)
+        }
+        syncManager.syncNow(currentPayload: locationPayload)
       }
-      syncManager.syncNow(currentPayload: locationPayload)
     }
 
     let event: [String: Any] = [
@@ -97,6 +101,10 @@ extension SwiftLocusPlugin {
 
   // MARK: - LocationClientDelegate
   public func onLocationUpdate(_ location: CLLocation) {
+    if isEnabled {
+      trackingStats.onLocationUpdate(accuracy: location.horizontalAccuracy)
+    }
+
     if let pending = pendingLocationResult {
       pendingLocationResult = nil
       let payload = buildLocationPayload(location, eventName: "location")

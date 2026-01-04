@@ -1,6 +1,6 @@
 library;
 
-import 'package:locus/src/models/models.dart';
+import 'package:locus/src/models.dart';
 
 /// Configuration for the foreground notification (Android).
 class NotificationConfig {

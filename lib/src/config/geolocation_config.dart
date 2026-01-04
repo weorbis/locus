@@ -3,7 +3,7 @@ library;
 import 'package:locus/src/config/config_enums.dart';
 import 'package:locus/src/config/notification_config.dart';
 import 'package:locus/src/config/permission_rationale.dart';
-import 'package:locus/src/models/models.dart';
+import 'package:locus/src/models.dart';
 
 /// Main configuration class for the background geolocation service.
 class Config {

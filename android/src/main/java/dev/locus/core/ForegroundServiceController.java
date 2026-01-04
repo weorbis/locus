@@ -2,6 +2,8 @@ package dev.locus.core;
 
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
+import android.util.Log;
 
 import dev.locus.service.ForegroundService;
 
@@ -22,7 +24,15 @@ public class ForegroundServiceController {
         if (config.notificationActions != null && !config.notificationActions.isEmpty()) {
             intent.putExtra("actions", config.notificationActions.toArray(new String[0]));
         }
-        context.startForegroundService(intent);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent);
+            } else {
+                context.startService(intent);
+            }
+        } catch (Exception e) {
+            Log.w("ForegroundServiceController", "Failed to start foreground service: " + e.getMessage());
+        }
     }
 
     public void stop() {

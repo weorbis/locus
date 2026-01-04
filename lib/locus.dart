@@ -27,10 +27,10 @@
 library;
 
 export 'src/locus.dart';
-export 'src/battery/battery.dart';
+export 'src/features/battery/battery.dart';
 export 'src/config/config.dart';
-export 'src/events/events.dart';
-export 'src/models/models.dart';
-export 'src/services/services.dart';
+export 'src/shared/events.dart';
+export 'src/models.dart';
+export 'src/services.dart';
 export 'src/testing/testing.dart';
-export 'src/widgets/widgets.dart';
+export 'src/features/diagnostics/widgets.dart';

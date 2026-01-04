@@ -6,6 +6,9 @@ import android.content.Intent;
 import androidx.annotation.NonNull;
 import androidx.core.app.JobIntentService;
 
+import android.os.Handler;
+import android.os.Looper;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,7 +21,9 @@ import io.flutter.view.FlutterCallbackInformation;
 
 public class HeadlessService extends JobIntentService {
     private static final String CHANNEL = "locus/headless";
+    private static final String CACHE_KEY = "locus_headless_engine";
     private static final int JOB_ID = 197812512;
+    private static final long ENGINE_IDLE_TIMEOUT_MS = 60_000L;
 
     public static void enqueueWork(Context context, Intent intent) {
         enqueueWork(context, HeadlessService.class, JOB_ID, intent);
@@ -32,7 +37,7 @@ public class HeadlessService extends JobIntentService {
             return;
         }
 
-        FlutterEngine engine = FlutterEngineCache.getInstance().get("locus_headless_engine");
+        FlutterEngine engine = FlutterEngineCache.getInstance().get(CACHE_KEY);
         if (engine == null) {
             FlutterInjector injector = FlutterInjector.instance();
             injector.flutterLoader().startInitialization(getApplicationContext());
@@ -50,7 +55,7 @@ public class HeadlessService extends JobIntentService {
                     info
             );
             engine.getDartExecutor().executeDartCallback(callback);
-            FlutterEngineCache.getInstance().put("locus_headless_engine", engine);
+            FlutterEngineCache.getInstance().put(CACHE_KEY, engine);
         }
 
         MethodChannel channel = new MethodChannel(engine.getDartExecutor().getBinaryMessenger(), CHANNEL);
@@ -63,5 +68,13 @@ public class HeadlessService extends JobIntentService {
             args.put("event", "{\"type\":\"boot\"}");
         }
         channel.invokeMethod("headlessEvent", args);
+
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            FlutterEngine cached = FlutterEngineCache.getInstance().get(CACHE_KEY);
+            if (cached != null) {
+                cached.destroy();
+                FlutterEngineCache.getInstance().remove(CACHE_KEY);
+            }
+        }, ENGINE_IDLE_TIMEOUT_MS);
     }
 }

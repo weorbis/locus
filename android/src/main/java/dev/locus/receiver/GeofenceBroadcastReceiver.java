@@ -66,6 +66,10 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
         SharedPreferences preferences =
                 context.getSharedPreferences(LocusPlugin.PREFS_NAME, Context.MODE_PRIVATE);
 
+        if (preferences.getBoolean("bg_privacy_mode", false)) {
+            return;
+        }
+
         preferences.edit()
                 .putString(LocusPlugin.KEY_GEOFENCE_EVENT, payload.toString())
                 .apply();

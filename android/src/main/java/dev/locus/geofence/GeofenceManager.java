@@ -224,23 +224,46 @@ public class GeofenceManager {
             return;
         }
         List<Geofence> geofences = new ArrayList<>();
+        int initialTrigger = 0;
         for (int i = 0; i < stored.length(); i++) {
             JSONObject obj = stored.optJSONObject(i);
             if (obj != null) {
                 try {
-                    geofences.add(buildGeofence(toMap(obj)));
+                    Map<String, Object> map = toMap(obj);
+                    geofences.add(buildGeofence(map));
+
+                    // Respect per-geofence initial trigger preferences so existing regions emit entry/dwell immediately when applicable
+                    boolean notifyOnEntry = map.get("notifyOnEntry") == null || Boolean.TRUE.equals(map.get("notifyOnEntry"));
+                    boolean notifyOnDwell = Boolean.TRUE.equals(map.get("notifyOnDwell"));
+                    if (notifyOnEntry) {
+                        initialTrigger |= GeofencingRequest.INITIAL_TRIGGER_ENTER;
+                    }
+                    if (notifyOnDwell) {
+                        initialTrigger |= GeofencingRequest.INITIAL_TRIGGER_DWELL;
+                    }
                 } catch (JSONException e) {
                    // Ignore malformed
                 }
             }
         }
         if (geofences.isEmpty()) return;
-        
-        GeofencingRequest request = new GeofencingRequest.Builder()
-                .addGeofences(geofences)
-                .build();
+
+        GeofencingRequest.Builder builder = new GeofencingRequest.Builder()
+                .addGeofences(geofences);
+        if (initialTrigger != 0) {
+            builder.setInitialTrigger(initialTrigger);
+        }
+        GeofencingRequest request = builder.build();
         geofencePendingIntent = createGeofencePendingIntent();
-        geofencingClient.addGeofences(request, geofencePendingIntent);
+        List<String> storedIds = extractIdentifiers(stored);
+        geofencingClient.addGeofences(request, geofencePendingIntent)
+                .addOnFailureListener(e -> {
+                    // Clean up persisted store so Dart stays in sync when geofencing cannot start
+                    writeGeofenceStore(new JSONArray());
+                    if (!storedIds.isEmpty() && listener != null) {
+                        listener.onGeofencesChanged(new ArrayList<>(), storedIds);
+                    }
+                });
     }
 
     private Geofence buildGeofence(Map<String, Object> map) {

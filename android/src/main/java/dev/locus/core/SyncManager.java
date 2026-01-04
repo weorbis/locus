@@ -41,6 +41,7 @@ public class SyncManager {
     public interface SyncListener {
         void onHttpEvent(Map<String, Object> eventData);
         void onLog(String level, String message);
+        void onSyncRequest();
     }
 
     public SyncManager(Context context, ConfigManager config, LocationStore locationStore, QueueStore queueStore, SyncListener listener) {
@@ -183,6 +184,7 @@ public class SyncManager {
             return;
         }
         executor.execute(() -> {
+            listener.onSyncRequest();
             try {
                 JSONObject body = buildHttpBody(locationPayload, null);
                 for (Map.Entry<String, Object> entry : config.httpParams.entrySet()) {
@@ -259,6 +261,7 @@ public class SyncManager {
             return;
         }
         executor.execute(() -> {
+            listener.onSyncRequest();
             try {
                 JSONObject body = buildHttpBody(null, payloads);
                 for (Map.Entry<String, Object> entry : config.httpParams.entrySet()) {
@@ -335,6 +338,7 @@ public class SyncManager {
             return;
         }
         executor.execute(() -> {
+            listener.onSyncRequest();
             try {
                 JSONObject body = buildQueueBody(payload, id, type, idempotencyKey);
                 for (Map.Entry<String, Object> entry : config.httpParams.entrySet()) {

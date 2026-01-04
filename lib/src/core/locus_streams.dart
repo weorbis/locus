@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:locus/src/events/events.dart';
-import 'package:locus/src/models/models.dart';
-import 'package:locus/src/services/event_mapper.dart';
-import 'package:locus/src/services/spoof_detection.dart';
-import 'package:locus/src/services/error_recovery.dart';
-import 'locus_channels.dart';
+import 'package:locus/src/shared/events.dart';
+import 'package:locus/src/models.dart';
+import 'package:locus/src/core/event_mapper.dart';
+import 'package:locus/src/features/location/services/spoof_detection.dart';
+import 'package:locus/src/features/diagnostics/services/error_recovery.dart';
+import 'package:locus/src/features/geofencing/services/polygon_geofence_service.dart';
+import 'package:locus/src/features/privacy/services/privacy_zone_service.dart';
+import 'package:locus/src/core/locus_channels.dart';
 
 /// Stream management for geolocation events.
 class LocusStreams {
@@ -20,6 +22,12 @@ class LocusStreams {
   // Spoof detection integration
   static SpoofDetector? _spoofDetector;
   static bool _spoofDetectionEnabled = false;
+
+  // Polygon geofence integration
+  static PolygonGeofenceService? _polygonGeofenceService;
+
+  // Privacy zone integration
+  static PrivacyZoneService? _privacyZoneService;
 
   /// Stream of all geolocation events (after spoof filtering).
   static Stream<GeolocationEvent<dynamic>> get events {
@@ -56,6 +64,29 @@ class LocusStreams {
 
   /// Whether spoof detection is currently enabled.
   static bool get isSpoofDetectionEnabled => _spoofDetectionEnabled;
+
+  /// Sets the polygon geofence service for processing location updates.
+  /// When set, location events will trigger polygon enter/exit detection.
+  static void setPolygonGeofenceService(PolygonGeofenceService? service) {
+    _polygonGeofenceService = service;
+    debugPrint('[Locus] Polygon geofence service ${service != null ? 'registered' : 'cleared'}');
+  }
+
+  /// Sets the privacy zone service for filtering location events.
+  /// When set, locations in privacy zones will be obfuscated or excluded.
+  static void setPrivacyZoneService(PrivacyZoneService? service) {
+    _privacyZoneService = service;
+    debugPrint('[Locus] Privacy zone service ${service != null ? 'registered' : 'cleared'}');
+
+    // Inform native side to avoid persisting raw locations when privacy zones are active
+    unawaited(
+      LocusChannels.methods
+          .invokeMethod('setPrivacyMode', service != null)
+          .catchError((error) {
+        debugPrint('[Locus] Failed to set privacy mode on native side: $error');
+      }),
+    );
+  }
 
   static void _onListen() {
     _listenerCount += 1;
@@ -111,33 +142,66 @@ class LocusStreams {
     }
   }
 
-  /// Processes a mapped event, applying spoof detection if enabled.
+  /// Processes a mapped event, applying spoof detection, privacy zones,
+  /// and polygon geofence detection if enabled.
   static void _processEvent(GeolocationEvent<dynamic> event) {
-    // Only apply spoof detection to location-type events
-    if (_spoofDetectionEnabled &&
-        _spoofDetector != null &&
-        event.type == EventType.location &&
-        event.data is Location) {
+    // Only apply location processing to location-type events
+    if (event.type == EventType.location && event.data is Location) {
       final location = event.data as Location;
-      final spoofResult = _spoofDetector!.analyze(location);
+      
+      // 1. Spoof detection (may block the event entirely)
+      if (_spoofDetectionEnabled && _spoofDetector != null) {
+        final spoofResult = _spoofDetector!.analyze(location);
 
-      // If spoof detection returned a result (something was detected)
-      if (spoofResult != null) {
-        if (spoofResult.wasBlocked) {
-          // Emit to blocked events stream for monitoring
-          _blockedEventsController?.add(spoofResult);
+        if (spoofResult != null) {
+          if (spoofResult.wasBlocked) {
+            _blockedEventsController?.add(spoofResult);
+            debugPrint(
+                '[Locus] Blocked spoofed location: ${spoofResult.factors}');
+            return; // Don't process further
+          }
           debugPrint(
-              '[Locus] Blocked spoofed location: ${spoofResult.factors}');
-          return; // Don't add to main event stream
+              '[Locus] Spoofed location detected (not blocked): ${spoofResult.factors}');
         }
-
-        // Detected but not blocked, log but still emit
-        debugPrint(
-            '[Locus] Spoofed location detected (not blocked): ${spoofResult.factors}');
       }
+
+      // 2. Privacy zone processing (may exclude or obfuscate location)
+      Location processedLocation = location;
+      if (_privacyZoneService != null && _privacyZoneService!.enabledZones.isNotEmpty) {
+        final result = _privacyZoneService!.processLocation(location);
+        
+        if (result.wasExcluded) {
+          debugPrint('[Locus] Location excluded by privacy zone');
+          return; // Don't emit excluded locations
+        }
+        
+        if (result.wasObfuscated && result.processedLocation != null) {
+          processedLocation = result.processedLocation!;
+          debugPrint('[Locus] Location obfuscated by privacy zone');
+        }
+      }
+
+      // 3. Polygon geofence detection (triggers enter/exit events)
+      if (_polygonGeofenceService != null && _polygonGeofenceService!.count > 0) {
+        _polygonGeofenceService!.processLocationUpdate(
+          processedLocation.coords.latitude,
+          processedLocation.coords.longitude,
+        );
+      }
+
+      // Emit the (possibly modified) location event
+      if (processedLocation != location) {
+        _eventController?.add(GeolocationEvent<Location>(
+          type: event.type,
+          data: processedLocation,
+        ));
+      } else {
+        _eventController?.add(event);
+      }
+      return;
     }
 
-    // Add to main event stream
+    // Non-location events pass through unchanged
     _eventController?.add(event);
   }
 

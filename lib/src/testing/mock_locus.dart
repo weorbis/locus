@@ -22,12 +22,11 @@ library;
 
 import 'dart:async';
 
-import 'package:locus/src/battery/battery.dart';
 import 'package:locus/src/config/config.dart';
 import 'package:locus/src/core/locus_interface.dart';
-import 'package:locus/src/events/events.dart';
-import 'package:locus/src/models/models.dart';
-import 'package:locus/src/services/services.dart';
+import 'package:locus/src/shared/events.dart';
+import 'package:locus/src/models.dart';
+import 'package:locus/src/services.dart';
 
 export 'package:locus/src/core/locus_interface.dart';
 
@@ -326,6 +325,36 @@ class MockLocus implements LocusInterface {
   }
 
   @override
+  Future<List<Location>> queryLocations(LocationQuery query) async {
+    _methodCalls.add('queryLocations');
+    return query.apply(_storedLocations);
+  }
+
+  @override
+  Future<LocationSummary> getLocationSummary({
+    DateTime? date,
+    LocationQuery? query,
+  }) async {
+    _methodCalls.add('getLocationSummary');
+    LocationQuery effectiveQuery;
+    
+    if (query != null) {
+      effectiveQuery = query;
+    } else if (date != null) {
+      final startOfDay = DateTime(date.year, date.month, date.day);
+      final endOfDay = startOfDay.add(const Duration(days: 1));
+      effectiveQuery = LocationQuery(from: startOfDay, to: endOfDay);
+    } else {
+      final now = DateTime.now();
+      final startOfDay = DateTime(now.year, now.month, now.day);
+      effectiveQuery = LocationQuery(from: startOfDay, to: now);
+    }
+
+    final locations = await queryLocations(effectiveQuery);
+    return LocationHistoryCalculator.calculateSummary(locations);
+  }
+
+  @override
   Future<bool> destroyLocations() async {
     _methodCalls.add('destroyLocations');
     _storedLocations.clear();
@@ -400,6 +429,122 @@ class MockLocus implements LocusInterface {
   Future<bool> startGeofences() async {
     _methodCalls.add('startGeofences');
     return true;
+  }
+
+  // ============================================================
+  // Polygon Geofencing Methods
+  // ============================================================
+  final PolygonGeofenceService _polygonGeofenceService =
+      PolygonGeofenceService();
+
+  @override
+  Future<bool> addPolygonGeofence(PolygonGeofence polygon) async {
+    _methodCalls.add('addPolygonGeofence:${polygon.identifier}');
+    return _polygonGeofenceService.addPolygonGeofence(polygon);
+  }
+
+  @override
+  Future<int> addPolygonGeofences(List<PolygonGeofence> polygons) async {
+    _methodCalls.add('addPolygonGeofences:${polygons.length}');
+    return _polygonGeofenceService.addPolygonGeofences(polygons);
+  }
+
+  @override
+  Future<bool> removePolygonGeofence(String identifier) async {
+    _methodCalls.add('removePolygonGeofence:$identifier');
+    return _polygonGeofenceService.removePolygonGeofence(identifier);
+  }
+
+  @override
+  Future<void> removeAllPolygonGeofences() async {
+    _methodCalls.add('removeAllPolygonGeofences');
+    await _polygonGeofenceService.removeAllPolygonGeofences();
+  }
+
+  @override
+  Future<List<PolygonGeofence>> getPolygonGeofences() async {
+    _methodCalls.add('getPolygonGeofences');
+    return _polygonGeofenceService.polygons;
+  }
+
+  @override
+  Future<PolygonGeofence?> getPolygonGeofence(String identifier) async {
+    _methodCalls.add('getPolygonGeofence:$identifier');
+    return _polygonGeofenceService.getPolygonGeofence(identifier);
+  }
+
+  @override
+  Future<bool> polygonGeofenceExists(String identifier) async {
+    _methodCalls.add('polygonGeofenceExists:$identifier');
+    return _polygonGeofenceService.polygonExists(identifier);
+  }
+
+  @override
+  Stream<PolygonGeofenceEvent> get polygonGeofenceEvents =>
+      _polygonGeofenceService.events;
+
+  /// Emits a mock polygon geofence event.
+  void emitPolygonGeofenceEvent(PolygonGeofenceEvent event) {
+    _polygonGeofenceService.processLocationUpdate(
+      event.triggerLocation?.latitude ?? 0,
+      event.triggerLocation?.longitude ?? 0,
+    );
+  }
+
+  // ============================================================
+  // Privacy Zone Methods
+  // ============================================================
+  final PrivacyZoneService _privacyZoneService = PrivacyZoneService();
+
+  @override
+  Future<void> addPrivacyZone(PrivacyZone zone) async {
+    _methodCalls.add('addPrivacyZone:${zone.identifier}');
+    await _privacyZoneService.addZone(zone);
+  }
+
+  @override
+  Future<void> addPrivacyZones(List<PrivacyZone> zones) async {
+    _methodCalls.add('addPrivacyZones:${zones.length}');
+    await _privacyZoneService.addZones(zones);
+  }
+
+  @override
+  Future<bool> removePrivacyZone(String identifier) async {
+    _methodCalls.add('removePrivacyZone:$identifier');
+    return _privacyZoneService.removeZone(identifier);
+  }
+
+  @override
+  Future<void> removeAllPrivacyZones() async {
+    _methodCalls.add('removeAllPrivacyZones');
+    await _privacyZoneService.removeAllZones();
+  }
+
+  @override
+  Future<PrivacyZone?> getPrivacyZone(String identifier) async {
+    _methodCalls.add('getPrivacyZone:$identifier');
+    return _privacyZoneService.getZone(identifier);
+  }
+
+  @override
+  Future<List<PrivacyZone>> getPrivacyZones() async {
+    _methodCalls.add('getPrivacyZones');
+    return _privacyZoneService.zones;
+  }
+
+  @override
+  Future<bool> setPrivacyZoneEnabled(String identifier, bool enabled) async {
+    _methodCalls.add('setPrivacyZoneEnabled:$identifier:$enabled');
+    return _privacyZoneService.setZoneEnabled(identifier, enabled);
+  }
+
+  @override
+  Stream<PrivacyZoneEvent> get privacyZoneEvents =>
+      _privacyZoneService.zoneChanges;
+
+  /// Helper to process a location through privacy zones.
+  PrivacyZoneResult processLocationThroughPrivacyZones(Location location) {
+    return _privacyZoneService.processLocation(location);
   }
 
   @override
@@ -807,6 +952,17 @@ class MockLocus implements LocusInterface {
   Future<PowerState> getPowerState() async {
     _methodCalls.add('getPowerState');
     return _powerState;
+  }
+
+  @override
+  Future<BatteryRunway> estimateBatteryRunway() async {
+    _methodCalls.add('estimateBatteryRunway');
+    return BatteryRunwayCalculator.calculate(
+      currentLevel: _batteryStats.currentBatteryLevel ?? _powerState.batteryLevel,
+      isCharging: _batteryStats.isCharging ?? _powerState.isCharging,
+      drainPercent: _batteryStats.estimatedDrainPercent,
+      trackingMinutes: _batteryStats.trackingDurationMinutes,
+    );
   }
 
   /// Sets mock power state and emits a change event.

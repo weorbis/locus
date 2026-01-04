@@ -11,3 +11,4 @@ linter:
   rules:
     avoid_print: true
     avoid_relative_lib_imports: true
+    always_use_package_imports: true

@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'package:locus/src/battery/battery.dart';
-import 'package:locus/src/models/models.dart';
-import 'package:locus/src/services/services.dart';
-import 'locus_channels.dart';
-import 'locus_battery.dart'; // For getPowerState
-import 'locus_lifecycle.dart'; // For isTracking
-import 'locus_streams.dart'; // For spoof detection integration
+import 'package:locus/src/models.dart';
+import 'package:locus/src/services.dart';
+import 'package:locus/src/core/locus_channels.dart';
+import 'package:locus/src/core/locus_lifecycle.dart';
+import 'package:locus/src/core/locus_streams.dart';
 
 /// Advanced Features (Spoof, Significant Change, Error Recovery).
 class LocusFeatures {
