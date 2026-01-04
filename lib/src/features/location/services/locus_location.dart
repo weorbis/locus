@@ -60,10 +60,10 @@ class LocusLocation {
 
     final fetched = await getLocations(limit: fetchLimit);
     final sliced = offset >= fetched.length
-      ? <Location>[]
-      : (fetchLimit == null
-        ? fetched.sublist(offset)
-        : fetched.sublist(offset, offset + (limit ?? 0)));
+        ? <Location>[]
+        : (fetchLimit == null
+            ? fetched.sublist(offset)
+            : fetched.sublist(offset, offset + (limit ?? 0)));
 
     final adjustedQuery = LocationQuery(
       from: query.from,
@@ -86,7 +86,7 @@ class LocusLocation {
     LocationQuery? query,
   }) async {
     LocationQuery effectiveQuery;
-    
+
     if (query != null) {
       effectiveQuery = query;
     } else if (date != null) {

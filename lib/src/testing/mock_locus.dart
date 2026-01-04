@@ -337,7 +337,7 @@ class MockLocus implements LocusInterface {
   }) async {
     _methodCalls.add('getLocationSummary');
     LocationQuery effectiveQuery;
-    
+
     if (query != null) {
       effectiveQuery = query;
     } else if (date != null) {
@@ -958,7 +958,8 @@ class MockLocus implements LocusInterface {
   Future<BatteryRunway> estimateBatteryRunway() async {
     _methodCalls.add('estimateBatteryRunway');
     return BatteryRunwayCalculator.calculate(
-      currentLevel: _batteryStats.currentBatteryLevel ?? _powerState.batteryLevel,
+      currentLevel:
+          _batteryStats.currentBatteryLevel ?? _powerState.batteryLevel,
       isCharging: _batteryStats.isCharging ?? _powerState.isCharging,
       drainPercent: _batteryStats.estimatedDrainPercent,
       trackingMinutes: _batteryStats.trackingDurationMinutes,

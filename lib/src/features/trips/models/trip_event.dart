@@ -9,6 +9,7 @@ enum TripEventType {
   dwell,
   routeDeviation,
   diagnostic,
+
   /// Waypoint reached event.
   waypointReached,
 }

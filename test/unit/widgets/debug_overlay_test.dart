@@ -240,10 +240,14 @@ void main() {
   group('DebugOverlayPosition', () {
     test('has all corner positions', () {
       expect(DebugOverlayPosition.values.length, 4);
-      expect(DebugOverlayPosition.values, contains(DebugOverlayPosition.topLeft));
-      expect(DebugOverlayPosition.values, contains(DebugOverlayPosition.topRight));
-      expect(DebugOverlayPosition.values, contains(DebugOverlayPosition.bottomLeft));
-      expect(DebugOverlayPosition.values, contains(DebugOverlayPosition.bottomRight));
+      expect(
+          DebugOverlayPosition.values, contains(DebugOverlayPosition.topLeft));
+      expect(
+          DebugOverlayPosition.values, contains(DebugOverlayPosition.topRight));
+      expect(DebugOverlayPosition.values,
+          contains(DebugOverlayPosition.bottomLeft));
+      expect(DebugOverlayPosition.values,
+          contains(DebugOverlayPosition.bottomRight));
     });
   });
 }

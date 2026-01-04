@@ -540,7 +540,8 @@ void main() {
       final result = await Locus.removePolygonGeofence('to-remove');
 
       expect(result, true);
-      expect(mockLocus.methodCalls, contains('removePolygonGeofence:to-remove'));
+      expect(
+          mockLocus.methodCalls, contains('removePolygonGeofence:to-remove'));
     });
 
     test('getPolygonGeofences returns all polygons', () async {

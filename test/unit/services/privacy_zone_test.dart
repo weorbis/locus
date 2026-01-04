@@ -367,7 +367,8 @@ void main() {
     });
 
     group('location processing', () {
-      test('processLocation returns unmodified for location outside zones', () async {
+      test('processLocation returns unmodified for location outside zones',
+          () async {
         await service.addZone(PrivacyZone.create(
           identifier: 'home',
           latitude: 37.7749,
@@ -485,9 +486,11 @@ void main() {
         ));
 
         final locations = [
-          _createTestLocation(latitude: 37.7749, longitude: -122.4194), // Inside
+          _createTestLocation(
+              latitude: 37.7749, longitude: -122.4194), // Inside
           _createTestLocation(latitude: 38.0, longitude: -123.0), // Outside
-          _createTestLocation(latitude: 37.7749, longitude: -122.4194), // Inside
+          _createTestLocation(
+              latitude: 37.7749, longitude: -122.4194), // Inside
         ];
 
         final processed = service.processLocations(locations);
@@ -543,7 +546,8 @@ void main() {
         final matching = service.getMatchingZones(location);
 
         expect(matching.length, 2);
-        expect(matching.map((z) => z.identifier), containsAll(['zone1', 'zone2']));
+        expect(
+            matching.map((z) => z.identifier), containsAll(['zone1', 'zone2']));
       });
     });
 

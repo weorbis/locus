@@ -69,14 +69,16 @@ class LocusStreams {
   /// When set, location events will trigger polygon enter/exit detection.
   static void setPolygonGeofenceService(PolygonGeofenceService? service) {
     _polygonGeofenceService = service;
-    debugPrint('[Locus] Polygon geofence service ${service != null ? 'registered' : 'cleared'}');
+    debugPrint(
+        '[Locus] Polygon geofence service ${service != null ? 'registered' : 'cleared'}');
   }
 
   /// Sets the privacy zone service for filtering location events.
   /// When set, locations in privacy zones will be obfuscated or excluded.
   static void setPrivacyZoneService(PrivacyZoneService? service) {
     _privacyZoneService = service;
-    debugPrint('[Locus] Privacy zone service ${service != null ? 'registered' : 'cleared'}');
+    debugPrint(
+        '[Locus] Privacy zone service ${service != null ? 'registered' : 'cleared'}');
 
     // Inform native side to avoid persisting raw locations when privacy zones are active
     unawaited(
@@ -148,7 +150,7 @@ class LocusStreams {
     // Only apply location processing to location-type events
     if (event.type == EventType.location && event.data is Location) {
       final location = event.data as Location;
-      
+
       // 1. Spoof detection (may block the event entirely)
       if (_spoofDetectionEnabled && _spoofDetector != null) {
         final spoofResult = _spoofDetector!.analyze(location);
@@ -167,14 +169,15 @@ class LocusStreams {
 
       // 2. Privacy zone processing (may exclude or obfuscate location)
       Location processedLocation = location;
-      if (_privacyZoneService != null && _privacyZoneService!.enabledZones.isNotEmpty) {
+      if (_privacyZoneService != null &&
+          _privacyZoneService!.enabledZones.isNotEmpty) {
         final result = _privacyZoneService!.processLocation(location);
-        
+
         if (result.wasExcluded) {
           debugPrint('[Locus] Location excluded by privacy zone');
           return; // Don't emit excluded locations
         }
-        
+
         if (result.wasObfuscated && result.processedLocation != null) {
           processedLocation = result.processedLocation!;
           debugPrint('[Locus] Location obfuscated by privacy zone');
@@ -182,7 +185,8 @@ class LocusStreams {
       }
 
       // 3. Polygon geofence detection (triggers enter/exit events)
-      if (_polygonGeofenceService != null && _polygonGeofenceService!.count > 0) {
+      if (_polygonGeofenceService != null &&
+          _polygonGeofenceService!.count > 0) {
         _polygonGeofenceService!.processLocationUpdate(
           processedLocation.coords.latitude,
           processedLocation.coords.longitude,

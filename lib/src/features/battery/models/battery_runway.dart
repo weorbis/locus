@@ -153,9 +153,10 @@ class BatteryRunway {
   /// Creates from a map.
   factory BatteryRunway.fromMap(JsonMap map) {
     return BatteryRunway(
-      duration: Duration(minutes: (map['durationMinutes'] as num?)?.toInt() ?? 0),
-      lowPowerDuration:
-          Duration(minutes: (map['lowPowerDurationMinutes'] as num?)?.toInt() ?? 0),
+      duration:
+          Duration(minutes: (map['durationMinutes'] as num?)?.toInt() ?? 0),
+      lowPowerDuration: Duration(
+          minutes: (map['lowPowerDurationMinutes'] as num?)?.toInt() ?? 0),
       recommendation: map['recommendation'] as String? ?? '',
       currentLevel: (map['currentLevel'] as num?)?.toInt() ?? 0,
       isCharging: map['isCharging'] as bool? ?? false,

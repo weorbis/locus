@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [1.2.0] - 2026-01-03
 
+### Breaking
+
+- Internal imports were reorganized into feature-first barrels. Any direct imports under `package:locus/src/core/...`, `package:locus/src/services/...`, or `package:locus/src/models/...` from 1.1.x will break. Migrate to the public barrels exposed by [lib/locus.dart](lib/locus.dart) or, for advanced/internal use, the consolidated [lib/src/models.dart](lib/src/models.dart) and [lib/src/services.dart](lib/src/services.dart).
+
 ### Added
 
 - **Polygon Geofences**: Define complex boundaries with arbitrary shapes using `PolygonGeofence`. Supports enter/exit detection with efficient ray-casting algorithm.

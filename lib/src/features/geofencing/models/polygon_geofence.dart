@@ -360,7 +360,8 @@ class PolygonGeofenceEvent {
         'geofence': geofence.toMap(),
         'type': type.name,
         'timestamp': timestamp.toIso8601String(),
-        if (triggerLocation != null) 'triggerLocation': triggerLocation!.toMap(),
+        if (triggerLocation != null)
+          'triggerLocation': triggerLocation!.toMap(),
       };
 
   factory PolygonGeofenceEvent.fromMap(JsonMap map) {

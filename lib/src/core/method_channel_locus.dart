@@ -18,7 +18,7 @@ import 'package:locus/src/core/locus_interface.dart';
 /// Method-channel backed implementation of [LocusInterface].
 class MethodChannelLocus implements LocusInterface {
   /// Creates a new MethodChannelLocus instance.
-  /// 
+  ///
   /// Automatically registers polygon geofence and privacy zone services
   /// with the event stream for location processing.
   MethodChannelLocus() {

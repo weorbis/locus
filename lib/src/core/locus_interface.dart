@@ -77,7 +77,8 @@ abstract class LocusInterface {
 
   Future<List<Location>> getLocations({int? limit});
   Future<List<Location>> queryLocations(LocationQuery query);
-  Future<LocationSummary> getLocationSummary({DateTime? date, LocationQuery? query});
+  Future<LocationSummary> getLocationSummary(
+      {DateTime? date, LocationQuery? query});
   Future<bool> changePace(bool isMoving);
   Future<double> setOdometer(double value);
 

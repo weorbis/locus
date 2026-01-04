@@ -35,8 +35,7 @@ class PrivacyZoneService {
   final Map<String, PrivacyZone> _zones = {};
 
   /// Stream controller for zone changes.
-  final _zoneChangesController =
-      StreamController<PrivacyZoneEvent>.broadcast();
+  final _zoneChangesController = StreamController<PrivacyZoneEvent>.broadcast();
 
   /// Random number generator for obfuscation.
   final math.Random _random;
@@ -276,8 +275,7 @@ class PrivacyZoneService {
     final lngOffset = (distance * math.sin(angle)) /
         (111000 * math.cos(location.coords.latitude * math.pi / 180));
 
-    final newLat =
-        (location.coords.latitude + latOffset).clamp(-90.0, 90.0);
+    final newLat = (location.coords.latitude + latOffset).clamp(-90.0, 90.0);
     final newLng = _normalizeLongitude(location.coords.longitude + lngOffset);
 
     return Location(
@@ -290,7 +288,8 @@ class PrivacyZoneService {
       coords: Coords(
         latitude: newLat,
         longitude: newLng,
-        accuracy: location.coords.accuracy + radius, // Increase accuracy uncertainty
+        accuracy:
+            location.coords.accuracy + radius, // Increase accuracy uncertainty
         speed: location.coords.speed,
         heading: location.coords.heading,
         altitude: location.coords.altitude,

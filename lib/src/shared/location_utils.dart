@@ -35,8 +35,8 @@ class LocationUtils {
     final sinLat = math.sin(dLat / 2);
     final sinLon = math.sin(dLon / 2);
 
-    final aVal =
-        sinLat * sinLat + math.cos(lat1Rad) * math.cos(lat2Rad) * sinLon * sinLon;
+    final aVal = sinLat * sinLat +
+        math.cos(lat1Rad) * math.cos(lat2Rad) * sinLon * sinLon;
     final c = 2 * math.atan2(math.sqrt(aVal), math.sqrt(1 - aVal));
 
     return earthRadius * c;

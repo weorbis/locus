@@ -64,8 +64,7 @@ class PolygonGeofenceService {
   /// Returns true if added successfully, false if identifier already exists.
   Future<bool> addPolygonGeofence(PolygonGeofence polygon) async {
     if (!polygon.isValid) {
-      throw ArgumentError(
-          'Invalid polygon geofence: ${polygon.identifier}. '
+      throw ArgumentError('Invalid polygon geofence: ${polygon.identifier}. '
           'Must have non-empty identifier and at least 3 valid vertices.');
     }
 
@@ -79,8 +78,7 @@ class PolygonGeofenceService {
     _insideState[polygon.identifier] = false;
     await _persist();
 
-    debugPrint(
-        '[PolygonGeofenceService] Added polygon: ${polygon.identifier} '
+    debugPrint('[PolygonGeofenceService] Added polygon: ${polygon.identifier} '
         '(${polygon.vertices.length} vertices)');
     return true;
   }
@@ -156,7 +154,8 @@ class PolygonGeofenceService {
     _polygons[polygon.identifier] = polygon;
     await _persist();
 
-    debugPrint('[PolygonGeofenceService] Updated polygon: ${polygon.identifier}');
+    debugPrint(
+        '[PolygonGeofenceService] Updated polygon: ${polygon.identifier}');
     return true;
   }
 
@@ -207,8 +206,7 @@ class PolygonGeofenceService {
             timestamp: now,
             triggerLocation: triggerPoint,
           ));
-          debugPrint(
-              '[PolygonGeofenceService] ENTER: ${polygon.identifier}');
+          debugPrint('[PolygonGeofenceService] ENTER: ${polygon.identifier}');
         }
       } else if (wasInside && !isNowInside) {
         // Exited polygon
@@ -221,8 +219,7 @@ class PolygonGeofenceService {
             timestamp: now,
             triggerLocation: triggerPoint,
           ));
-          debugPrint(
-              '[PolygonGeofenceService] EXIT: ${polygon.identifier}');
+          debugPrint('[PolygonGeofenceService] EXIT: ${polygon.identifier}');
         }
       }
     }
