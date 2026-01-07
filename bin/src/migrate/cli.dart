@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'analyzer.dart';
 import 'migrator.dart';
 import 'report.dart';
@@ -60,6 +59,60 @@ class MigrationCLI {
         ),
       ));
     }
+  }
+
+  void printAnalysisOnly(MigrationAnalysisResult analysis) {
+    _printHeader('Migration Analysis');
+    _printProjectInfo(analysis);
+    _printSummary(analysis);
+    _printChangesByCategory(analysis);
+    _printMigrationHints(analysis);
+    _printWarnings(analysis);
+    print('');
+    print('${_bold}Next Steps${_reset}');
+    print('${_gray}${'─' * 40}${_reset}');
+    print('Run ${_cyan}dart run locus:migrate${_reset} to apply changes.');
+    print('Add ${_cyan}--dry-run${_reset} to preview changes first.');
+    print('');
+  }
+
+  void _printMigrationHints(MigrationAnalysisResult analysis) {
+    if (analysis.totalMatches == 0) return;
+
+    print('${_bold}Migration Hints${_reset}');
+    print('${_gray}${'─' * 40}${_reset}');
+
+    // Check for removed features
+    if (analysis.removedFeaturesCount > 0) {
+      print('${_red}⚠${_reset}  ${analysis.removedFeaturesCount} removed feature(s) detected:');
+      print('   These methods no longer exist in v2.0 and require manual replacement.');
+    }
+
+    // Check for headless patterns
+    final headlessMatches = analysis.matches.where(
+      (m) => m.patternId.contains('headless'),
+    ).length;
+    if (headlessMatches > 0) {
+      print('${_yellow}⚠${_reset}  $headlessMatches headless callback(s) found:');
+      print('   Add @pragma(\'vm:entry-point\') annotation above these functions.');
+    }
+
+    // Check for config patterns
+    final configMatches = analysis.matches.where(
+      (m) => m.patternId.contains('config'),
+    ).length;
+    if (configMatches > 0) {
+      print('${_cyan}ℹ${_reset}  $configMatches config pattern(s) found:');
+      print('   Review LocusConfig for renamed parameters (url→syncUrl, httpTimeout→syncTimeout).');
+    }
+
+    // Suggest testing
+    if (analysis.autoMigratableCount > 0) {
+      print('${_green}✓${_reset}  ${analysis.autoMigratableCount} pattern(s) can be auto-migrated.');
+      print('   Run tests after migration to verify behavior.');
+    }
+
+    _printLine();
   }
 
   void _printHeader(String title) {
@@ -134,13 +187,11 @@ class MigrationCLI {
             '$icon ${color}${_getCategoryName(category)}${_reset}: ${matches.length}');
 
         for (final match in matches.take(3)) {
-          final pattern = MigrationPatternDatabase.allPatterns
-              .firstWhere((p) => p.id == match.patternId);
           final shortOriginal = _truncate(match.original, 25);
           final shortReplacement = _truncate(match.replacement, 25);
-          print('    ${_gray}${match.filePath}:${match.line}${_reset}');
+          print('    $_gray${match.filePath}:${match.line}$_reset');
           print(
-              '    ${_red}$shortOriginal${_reset} → ${_green}$shortReplacement${_reset}');
+              '    $_red$shortOriginal$_reset → $_green$shortReplacement$_reset');
         }
 
         if (matches.length > 3) {
@@ -333,15 +384,109 @@ class MigrationCLI {
     print('${_green}[OK] $message${_reset}');
   }
 
-  static const String _reset = '\x1B[0m';
-  static const String _bold = '\x1B[1m';
-  static const String _gray = '\x1B[90m';
-  static const String _red = '\x1B[31m';
-  static const String _green = '\x1B[32m';
-  static const String _yellow = '\x1B[33m';
-  static const String _blue = '\x1B[34m';
-  static const String _purple = '\x1B[35m';
-  static const String _cyan = '\x1B[36m';
-  static const String _magenta = '\x1B[35m';
-  static const String _orange = '\x1B[38;5;208m';
+  void printMonorepoMigrationResult(MonorepoMigrationResult result) {
+    _printHeader('Monorepo Migration Complete');
+
+    if (result.dryRun) {
+      print('\n${_yellow}⚠️  DRY RUN - No files were modified${_reset}\n');
+    }
+
+    // Print monorepo detection info
+    print('${_bold}Workspace Structure${_reset}');
+    print('${_gray}${'─' * 40}${_reset}');
+    print('Root: ${result.analysis.rootPath}');
+    print(
+        'Type: ${result.analysis.isMonorepo ? 'Monorepo' : 'Single Package'}');
+    print('Total packages: ${result.analysis.packages.length}');
+    _printLine();
+
+    // Print per-package results
+    print('${_bold}Package Analysis${_reset}');
+    print('${_gray}${'─' * 40}${_reset}');
+
+    for (final package in result.analysis.packages) {
+      final icon = package.isApp ? '📱' : '📦';
+      final typeLabel = package.isApp ? 'app' : 'package';
+      print('$icon ${_cyan}${package.name}${_reset} ($typeLabel)');
+      print('   ${_gray}Path: ${package.path}${_reset}');
+
+      if (result.packageResults.containsKey(package.displayName)) {
+        final packageResult = result.packageResults[package.displayName]!;
+        final analysis = packageResult.analysis;
+
+        if (analysis.totalMatches > 0) {
+          print('   Patterns found: ${analysis.totalMatches}');
+          print(
+              '   Auto-migratable: ${_green}${analysis.autoMigratableCount}${_reset}');
+          if (analysis.manualReviewCount > 0) {
+            print(
+                '   Manual review: ${_yellow}${analysis.manualReviewCount}${_reset}');
+          }
+          if (analysis.removedFeaturesCount > 0) {
+            print(
+                '   Removed features: ${_red}${analysis.removedFeaturesCount}${_reset}');
+          }
+          if (!result.dryRun) {
+            print(
+                '   Changes applied: ${_green}${packageResult.successfulChanges}${_reset}');
+            if (packageResult.failedChanges > 0) {
+              print(
+                  '   ${_red}Failed: ${packageResult.failedChanges}${_reset}');
+            }
+          }
+        } else {
+          print('   ${_gray}No Locus patterns found${_reset}');
+        }
+      } else {
+        print('   ${_gray}Not analyzed${_reset}');
+      }
+      print('');
+    }
+
+    // Print aggregated summary
+    final aggregated = result.analysis.aggregated;
+    print('${_bold}Aggregated Summary${_reset}');
+    print('${_gray}${'─' * 40}${_reset}');
+    print('Total files analyzed: ${aggregated.totalFiles}');
+    print('Files with Locus SDK: ${aggregated.filesWithLocus}');
+    print('Total patterns found: ${aggregated.totalMatches}');
+    print(
+        'Auto-migratable: ${_green}${aggregated.autoMigratableCount}${_reset}');
+    if (aggregated.manualReviewCount > 0) {
+      print(
+          'Manual review required: ${_yellow}${aggregated.manualReviewCount}${_reset}');
+    }
+    if (aggregated.removedFeaturesCount > 0) {
+      print(
+          'Removed features: ${_red}${aggregated.removedFeaturesCount}${_reset}');
+    }
+
+    if (!result.dryRun) {
+      _printLine();
+      print('${_bold}Migration Results${_reset}');
+      print('${_gray}${'─' * 40}${_reset}');
+      print('Files modified: ${result.filesModified}');
+      print(
+          'Successful changes: ${_green}${result.successfulChanges}${_reset}');
+      if (result.failedChanges > 0) {
+        print('Failed changes: ${_red}${result.failedChanges}${_reset}');
+      }
+    }
+
+    _printWarnings(aggregated);
+    _printNextSteps(result.dryRun);
+  }
+
+  // ANSI escape codes - respect _noColor setting
+  String get _reset => _noColor ? '' : '\x1B[0m';
+  String get _bold => _noColor ? '' : '\x1B[1m';
+  String get _gray => _noColor ? '' : '\x1B[90m';
+  String get _red => _noColor ? '' : '\x1B[31m';
+  String get _green => _noColor ? '' : '\x1B[32m';
+  String get _yellow => _noColor ? '' : '\x1B[33m';
+  String get _blue => _noColor ? '' : '\x1B[34m';
+  String get _purple => _noColor ? '' : '\x1B[35m';
+  String get _cyan => _noColor ? '' : '\x1B[36m';
+  String get _magenta => _noColor ? '' : '\x1B[35m';
+  String get _orange => _noColor ? '' : '\x1B[38;5;208m';
 }

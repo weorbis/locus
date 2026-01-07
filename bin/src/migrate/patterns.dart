@@ -1,6 +1,3 @@
-import 'dart:io';
-import 'dart:convert';
-
 enum MigrationConfidence {
   high,
   medium,
@@ -117,6 +114,8 @@ class MigrationPattern {
 
 class MigrationPatternDatabase {
   static final List<MigrationPattern> allPatterns = [
+    ..._importPatterns,
+    ..._configPatterns,
     ..._locationPatterns,
     ..._geofencingPatterns,
     ..._privacyPatterns,
@@ -126,6 +125,52 @@ class MigrationPatternDatabase {
     ..._diagnosticsPatterns,
     ..._removedPatterns,
     ..._headlessPatterns,
+  ];
+
+  /// Import statement patterns - detect outdated imports
+  static const _importPatterns = [
+    MigrationPattern(
+      id: 'locus-import-services',
+      name: 'Import pattern unchanged but may need service exports',
+      description:
+          'The import remains the same but ensure you access services via Locus.location, Locus.geofencing, etc.',
+      confidence: MigrationConfidence.medium,
+      category: MigrationCategory.location,
+      fromPattern: r"import 'package:locus/locus\.dart'",
+      toPatternTemplate: "import 'package:locus/locus.dart'",
+    ),
+  ];
+
+  /// Configuration patterns - LocusConfig changes
+  static const _configPatterns = [
+    MigrationPattern(
+      id: 'locus-config-url',
+      name: 'LocusConfig.url → LocusConfig.syncUrl',
+      description: 'The url parameter was renamed to syncUrl for clarity',
+      confidence: MigrationConfidence.high,
+      category: MigrationCategory.sync,
+      fromPattern: r'LocusConfig\(([^)]*)\burl:',
+      toPatternTemplate: 'LocusConfig(\$1syncUrl:',
+    ),
+    MigrationPattern(
+      id: 'locus-config-http-timeout',
+      name: 'LocusConfig.httpTimeout → LocusConfig.syncTimeout',
+      description: 'The httpTimeout parameter was renamed to syncTimeout',
+      confidence: MigrationConfidence.high,
+      category: MigrationCategory.sync,
+      fromPattern: r'httpTimeout:',
+      toPatternTemplate: 'syncTimeout:',
+    ),
+    MigrationPattern(
+      id: 'locus-set-config',
+      name: 'Locus.setConfig() still works but prefer passing to ready()',
+      description:
+          'setConfig still works but configuration is best passed to Locus.ready(config:)',
+      confidence: MigrationConfidence.medium,
+      category: MigrationCategory.location,
+      fromPattern: r'Locus\.setConfig\(([^)]+)\)',
+      toPatternTemplate: 'Locus.setConfig(\$1)',
+    ),
   ];
 
   static const _locationPatterns = [

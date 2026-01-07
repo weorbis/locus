@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:math';
 import 'analyzer.dart';
 import 'migrator.dart';
-import 'patterns.dart';
 
 class MigrationReportGenerator {
   final bool _verbose;
@@ -66,8 +65,6 @@ class MigrationReportGenerator {
           buffer.writeln('  Line | Pattern | Change');
 
           for (final match in fileMatches) {
-            final pattern = MigrationPatternDatabase.allPatterns
-                .firstWhere((p) => p.id == match.patternId);
             buffer.writeln(
               '  ${match.line.toString().padLeft(4)} | ${match.patternId.padRight(30)} | '
               '${match.original.substring(0, min(20, match.original.length))} → '

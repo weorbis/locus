@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'dart:convert';
 import 'patterns.dart';
+import 'monorepo.dart';
 
 class MigrationAnalysisResult {
   final String projectPath;
@@ -158,15 +158,47 @@ class MigrationError {
 class MigrationAnalyzer {
   final List<MigrationPattern> _patterns;
   final Set<String> _ignoredPatterns;
+  final Set<MigrationCategory> _onlyCategories;
   final bool _verbose;
 
   MigrationAnalyzer({
     List<MigrationPattern>? patterns,
     Set<String>? ignoredPatterns,
+    Set<String>? onlyCategories,
     bool verbose = false,
-  })  : _patterns = patterns ?? MigrationPatternDatabase.allPatterns,
+  })  : _patterns = _filterPatternsByCategory(
+            patterns ?? MigrationPatternDatabase.allPatterns,
+            onlyCategories,
+        ),
         _ignoredPatterns = ignoredPatterns ?? {},
+        _onlyCategories = _parseCategories(onlyCategories),
         _verbose = verbose;
+
+  static List<MigrationPattern> _filterPatternsByCategory(
+    List<MigrationPattern> patterns,
+    Set<String>? onlyCategories,
+  ) {
+    if (onlyCategories == null || onlyCategories.isEmpty) {
+      return patterns;
+    }
+    final categories = _parseCategories(onlyCategories);
+    return patterns.where((p) => categories.contains(p.category)).toList();
+  }
+
+  static Set<MigrationCategory> _parseCategories(Set<String>? categoryNames) {
+    if (categoryNames == null || categoryNames.isEmpty) {
+      return MigrationCategory.values.toSet();
+    }
+    return categoryNames
+        .map((name) => MigrationCategory.values.firstWhere(
+              (c) => c.name.toLowerCase() == name.toLowerCase(),
+              orElse: () => throw ArgumentError('Unknown category: $name'),
+            ))
+        .toSet();
+  }
+
+  /// Returns the set of categories being analyzed.
+  Set<MigrationCategory> get activeCategories => _onlyCategories;
 
   Future<MigrationAnalysisResult> analyze(
     Directory projectDir, {
@@ -420,4 +452,137 @@ class MigrationAnalyzer {
   }
 
   List<MigrationPattern> get patterns => _patterns;
+
+  /// Analyzes multiple packages in a monorepo and aggregates results
+  Future<MonorepoMigrationAnalysisResult> analyzeMonorepo(
+    Directory rootDir, {
+    bool skipTests = false,
+    Set<String>? additionalIgnores,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+
+    if (_verbose) {
+      print('[INFO] Detecting monorepo structure...');
+    }
+
+    final packages = await MonorepoDetector.findPackages(rootDir);
+
+    if (_verbose) {
+      print(
+          '[INFO] Found ${packages.length} package(s): ${packages.map((p) => p.displayName).join(', ')}');
+    }
+
+    final packageResults = <String, MigrationAnalysisResult>{};
+    final allWarnings = <MigrationWarning>[];
+    final allErrors = <MigrationError>[];
+
+    for (final package in packages) {
+      try {
+        final packageDir = Directory(package.path);
+        final result = await analyze(
+          packageDir,
+          skipTests: skipTests,
+          additionalIgnores: additionalIgnores,
+        );
+        packageResults[package.displayName] = result;
+      } catch (e, stack) {
+        allErrors.add(MigrationError(
+          filePath: package.path,
+          line: 1,
+          message: 'Failed to analyze package "${package.displayName}": $e',
+          code: 'PACKAGE_ANALYSIS_ERROR',
+        ));
+
+        if (_verbose) {
+          print('[ERROR] Failed to analyze package ${package.displayName}: $e');
+          print(stack);
+        }
+      }
+    }
+
+    stopwatch.stop();
+
+    if (_verbose) {
+      print(
+          '[INFO] Monorepo analysis completed in ${stopwatch.elapsedMilliseconds}ms');
+    }
+
+    return MonorepoMigrationAnalysisResult(
+      rootPath: rootDir.absolute.path,
+      timestamp: DateTime.now(),
+      isMonorepo: packages.length > 1,
+      packages: packages,
+      packageResults: packageResults,
+      warnings: allWarnings,
+      errors: allErrors,
+    );
+  }
+}
+
+/// Result of analyzing a monorepo with multiple packages
+class MonorepoMigrationAnalysisResult {
+  final String rootPath;
+  final DateTime timestamp;
+  final bool isMonorepo;
+  final List<PackageInMonorepo> packages;
+  final Map<String, MigrationAnalysisResult> packageResults;
+  final List<MigrationWarning> warnings;
+  final List<MigrationError> errors;
+
+  MonorepoMigrationAnalysisResult({
+    required this.rootPath,
+    required this.timestamp,
+    required this.isMonorepo,
+    required this.packages,
+    required this.packageResults,
+    required this.warnings,
+    required this.errors,
+  });
+
+  /// Get aggregated analysis across all packages
+  MigrationAnalysisResult get aggregated {
+    final allFiles = <AnalyzedFile>[];
+    final allMatches = <PatternMatch>[];
+    final allWarnings = <MigrationWarning>[...warnings];
+    final allErrors = <MigrationError>[...errors];
+    final allPackages = <String>{};
+
+    for (final result in packageResults.values) {
+      allFiles.addAll(result.analyzedFiles);
+      allMatches.addAll(result.matches);
+      allWarnings.addAll(result.warnings);
+      allErrors.addAll(result.errors);
+      allPackages.addAll(result.importedPackages);
+    }
+
+    return MigrationAnalysisResult(
+      projectPath: rootPath,
+      timestamp: timestamp,
+      analyzedFiles: allFiles,
+      matches: allMatches,
+      warnings: allWarnings,
+      errors: allErrors,
+      importedPackages: allPackages,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'rootPath': rootPath,
+        'timestamp': timestamp.toIso8601String(),
+        'isMonorepo': isMonorepo,
+        'packages': packages
+            .map((p) => {
+                  'path': p.path,
+                  'name': p.name,
+                  'isApp': p.isApp,
+                })
+            .toList(),
+        'packageResults': {
+          for (final entry in packageResults.entries)
+            entry.key: entry.value.toJson(),
+        },
+        'aggregated': aggregated.toJson(),
+        'warnings': warnings.map((w) => w.toJson()).toList(),
+        'errors': errors.map((e) => e.toJson()).toList(),
+      };
 }

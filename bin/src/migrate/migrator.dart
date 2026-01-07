@@ -214,8 +214,6 @@ class MigrationMigrator {
           ..sort((a, b) => (b['adjustedOffset'] as int)
               .compareTo(a['adjustedOffset'] as int));
 
-        int totalOffsetAdjustment = 0;
-
         for (final item in sortedMatches) {
           final match = item['match'] as PatternMatch;
           final adjustedOffset = item['adjustedOffset'] as int;
@@ -349,4 +347,133 @@ class MigrationMigrator {
       return false;
     }
   }
+
+  /// Migrates a monorepo with multiple packages
+  Future<MonorepoMigrationResult> migrateMonorepo({
+    required Directory rootDir,
+    required bool dryRun,
+    required bool createBackup,
+    bool skipTests = false,
+    Set<String>? additionalIgnores,
+  }) async {
+    final timestamp = DateTime.now();
+
+    if (_verbose) {
+      print('[INFO] Starting monorepo migration of ${rootDir.path}');
+      print('[INFO] Dry run: $dryRun, Create backup: $createBackup');
+    }
+
+    final analysis = await _analyzer.analyzeMonorepo(
+      rootDir,
+      skipTests: skipTests,
+      additionalIgnores: additionalIgnores,
+    );
+
+    if (dryRun) {
+      if (_verbose) {
+        print('[INFO] Dry run - no files will be modified');
+      }
+      return MonorepoMigrationResult(
+        analysis: analysis,
+        packageResults: {},
+        dryRun: true,
+        timestamp: timestamp,
+      );
+    }
+
+    String? backupPath;
+    if (createBackup) {
+      backupPath = await _createBackup(rootDir, timestamp);
+    }
+
+    final packageResults = <String, MigrationResult>{};
+
+    for (final entry in analysis.packageResults.entries) {
+      final packageName = entry.key;
+      final packageAnalysis = entry.value;
+
+      // Find the package directory
+      final packageDir = Directory(packageAnalysis.projectPath);
+      if (!await packageDir.exists()) {
+        continue;
+      }
+
+      if (_verbose) {
+        print('[INFO] Migrating package: $packageName');
+      }
+
+      final appliedChanges =
+          await _applyMigrations(packageAnalysis, packageDir);
+
+      packageResults[packageName] = MigrationResult(
+        analysis: packageAnalysis,
+        appliedChanges: appliedChanges,
+        backupPath: backupPath,
+        dryRun: false,
+        timestamp: timestamp,
+      );
+    }
+
+    if (_verbose) {
+      print('[INFO] Monorepo migration complete');
+      final totalSuccessful =
+          packageResults.values.fold(0, (sum, r) => sum + r.successfulChanges);
+      final totalFailed =
+          packageResults.values.fold(0, (sum, r) => sum + r.failedChanges);
+      print('[INFO] Applied $totalSuccessful changes');
+      print('[INFO] Failed: $totalFailed');
+      if (backupPath != null) {
+        print('[INFO] Backup created at: $backupPath');
+      }
+    }
+
+    return MonorepoMigrationResult(
+      analysis: analysis,
+      packageResults: packageResults,
+      dryRun: false,
+      timestamp: timestamp,
+    );
+  }
+}
+
+/// Result of migrating a monorepo
+class MonorepoMigrationResult {
+  final MonorepoMigrationAnalysisResult analysis;
+  final Map<String, MigrationResult> packageResults;
+  final bool dryRun;
+  final DateTime timestamp;
+
+  MonorepoMigrationResult({
+    required this.analysis,
+    required this.packageResults,
+    required this.dryRun,
+    required this.timestamp,
+  });
+
+  int get successfulChanges =>
+      packageResults.values.fold(0, (sum, r) => sum + r.successfulChanges);
+
+  int get failedChanges =>
+      packageResults.values.fold(0, (sum, r) => sum + r.failedChanges);
+
+  int get filesModified => packageResults.values.fold(<String>{}, (set, r) {
+        set.addAll(r.appliedChanges.map((c) => c.filePath));
+        return set;
+      }).length;
+
+  Map<String, dynamic> toJson() => {
+        'dryRun': dryRun,
+        'timestamp': timestamp.toIso8601String(),
+        'summary': {
+          'packages': packageResults.length,
+          'filesModified': filesModified,
+          'successfulChanges': successfulChanges,
+          'failedChanges': failedChanges,
+        },
+        'analysis': analysis.toJson(),
+        'packageResults': {
+          for (final entry in packageResults.entries)
+            entry.key: entry.value.toJson(),
+        },
+      };
 }

@@ -23,6 +23,22 @@ All notable changes to this project will be documented in this file.
   - Pattern-based detection of deprecated API usage
   - Dry-run mode for safe preview
   - Detailed migration suggestions with line numbers
+  - **Monorepo support**: Automatically detects and processes multiple packages in monorepo workspaces
+    - Discovers all Dart/Flutter packages in the workspace structure (supports `packages/`, `apps/`, `modules/`, etc.)
+    - Pre-flight Locus SDK usage detection per package
+    - Aggregates analysis results across all packages with per-package breakdown
+    - Applies migrations to each package independently
+    - Single backup for entire monorepo
+    - Distinguishes between Flutter apps and packages in output
+  - **Rollback support**: `--rollback` flag to restore from most recent backup
+  - **Analysis-only mode**: `--analyze-only` to scan without migration suggestions
+  - **Pattern filtering**: `--ignore-pattern` and `--only-category` options for targeted migrations
+  - **Migration hints**: Smart suggestions for headless callbacks, config changes, and removed features
+  - **70+ migration patterns**: Comprehensive coverage across all service categories
+    - Location, Geofencing, Privacy, Trips, Sync, Battery, Diagnostics
+    - Config parameter renames (url→syncUrl, httpTimeout→syncTimeout)
+    - Removed feature detection with TODO comments
+    - Headless callback pragma annotation hints
 - **Service behavior tests**: Expanded unit coverage for the new v2.0 service APIs
 - **Dynamic headers support**: `setDynamicHeaders()` now works on both Android and iOS
 - **Sync policy support (iOS)**: `setSyncPolicy()` handler added for iOS platform parity
