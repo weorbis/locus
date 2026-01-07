@@ -282,8 +282,8 @@ class LocusPlugin : FlutterPlugin,
         syncManager?.release()
         
         // Close database helpers
-        locationStore?.close()
-        queueStore?.close()
+        stateManager?.locationStore?.close()
+        stateManager?.queueStore?.close()
 
         if (prefs != null && isListenerRegistered) {
             prefs?.unregisterOnSharedPreferenceChangeListener(this)
