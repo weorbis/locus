@@ -39,7 +39,7 @@ class TripEngine {
 
     // If we are NOT restoring, we clean up any existing session fully
     if (!shouldRestore) {
-      stop();
+      await stop();
     } else {
       // If restoring, just cancel the previous stream so we can re-bind
       await _subscription?.cancel();
@@ -75,8 +75,8 @@ class TripEngine {
     _subscription = source.listen(_handleLocation);
   }
 
-  TripSummary? stop() {
-    _subscription?.cancel();
+  Future<TripSummary?> stop() async {
+    await _subscription?.cancel();
     _subscription = null;
     final state = _state;
     _state = state == null
@@ -108,12 +108,12 @@ class TripEngine {
         isMoving: false,
       ));
     }
-    _store?.clear();
+    await _store?.clear();
     return summary;
   }
 
   Future<void> dispose() async {
-    stop();
+    await stop();
     await _controller.close();
   }
 
@@ -281,7 +281,7 @@ class TripEngine {
     _emitRouteDeviationIfNeeded(location, state.tripId, config);
 
     if (config.stopOnStationary) {
-      _maybeStopOnStationary(location, state.tripId, config);
+      await _maybeStopOnStationary(location, state.tripId, config);
     }
   }
 
@@ -357,18 +357,18 @@ class TripEngine {
     ));
   }
 
-  void _maybeStopOnStationary(
+  Future<void> _maybeStopOnStationary(
     Location location,
     String tripId,
     TripConfig config,
-  ) {
+  ) async {
     final stationarySince = _lastStationaryAt;
     if (stationarySince == null) {
       return;
     }
     if (location.timestamp.difference(stationarySince).inMinutes >=
         config.stopTimeoutMinutes) {
-      stop();
+      await stop();
     }
   }
 

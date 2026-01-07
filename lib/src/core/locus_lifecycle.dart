@@ -67,7 +67,7 @@ class LocusLifecycle {
 
     // Start adaptive tracking if enabled
     if (LocusAdaptive.isEnabled) {
-      LocusAdaptive.startAdaptiveTracking();
+      await LocusAdaptive.startAdaptiveTracking();
     }
 
     if (result is Map) {
@@ -79,7 +79,7 @@ class LocusLifecycle {
 
   /// Stops the background geolocation service.
   static Future<GeolocationState> stop() async {
-    LocusAdaptive.stopAdaptiveTracking();
+    await LocusAdaptive.stopAdaptiveTracking();
     final result = await LocusChannels.methods.invokeMethod('stop');
     if (result is Map) {
       return GeolocationState.fromMap(Map<String, dynamic>.from(result));
@@ -104,7 +104,7 @@ class LocusLifecycle {
 
   /// Destroys the SDK instance, cleaning up all resources and static state.
   static Future<void> destroy() async {
-    LocusAdaptive.stopAdaptiveTracking();
+    await LocusAdaptive.stopAdaptiveTracking();
     await LocusStreams.stopNativeStream(force: true);
 
     // Attempt to stop and clean native state; ignore missing plugin in tests
@@ -122,10 +122,10 @@ class LocusLifecycle {
     } catch (_) {}
 
     await LocusTrip.dispose();
-    LocusProfiles.clearTrackingProfiles();
+    await LocusProfiles.clearTrackingProfiles();
     await LocusWorkflows.dispose();
-    LocusFeatures.disposeSignificantChangeManager();
-    LocusFeatures.disposeErrorRecoveryManager();
+    await LocusFeatures.disposeSignificantChangeManager();
+    await LocusFeatures.disposeErrorRecoveryManager();
     LocusFeatures.resetSpoofDetector();
   }
 

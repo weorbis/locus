@@ -58,6 +58,17 @@ abstract class PrivacyService {
   /// Enables or disables a privacy zone.
   Future<bool> setEnabled(String identifier, bool enabled);
 
-  /// Subscribes to privacy zone change events.
-  void onChange(void Function(PrivacyZoneEvent) callback);
+  /// Subscribes to privacy zone events.
+  ///
+  /// Returns a [StreamSubscription] that can be cancelled to prevent memory leaks.
+  ///
+  /// Example:
+  /// ```dart
+  /// final subscription = Locus.privacy.onChange((event) {
+  ///   print('Zone ${event.zone.name} was ${event.type}');
+  /// });
+  /// // Later, cancel the subscription
+  /// subscription.cancel();
+  /// ```
+  StreamSubscription<PrivacyZoneEvent> onChange(void Function(PrivacyZoneEvent) callback);
 }

@@ -515,8 +515,8 @@ class ErrorRecoveryManager {
   }
 
   /// Disposes resources.
-  void dispose() {
+  Future<void> dispose() async {
     reset();
-    _errorController.close();
+    await _errorController.close();
   }
 }

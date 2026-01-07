@@ -1,11 +1,10 @@
 package dev.locus.core
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import dev.locus.storage.LocationStore
 import dev.locus.storage.QueueStore
+import kotlinx.coroutines.*
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -36,7 +35,7 @@ class SyncManager(
     }
 
     private val executor: ExecutorService = Executors.newFixedThreadPool(4)
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private val mainScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     
     @Volatile
     private var isSyncPaused = false
@@ -46,6 +45,7 @@ class SyncManager(
 
     fun release() {
         isReleased = true
+        mainScope.cancel()
         executor.shutdown()
         // Don't force-terminate - let in-flight syncs complete gracefully
         // Callbacks will be ignored since isReleased is true
@@ -396,14 +396,20 @@ class SyncManager(
         if (isReleased || attempt > config.maxRetry || config.httpUrl.isNullOrEmpty()) return
         
         val delay = calculateRetryDelay(attempt)
-        mainHandler.postDelayed({ if (!isReleased) enqueueHttpBatch(payloads, idsToDelete, attempt) }, delay)
+        mainScope.launch {
+            delay(delay)
+            if (!isReleased) enqueueHttpBatch(payloads, idsToDelete, attempt)
+        }
     }
 
     private fun scheduleHttpRetry(payload: Map<String, Any>, idsToDelete: List<String>?, attempt: Int) {
         if (isReleased || attempt > config.maxRetry || config.httpUrl.isNullOrEmpty()) return
         
         val delay = calculateRetryDelay(attempt)
-        mainHandler.postDelayed({ if (!isReleased) enqueueHttp(payload, idsToDelete, attempt) }, delay)
+        mainScope.launch {
+            delay(delay)
+            if (!isReleased) enqueueHttp(payload, idsToDelete, attempt)
+        }
     }
 
     private fun scheduleQueueRetry(
@@ -418,7 +424,10 @@ class SyncManager(
         val delay = calculateRetryDelay(attempt)
         val nextRetryAt = System.currentTimeMillis() + delay
         queueStore.updateRetry(id, attempt, nextRetryAt)
-        mainHandler.postDelayed({ if (!isReleased) enqueueQueueHttp(payload, id, type, idempotencyKey, attempt) }, delay)
+        mainScope.launch {
+            delay(delay)
+            if (!isReleased) enqueueQueueHttp(payload, id, type, idempotencyKey, attempt)
+        }
     }
 
     private fun calculateRetryDelay(attempt: Int): Long {

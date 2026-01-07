@@ -44,6 +44,15 @@ For full documentation, visit [locus.dev](https://pub.dev/documentation/locus/la
 - **[Trip Tracking](doc/advanced/trips.md)** - Trip detection and recording.
 - **[Battery Optimization](doc/advanced/battery-optimization.md)** - Adaptive tracking.
 - **[Platform Setup](doc/setup/platform-configuration.md)** - iOS & Android permissions.
+- **[Troubleshooting](doc/guides/troubleshooting.md)** - Common issues and fixes.
+- **[FAQ](doc/guides/faq.md)** - Frequently asked questions.
+- **[Headless Execution](doc/guides/headless-execution.md)** - Running logic when the app is terminated.
+- **[Platform Behaviors](doc/guides/platform-specific-behaviors.md)** - Android/iOS runtime differences.
+- **[HTTP Synchronization](doc/guides/http-synchronization.md)** - Request formats, retry, and batching.
+- **[Performance Optimization](doc/guides/performance-optimization.md)** - Tuning for battery and accuracy.
+- **[Activity Recognition](doc/guides/activity-recognition.md)** - Activity types and best practices.
+- **[Event Streams Reference](doc/reference/event-streams.md)** - When streams emit and how to subscribe safely.
+- **[Error Codes](doc/reference/error-codes.md)** - Exception types and recovery guidance.
 
 ## Quick Start
 

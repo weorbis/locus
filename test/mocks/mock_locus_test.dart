@@ -9,8 +9,8 @@ void main() {
       mock = MockLocus();
     });
 
-    tearDown(() {
-      mock.dispose();
+    tearDown(() async {
+      await mock.dispose();
     });
 
     test('starts in not ready state', () {

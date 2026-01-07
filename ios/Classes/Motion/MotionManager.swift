@@ -24,6 +24,10 @@ class MotionManager {
         self.config = config
     }
     
+    deinit {
+        stop()
+    }
+    
     func start() {
         guard CMMotionActivityManager.isActivityAvailable(), !config.disableMotionActivityUpdates else { return }
         

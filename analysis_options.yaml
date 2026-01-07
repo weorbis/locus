@@ -9,6 +9,7 @@ analyzer:
 
 linter:
   rules:
+    # General best practices
     avoid_print: true
     avoid_relative_lib_imports: true
     always_use_package_imports: true
@@ -20,6 +21,24 @@ linter:
     unnecessary_late: true
     prefer_single_quotes: true
     sort_constructors_first: true
+    
+    # Async safety rules
     unawaited_futures: true
     cancel_subscriptions: true
     close_sinks: true
+    avoid_slow_async_io: true
+    no_adjacent_strings_in_list: true
+    discarded_futures: true
+    unnecessary_await_in_return: true
+    avoid_empty_else: true
+    null_closures: true
+    comment_references: true
+    annotate_overrides: true
+    
+    # Public API documentation
+    public_member_api_docs: false
+    
+    # Additional safety
+    unnecessary_null_checks: true
+    no_leading_underscores_for_library_prefixes: true
+    use_build_context_synchronously: true

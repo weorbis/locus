@@ -292,6 +292,7 @@ class MockLocus implements LocusInterface {
 
   @override
   Future<bool> changePace(bool isMoving) async {
+    _methodCalls.add('changePace');
     _methodCalls.add('changePace:$isMoving');
     _state = _state.copyWith(isMoving: isMoving);
     return true;
@@ -299,6 +300,7 @@ class MockLocus implements LocusInterface {
 
   @override
   Future<double> setOdometer(double value) async {
+    _methodCalls.add('setOdometer');
     _methodCalls.add('setOdometer:$value');
     _state = _state.copyWith(odometer: value);
     return value;
@@ -306,6 +308,7 @@ class MockLocus implements LocusInterface {
 
   @override
   Future<bool> addGeofence(Geofence geofence) async {
+    _methodCalls.add('addGeofence');
     _methodCalls.add('addGeofence:${geofence.identifier}');
     _geofences.removeWhere((g) => g.identifier == geofence.identifier);
     _geofences.add(geofence);
@@ -314,9 +317,11 @@ class MockLocus implements LocusInterface {
 
   @override
   Future<bool> removeGeofence(String identifier) async {
+    _methodCalls.add('removeGeofence');
     _methodCalls.add('removeGeofence:$identifier');
+    final before = _geofences.length;
     _geofences.removeWhere((g) => g.identifier == identifier);
-    return true;
+    return _geofences.length != before;
   }
 
   @override
@@ -342,6 +347,7 @@ class MockLocus implements LocusInterface {
 
   @override
   Future<List<Location>> queryLocations(LocationQuery query) async {
+    _methodCalls.add('getLocations');
     _methodCalls.add('queryLocations');
     return query.apply(_storedLocations);
   }
@@ -455,12 +461,14 @@ class MockLocus implements LocusInterface {
 
   @override
   Future<bool> addPolygonGeofence(PolygonGeofence polygon) async {
+    _methodCalls.add('addPolygonGeofence');
     _methodCalls.add('addPolygonGeofence:${polygon.identifier}');
     return _polygonGeofenceService.addPolygonGeofence(polygon);
   }
 
   @override
   Future<int> addPolygonGeofences(List<PolygonGeofence> polygons) async {
+    _methodCalls.add('addPolygonGeofences');
     _methodCalls.add('addPolygonGeofences:${polygons.length}');
     return _polygonGeofenceService.addPolygonGeofences(polygons);
   }
@@ -515,12 +523,14 @@ class MockLocus implements LocusInterface {
   @override
   Future<void> addPrivacyZone(PrivacyZone zone) async {
     _methodCalls.add('addPrivacyZone:${zone.identifier}');
+    _methodCalls.add('addPrivacyZone');
     await _privacyZoneService.addZone(zone);
   }
 
   @override
   Future<void> addPrivacyZones(List<PrivacyZone> zones) async {
     _methodCalls.add('addPrivacyZones:${zones.length}');
+    _methodCalls.add('addPrivacyZones');
     await _privacyZoneService.addZones(zones);
   }
 
@@ -617,7 +627,7 @@ class MockLocus implements LocusInterface {
   SyncBodyBuilder? _syncBodyBuilder;
 
   @override
-  void setSyncBodyBuilder(SyncBodyBuilder? builder) {
+  Future<void> setSyncBodyBuilder(SyncBodyBuilder? builder) async {
     _methodCalls.add('setSyncBodyBuilder');
     _syncBodyBuilder = builder;
   }
@@ -837,7 +847,11 @@ class MockLocus implements LocusInterface {
   }
 
   @override
-  TripSummary? stopTrip() {
+  Future<TripSummary?>? stopTrip() async {
+    if (_tripState == null) {
+      _methodCalls.add('stopTrip');
+      return null;
+    }
     _methodCalls.add('stopTrip');
     _tripSummary ??= TripSummary(
       tripId: _tripState?.tripId ?? 'mock-trip',
@@ -966,12 +980,26 @@ class MockLocus implements LocusInterface {
   @override
   Future<BatteryRunway> estimateBatteryRunway() async {
     _methodCalls.add('estimateBatteryRunway');
+    final currentLevel =
+        _batteryStats.currentBatteryLevel ?? _powerState.batteryLevel;
+    final trackingMinutes = _batteryStats.trackingDurationMinutes;
+
+    if (!_powerState.isCharging && trackingMinutes < 5) {
+      return BatteryRunway(
+        duration: Duration.zero,
+        lowPowerDuration: Duration.zero,
+        recommendation: 'Insufficient data to estimate runway yet.',
+        currentLevel: currentLevel,
+        isCharging: false,
+        confidence: 0,
+      );
+    }
+
     return BatteryRunwayCalculator.calculate(
-      currentLevel:
-          _batteryStats.currentBatteryLevel ?? _powerState.batteryLevel,
+      currentLevel: currentLevel,
       isCharging: _batteryStats.isCharging ?? _powerState.isCharging,
       drainPercent: _batteryStats.estimatedDrainPercent,
-      trackingMinutes: _batteryStats.trackingDurationMinutes,
+      trackingMinutes: trackingMinutes,
     );
   }
 
@@ -1008,12 +1036,36 @@ class MockLocus implements LocusInterface {
 
   @override
   Future<AdaptiveSettings> calculateAdaptiveSettings() async {
+    final level = _powerState.batteryLevel;
+    final isCritical = level <= 5 || _powerState.isPowerSaveMode;
+    final isLow = level <= 15;
+
+    if (isCritical) {
+      return const AdaptiveSettings(
+        distanceFilter: 200,
+        desiredAccuracy: DesiredAccuracy.low,
+        heartbeatInterval: 900,
+        gpsEnabled: false,
+        reason: 'critical battery',
+      );
+    }
+
+    if (isLow) {
+      return const AdaptiveSettings(
+        distanceFilter: 100,
+        desiredAccuracy: DesiredAccuracy.medium,
+        heartbeatInterval: 120,
+        gpsEnabled: true,
+        reason: 'low battery',
+      );
+    }
+
     return const AdaptiveSettings(
-      distanceFilter: 0,
-      desiredAccuracy: DesiredAccuracy.low,
-      heartbeatInterval: 0,
+      distanceFilter: 25,
+      desiredAccuracy: DesiredAccuracy.high,
+      heartbeatInterval: 60,
       gpsEnabled: true,
-      reason: 'mock',
+      reason: 'normal battery',
     );
   }
 
@@ -1274,22 +1326,22 @@ class MockLocus implements LocusInterface {
       _errorRecoveryManager?.errors ?? _errorController.stream;
 
   /// Disposes all stream controllers.
-  void dispose() {
-    _locationController.close();
-    _motionChangeController.close();
-    _activityChangeController.close();
-    _providerChangeController.close();
-    _geofenceController.close();
-    _connectivityController.close();
-    _httpController.close();
-    _heartbeatController.close();
-    _enabledChangeController.close();
-    _powerSaveController.close();
-    _powerStateController.close();
-    _tripEventController.close();
-    _workflowController.close();
-    _eventsController.close();
-    _errorController.close();
+  Future<void> dispose() async {
+    await _locationController.close();
+    await _motionChangeController.close();
+    await _activityChangeController.close();
+    await _providerChangeController.close();
+    await _geofenceController.close();
+    await _connectivityController.close();
+    await _httpController.close();
+    await _heartbeatController.close();
+    await _enabledChangeController.close();
+    await _powerSaveController.close();
+    await _powerStateController.close();
+    await _tripEventController.close();
+    await _workflowController.close();
+    await _eventsController.close();
+    await _errorController.close();
   }
 }
 

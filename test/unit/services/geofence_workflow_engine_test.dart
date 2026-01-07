@@ -39,7 +39,7 @@ void main() {
         ],
       ),
     ]);
-    engine.start();
+    await engine.start();
 
     final events = <GeofenceWorkflowEvent>[];
     engine.events.listen(events.add);
@@ -87,7 +87,7 @@ void main() {
         ],
       ),
     ]);
-    engine.start();
+    await engine.start();
 
     final events = <GeofenceWorkflowEvent>[];
     engine.events.listen(events.add);

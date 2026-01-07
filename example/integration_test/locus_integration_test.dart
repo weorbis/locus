@@ -245,7 +245,7 @@ void main() {
       expect(tripState, anyOf(isNull, isA<TripState>()));
 
       // Stop the trip
-      final summary = Locus.trips.stop();
+      final summary = await Locus.trips.stop();
       // summary is nullable TripSummary?
       expect(summary, anyOf(isNull, isA<TripSummary>()));
     });

@@ -70,7 +70,8 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
   @override
   void initState() {
     super.initState();
-    _configure();
+    // Run configuration without awaiting to keep initState synchronous.
+    unawaited(_configure());
   }
 
   Future<void> _configure() async {
@@ -195,22 +196,22 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
 
   @override
   void dispose() {
-    _locationSubscription?.cancel();
-    _motionSubscription?.cancel();
-    _activitySubscription?.cancel();
-    _anomalySubscription?.cancel();
-    _tripSubscription?.cancel();
-    _workflowSubscription?.cancel();
-    _providerSubscription?.cancel();
-    _geofenceSubscription?.cancel();
-    _geofencesChangeSubscription?.cancel();
-    _heartbeatSubscription?.cancel();
-    _scheduleSubscription?.cancel();
-    _connectivitySubscription?.cancel();
-    _powerSaveSubscription?.cancel();
-    _enabledSubscription?.cancel();
-    _httpSubscription?.cancel();
-    _notificationActionSubscription?.cancel();
+    unawaited(_locationSubscription?.cancel());
+    unawaited(_motionSubscription?.cancel());
+    unawaited(_activitySubscription?.cancel());
+    unawaited(_anomalySubscription?.cancel());
+    unawaited(_tripSubscription?.cancel());
+    unawaited(_workflowSubscription?.cancel());
+    unawaited(_providerSubscription?.cancel());
+    unawaited(_geofenceSubscription?.cancel());
+    unawaited(_geofencesChangeSubscription?.cancel());
+    unawaited(_heartbeatSubscription?.cancel());
+    unawaited(_scheduleSubscription?.cancel());
+    unawaited(_connectivitySubscription?.cancel());
+    unawaited(_powerSaveSubscription?.cancel());
+    unawaited(_enabledSubscription?.cancel());
+    unawaited(_httpSubscription?.cancel());
+    unawaited(_notificationActionSubscription?.cancel());
     super.dispose();
   }
 
@@ -413,8 +414,9 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
     _recordEvent('trip', 'trip start requested');
   }
 
-  void _stopTrip() {
-    final summary = Locus.trips.stop();
+  Future<void> _stopTrip() async {
+    final summary = await Locus.trips.stop();
+    if (!mounted) return;
     setState(() {
       _lastTripSummary = summary;
     });
@@ -728,9 +730,9 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
                           ),
                         )
                         .toList(),
-                    onChanged: (preset) {
+                    onChanged: (preset) async {
                       if (preset != null) {
-                        _applyPreset(preset);
+                        await _applyPreset(preset);
                       }
                     },
                   ),
@@ -800,7 +802,7 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
                   label: const Text('Start Trip'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: _stopTrip,
+                  onPressed: () => _stopTrip(),
                   icon: const Icon(Icons.stop_circle_outlined),
                   label: const Text('Stop Trip'),
                 ),

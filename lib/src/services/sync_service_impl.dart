@@ -37,7 +37,7 @@ class SyncServiceImpl implements SyncService {
       _instance.evaluateSyncPolicy(policy: policy);
 
   @override
-  void setSyncBodyBuilder(SyncBodyBuilder? builder) =>
+  Future<void> setSyncBodyBuilder(SyncBodyBuilder? builder) =>
       _instance.setSyncBodyBuilder(builder);
 
   @override

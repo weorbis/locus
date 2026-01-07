@@ -29,8 +29,8 @@ void main() {
     );
   });
 
-  tearDown(() {
-    locationStream.close();
+  tearDown(() async {
+    await locationStream.close();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('locus/methods'),

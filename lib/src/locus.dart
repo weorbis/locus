@@ -91,7 +91,7 @@ class Locus {
   /// Example:
   /// ```dart
   /// await Locus.trips.start(TripConfig(...));
-  /// final summary = Locus.trips.stop();
+  /// final summary = await Locus.trips.stop();
   /// ```
   static final TripService trips = TripServiceImpl(() => _instance);
 
@@ -200,8 +200,8 @@ class Locus {
   ///   };
   /// });
   /// ```
-  static void setSyncBodyBuilder(SyncBodyBuilder? builder) {
-    _instance.setSyncBodyBuilder(builder);
+  static Future<void> setSyncBodyBuilder(SyncBodyBuilder? builder) {
+    return _instance.setSyncBodyBuilder(builder);
   }
 
   /// Clears the sync body builder callback.

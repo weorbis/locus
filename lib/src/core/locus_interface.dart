@@ -172,7 +172,7 @@ abstract class LocusInterface {
   ///   };
   /// });
   /// ```
-  void setSyncBodyBuilder(SyncBodyBuilder? builder);
+  Future<void> setSyncBodyBuilder(SyncBodyBuilder? builder);
 
   /// Clears the sync body builder callback.
   void clearSyncBodyBuilder();
@@ -320,7 +320,7 @@ abstract class LocusInterface {
   // Trip Lifecycle
   // ============================================================
   Future<void> startTrip(TripConfig config);
-  TripSummary? stopTrip();
+  Future<TripSummary?>? stopTrip();
   TripState? getTripState();
   Stream<TripEvent> get tripEvents;
   StreamSubscription<TripEvent> onTripEvent(

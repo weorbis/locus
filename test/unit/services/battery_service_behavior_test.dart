@@ -11,8 +11,8 @@ void main() {
       service = BatteryServiceImpl(() => mockLocus);
     });
 
-    tearDown(() {
-      mockLocus.dispose();
+    tearDown(() async {
+      await mockLocus.dispose();
     });
 
     test('getStats reflects mock battery stats', () async {

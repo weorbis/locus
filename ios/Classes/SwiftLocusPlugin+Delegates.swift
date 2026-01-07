@@ -4,9 +4,10 @@ import CoreLocation
 extension SwiftLocusPlugin {
   // MARK: - MotionManagerDelegate
   public func onActivityChange(type: String, confidence: Int) {
-    if let location = lastLocation {
-      emitLocationEvent(location, eventName: "activitychange")
+    guard let location = lastLocation else {
+      return
     }
+    emitLocationEvent(location, eventName: "activitychange")
   }
 
   public func onMotionStateChange(isMoving: Bool) {
@@ -14,9 +15,10 @@ extension SwiftLocusPlugin {
     trackingStats.onMotionChange(isMoving: isMoving)
 
     // Only emit event if we have a location to attach to it
-    if let location = lastLocation {
-      emitLocationEvent(location, eventName: "motionchange")
+    guard let location = lastLocation else {
+      return
     }
+    emitLocationEvent(location, eventName: "motionchange")
   }
 
   // MARK: - SyncManagerDelegate
@@ -49,6 +51,8 @@ extension SwiftLocusPlugin {
 
   // MARK: - GeofenceManagerDelegate
   public func onGeofencesChange(added: [String], removed: [String]) {
+    guard !added.isEmpty || !removed.isEmpty else { return }
+    
     let event: [String: Any] = [
       "type": "geofenceschange",
       "data": [
@@ -61,6 +65,7 @@ extension SwiftLocusPlugin {
 
   public func onGeofenceEvent(identifier: String, action: String) {
     guard let geofence = geofenceManager.getGeofence(identifier) else {
+      appendLog("Geofence event for unknown geofence: \(identifier)", level: "warning")
       return
     }
 
@@ -101,6 +106,11 @@ extension SwiftLocusPlugin {
 
   // MARK: - LocationClientDelegate
   public func onLocationUpdate(_ location: CLLocation) {
+    guard isEnabled || pendingLocationResult != nil || configManager.startOnBoot else {
+      lastLocation = location
+      return
+    }
+    
     if isEnabled {
       trackingStats.onLocationUpdate(accuracy: location.horizontalAccuracy)
     }

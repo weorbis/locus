@@ -3,6 +3,8 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:locus/src/models.dart';
 import 'package:locus/src/core/locus_interface.dart';
 import 'package:locus/src/services/privacy_service.dart';
@@ -47,7 +49,12 @@ class PrivacyServiceImpl implements PrivacyService {
       _instance.setPrivacyZoneEnabled(identifier, enabled);
 
   @override
-  void onChange(void Function(PrivacyZoneEvent) callback) {
-    _instance.privacyZoneEvents.listen(callback);
+  StreamSubscription<PrivacyZoneEvent> onChange(void Function(PrivacyZoneEvent) callback) {
+    return _instance.privacyZoneEvents.listen(
+      callback,
+      onError: (error, stackTrace) {
+        debugPrint('[PrivacyService] Error in privacyZoneEvents stream: $error');
+      },
+    );
   }
 }

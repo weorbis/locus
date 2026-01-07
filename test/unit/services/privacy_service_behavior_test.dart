@@ -11,8 +11,8 @@ void main() {
       service = PrivacyServiceImpl(() => mockLocus);
     });
 
-    tearDown(() {
-      mockLocus.dispose();
+    tearDown(() async {
+      await mockLocus.dispose();
     });
 
     test('events emit add and remove changes', () async {

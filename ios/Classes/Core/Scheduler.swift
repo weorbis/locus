@@ -15,6 +15,10 @@ class Scheduler {
         self.config = config
     }
     
+    deinit {
+        stop()
+    }
+    
     func start() {
         guard config.scheduleEnabled else {
             // Schedule not enabled - this is normal, no need to log

@@ -15,7 +15,7 @@ class LocusFeatures {
 
   /// Sets spoof detection configuration.
   ///
-  /// When [config.blockMockLocations] is true, spoofed locations will be
+  /// When `config.blockMockLocations` is true, spoofed locations will be
   /// filtered from the event stream and available via [blockedLocationEvents].
   static Future<void> setSpoofDetection(SpoofDetectionConfig config) async {
     _spoofDetector = SpoofDetector(config);
@@ -76,8 +76,8 @@ class LocusFeatures {
   static Stream<SignificantChangeEvent>? get significantChangeStream =>
       _significantChangeManager?.events;
 
-  static void disposeSignificantChangeManager() {
-    _significantChangeManager?.dispose();
+  static Future<void> disposeSignificantChangeManager() async {
+    await _significantChangeManager?.dispose();
     _significantChangeManager = null;
   }
 
@@ -121,10 +121,10 @@ class LocusFeatures {
     );
   }
 
-  static void disposeErrorRecoveryManager() {
+  static Future<void> disposeErrorRecoveryManager() async {
     // Disconnect from LocusStreams
     LocusStreams.setErrorRecoveryManager(null);
-    _errorRecoveryManager?.dispose();
+    await _errorRecoveryManager?.dispose();
     _errorRecoveryManager = null;
   }
 

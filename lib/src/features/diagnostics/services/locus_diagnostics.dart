@@ -46,7 +46,7 @@ class LocusDiagnostics {
         if (command.payload == null) {
           return false;
         }
-        await LocusChannels.methods.invokeMethod('setConfig', command.payload!);
+        await LocusChannels.methods.invokeMethod('setConfig', command.payload);
         return true;
       case RemoteCommandType.syncQueue:
         await LocusSync.syncQueue();

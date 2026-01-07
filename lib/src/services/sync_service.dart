@@ -61,7 +61,7 @@ abstract class SyncService {
   Future<SyncDecision> evaluatePolicy({required SyncPolicy policy});
 
   /// Sets a callback to build custom HTTP sync body.
-  void setSyncBodyBuilder(SyncBodyBuilder? builder);
+  Future<void> setSyncBodyBuilder(SyncBodyBuilder? builder);
 
   /// Clears the sync body builder callback.
   void clearSyncBodyBuilder();

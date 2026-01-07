@@ -105,50 +105,50 @@ class TrackingProfileManager {
     }
   }
 
-  void startAutomation() {
+  Future<void> startAutomation() async {
     if (_isDisposed) return;
-    _subscription?.cancel();
+    await _subscription?.cancel();
     _subscription = _events.listen(_handleEvent);
   }
 
-  void stopAutomation() {
-    _subscription?.cancel();
+  Future<void> stopAutomation() async {
+    await _subscription?.cancel();
     _subscription = null;
   }
 
   /// Disposes of this manager and releases all resources.
   /// After calling dispose, this manager should not be used.
-  void dispose() {
+  Future<void> dispose() async {
     if (_isDisposed) return;
     _isDisposed = true;
-    stopAutomation();
-    _profileChangeController.close();
-    _errorController.close();
+    await stopAutomation();
+    await _profileChangeController.close();
+    await _errorController.close();
   }
 
-  void _handleEvent(GeolocationEvent<dynamic> event) {
+  Future<void> _handleEvent(GeolocationEvent<dynamic> event) async {
     if (_isDisposed || _rules.isEmpty) {
       return;
     }
     switch (event.type) {
       case EventType.activityChange:
-        _handleActivityEvent(event.data);
+        await _handleActivityEvent(event.data);
         break;
       case EventType.geofence:
-        _handleGeofenceEvent(event.data);
+        await _handleGeofenceEvent(event.data);
         break;
       case EventType.location:
       case EventType.motionChange:
       case EventType.heartbeat:
       case EventType.schedule:
-        _handleSpeedEvent(event.data);
+        await _handleSpeedEvent(event.data);
         break;
       default:
         break;
     }
   }
 
-  void _handleActivityEvent(dynamic data) {
+  Future<void> _handleActivityEvent(dynamic data) async {
     final activity = _extractActivity(data);
     if (activity == null) {
       return;
@@ -161,13 +161,13 @@ class TrackingProfileManager {
         continue;
       }
       if (rule.activity == activity.type) {
-        _applyRule(rule);
+        await _applyRule(rule);
         return;
       }
     }
   }
 
-  void _handleGeofenceEvent(dynamic data) {
+  Future<void> _handleGeofenceEvent(dynamic data) async {
     if (data is! GeofenceEvent) {
       return;
     }
@@ -182,12 +182,12 @@ class TrackingProfileManager {
           rule.geofenceIdentifier != data.geofence.identifier) {
         continue;
       }
-      _applyRule(rule);
+      await _applyRule(rule);
       return;
     }
   }
 
-  void _handleSpeedEvent(dynamic data) {
+  Future<void> _handleSpeedEvent(dynamic data) async {
     final location = _extractLocation(data);
     if (location == null) {
       return;
@@ -246,11 +246,11 @@ class TrackingProfileManager {
     }
 
     if (bestMatch != null) {
-      _applyRule(bestMatch);
+      await _applyRule(bestMatch);
     }
   }
 
-  void _applyRule(TrackingProfileRule rule) {
+  Future<void> _applyRule(TrackingProfileRule rule) async {
     if (_isDisposed) return;
     if (_current == rule.profile) {
       return;
@@ -258,7 +258,7 @@ class TrackingProfileManager {
     if (!_shouldSwitch(rule.cooldownSeconds)) {
       return;
     }
-    setProfile(
+    await setProfile(
       rule.profile,
       reason: 'Automation: ${rule.type.name}',
     ).catchError((Object e, StackTrace stack) {

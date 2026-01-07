@@ -305,8 +305,8 @@ void main() {
       );
     });
 
-    tearDown(() {
-      service.dispose();
+    tearDown(() async {
+      await service.dispose();
     });
 
     test('addPolygonGeofence adds valid polygon', () async {

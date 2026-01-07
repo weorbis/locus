@@ -98,15 +98,16 @@ class _LocusDebugOverlayState extends State<LocusDebugOverlay> {
     _isExpanded = widget.expanded;
     _trackingStartTime = DateTime.now();
     _setupListeners();
-    _loadInitialState();
+    // Kick off initial load without blocking initState.
+    unawaited(_loadInitialState());
     _startPeriodicUpdates();
   }
 
   Timer? _updateTimer;
 
   void _startPeriodicUpdates() {
-    _updateTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      _refreshData();
+    _updateTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      await _refreshData();
     });
   }
 
@@ -248,7 +249,7 @@ class _LocusDebugOverlayState extends State<LocusDebugOverlay> {
   void dispose() {
     _updateTimer?.cancel();
     for (final sub in _subscriptions) {
-      sub.cancel();
+      unawaited(sub.cancel());
     }
     super.dispose();
   }

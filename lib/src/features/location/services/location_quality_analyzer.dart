@@ -29,7 +29,7 @@ class LocationQualityAnalyzer {
 
     return source.asyncExpand((location) async* {
       window.add(location);
-      if (window.length > config.windowSize) {
+      if (window.length >= config.windowSize) {
         window.removeAt(0);
       }
 

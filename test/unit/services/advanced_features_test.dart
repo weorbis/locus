@@ -188,7 +188,7 @@ void main() {
       expect(events.length, 1);
       expect(events.first.location, loc2);
 
-      manager.dispose();
+      await manager.dispose();
     });
 
     test('ignores small movements', () async {
@@ -211,7 +211,7 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 10));
       expect(events, isEmpty); // No event for small movement below threshold
 
-      manager.dispose();
+      await manager.dispose();
     });
   });
 
@@ -300,10 +300,10 @@ void main() {
       final action = await manager.handleError(error);
       expect(action, RecoveryAction.fallbackLowPower);
 
-      manager.dispose();
+      await manager.dispose();
     });
 
-    test('calculates retry delay with backoff', () {
+    test('calculates retry delay with backoff', () async {
       final manager = ErrorRecoveryManager(const ErrorRecoveryConfig(
         retryDelay: Duration(seconds: 1),
         retryBackoff: 2.0,
@@ -311,16 +311,16 @@ void main() {
       ));
 
       // Simulate retries to increment counter
-      manager.handleError(LocusError.networkError());
+      await manager.handleError(LocusError.networkError());
 
       final delay1 = manager.getRetryDelay(LocusErrorType.networkError);
       expect(delay1.inSeconds, 2); // 1 * 2
 
-      manager.handleError(LocusError.networkError());
+      await manager.handleError(LocusError.networkError());
       final delay2 = manager.getRetryDelay(LocusErrorType.networkError);
       expect(delay2.inSeconds, 4); // 1 * 2 * 2
 
-      manager.dispose();
+      await manager.dispose();
     });
 
     test('emits errors to stream', () async {
@@ -337,7 +337,7 @@ void main() {
       expect(errors.length, 1);
       expect(errors.first.type, LocusErrorType.locationTimeout);
 
-      manager.dispose();
+      await manager.dispose();
     });
 
     test('markResolved clears retry count', () async {
@@ -354,7 +354,7 @@ void main() {
       final delay = manager.getRetryDelay(LocusErrorType.networkError);
       expect(delay, const Duration(seconds: 5)); // Default delay
 
-      manager.dispose();
+      await manager.dispose();
     });
   });
 }

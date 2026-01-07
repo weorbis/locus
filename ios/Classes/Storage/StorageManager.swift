@@ -42,7 +42,7 @@ class StorageManager {
     }
     
     func writeLocations(_ locations: [[String: Any]]) {
-        // Clear and re-write all locations
+        // Clear and re-write all locations (thread-safe via SQLiteStorage queue)
         sqliteStorage.clearLocations()
         for location in locations {
             sqliteStorage.insertLocation(location)
@@ -50,9 +50,10 @@ class StorageManager {
     }
     
     func saveLocation(_ payload: [String: Any], maxDays: Int, maxRecords: Int) {
+        // All operations are async and thread-safe via SQLiteStorage queue
         sqliteStorage.insertLocation(payload)
         
-        // Prune old locations
+        // Prune old locations (executed asynchronously)
         if maxDays > 0 || maxRecords > 0 {
             sqliteStorage.pruneLocations(maxDays: maxDays, maxRecords: maxRecords)
         }

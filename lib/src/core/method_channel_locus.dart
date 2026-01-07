@@ -22,9 +22,10 @@ class MethodChannelLocus implements LocusInterface {
   /// Automatically registers polygon geofence and privacy zone services
   /// with the event stream for location processing.
   MethodChannelLocus() {
-    // Register services with LocusStreams for event processing
+    // Register services with LocusStreams for event processing. Privacy zone
+    // registration is fire-and-forget; errors are logged inside the helper.
     LocusStreams.setPolygonGeofenceService(_polygonGeofenceService);
-    LocusStreams.setPrivacyZoneService(_privacyZoneService);
+    unawaited(LocusStreams.setPrivacyZoneService(_privacyZoneService));
   }
 
   // ============================================================
@@ -290,13 +291,13 @@ class MethodChannelLocus implements LocusInterface {
   // Sync Body Builder
   // ============================================================
   @override
-  void setSyncBodyBuilder(SyncBodyBuilder? builder) {
-    LocusSync.setSyncBodyBuilder(builder);
+  Future<void> setSyncBodyBuilder(SyncBodyBuilder? builder) {
+    return LocusSync.setSyncBodyBuilder(builder);
   }
 
   @override
-  void clearSyncBodyBuilder() {
-    LocusSync.clearSyncBodyBuilder();
+  Future<void> clearSyncBodyBuilder() async {
+    await LocusSync.clearSyncBodyBuilder();
   }
 
   @override
@@ -476,11 +477,11 @@ class MethodChannelLocus implements LocusInterface {
   Future<Map<String, String>> Function()? _headersCallback;
 
   @override
-  void setHeadersCallback(
+  Future<void> setHeadersCallback(
     Future<Map<String, String>> Function()? callback,
-  ) {
+  ) async {
     _headersCallback = callback;
-    _updateDynamicHeaders();
+    await _updateDynamicHeaders();
   }
 
   @override
@@ -632,7 +633,7 @@ class MethodChannelLocus implements LocusInterface {
   Future<void> startTrip(TripConfig config) => LocusTrip.startTrip(config);
 
   @override
-  TripSummary? stopTrip() => LocusTrip.stopTrip();
+  Future<TripSummary?>? stopTrip() => LocusTrip.stopTrip();
 
   @override
   TripState? getTripState() => LocusTrip.getTripState();

@@ -282,8 +282,8 @@ class SignificantChangeManager {
   /// Calculates distance between two coordinates in meters using Haversine formula.
 
   /// Disposes resources.
-  void dispose() {
+  Future<void> dispose() async {
     stop();
-    _controller.close();
+    await _controller.close();
   }
 }

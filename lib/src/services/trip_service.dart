@@ -38,7 +38,7 @@ import 'package:locus/src/models.dart';
 /// });
 ///
 /// // Stop the trip
-/// final summary = Locus.trips.stop();
+/// final summary = await Locus.trips.stop();
 /// print('Total distance: ${summary?.totalDistance}m');
 /// ```
 abstract class TripService {
@@ -51,7 +51,7 @@ abstract class TripService {
   /// Stops the current trip and returns a summary.
   ///
   /// Returns null if no trip is active.
-  TripSummary? stop();
+  Future<TripSummary?>? stop();
 
   /// Gets the current trip state.
   ///

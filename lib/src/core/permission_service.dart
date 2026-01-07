@@ -70,24 +70,24 @@ class PermissionService {
 
   /// Checks if location permission is granted (when in use).
   static Future<bool> hasLocationPermission() async {
-    return await Permission.locationWhenInUse.isGranted;
+    return Permission.locationWhenInUse.isGranted;
   }
 
   /// Checks if always location permission is granted.
   static Future<bool> hasAlwaysLocationPermission() async {
-    return await Permission.locationAlways.isGranted;
+    return Permission.locationAlways.isGranted;
   }
 
   /// Checks if activity/motion permission is granted.
   static Future<bool> hasActivityPermission() async {
     if (Platform.isAndroid) {
-      return await Permission.activityRecognition.isGranted;
+      return Permission.activityRecognition.isGranted;
     }
-    return await Permission.sensors.isGranted;
+    return Permission.sensors.isGranted;
   }
 
   /// Opens the app settings page.
   static Future<bool> openSettings() async {
-    return await openAppSettings();
+    return openAppSettings();
   }
 }

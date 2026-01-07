@@ -99,20 +99,20 @@ class GeofenceWorkflowEngine {
     await stateStore?.remove(_stateStoreKey);
   }
 
-  void start() {
-    _subscription?.cancel();
+  Future<void> start() async {
+    await _subscription?.cancel();
     _subscription = _events.listen(_handleEvent);
   }
 
-  void stop() {
-    _subscription?.cancel();
+  Future<void> stop() async {
+    await _subscription?.cancel();
     _subscription = null;
   }
 
   Future<void> dispose() async {
     // Save state before disposing
     await saveState();
-    stop();
+    await stop();
     await _controller.close();
   }
 

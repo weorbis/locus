@@ -12,10 +12,10 @@ class LocusWorkflows {
     return _workflowEngine!.events;
   }
 
-  static void registerGeofenceWorkflows(List<GeofenceWorkflow> workflows) {
+  static Future<void> registerGeofenceWorkflows(List<GeofenceWorkflow> workflows) async {
     _workflowEngine ??= GeofenceWorkflowEngine(events: LocusStreams.events);
     _workflowEngine!.registerWorkflows(workflows);
-    _workflowEngine!.start();
+    await _workflowEngine!.start();
   }
 
   static GeofenceWorkflowState? getWorkflowState(String workflowId) {
@@ -26,8 +26,8 @@ class LocusWorkflows {
     _workflowEngine?.clearWorkflows();
   }
 
-  static void stopGeofenceWorkflows() {
-    _workflowEngine?.stop();
+  static Future<void> stopGeofenceWorkflows() async {
+    await _workflowEngine?.stop();
   }
 
   static Future<void> dispose() async {

@@ -27,10 +27,10 @@ class LocusAdaptive {
     if (config.enabled) {
       final isTracking = await LocusLifecycle.isTracking();
       if (isTracking) {
-        startAdaptiveTracking();
+        await startAdaptiveTracking();
       }
     } else {
-      stopAdaptiveTracking();
+      await stopAdaptiveTracking();
     }
   }
 
@@ -39,21 +39,21 @@ class LocusAdaptive {
 
   static bool get isEnabled => _adaptiveConfig?.enabled == true;
 
-  static void startAdaptiveTracking() {
-    _adaptiveSubscription?.cancel();
-    _adaptiveSubscription = LocusStreams.events.listen((event) {
+  static Future<void> startAdaptiveTracking() async {
+    await _adaptiveSubscription?.cancel();
+    _adaptiveSubscription = LocusStreams.events.listen((event) async {
       if (event.type == EventType.location ||
           event.type == EventType.activityChange ||
           event.type == EventType.motionChange) {
-        evaluateAdaptiveSettings();
+        await evaluateAdaptiveSettings();
       }
     });
     // Evaluate immediately
-    evaluateAdaptiveSettings();
+    await evaluateAdaptiveSettings();
   }
 
-  static void stopAdaptiveTracking() {
-    _adaptiveSubscription?.cancel();
+  static Future<void> stopAdaptiveTracking() async {
+    await _adaptiveSubscription?.cancel();
     _adaptiveSubscription = null;
     _currentAdaptiveSettings = null;
     _stationarySince = null;

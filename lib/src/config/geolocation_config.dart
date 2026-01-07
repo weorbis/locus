@@ -15,6 +15,10 @@ class Config {
   /// Passive preset (lowest power usage).
   factory Config.passive() => ConfigPresets.lowPower;
 
+  /// Creates a [Config] with optional configuration parameters.
+  ///
+  /// All parameters are optional and default to null, which uses
+  /// platform-specific defaults at runtime.
   const Config({
     this.desiredAccuracy,
     this.distanceFilter,
@@ -94,6 +98,10 @@ class Config {
     this.spoofDetection,
   });
 
+  /// Creates a [Config] from a map representation.
+  ///
+  /// Deserializes all configuration fields from the provided [map].
+  /// Returns a [Config] instance with all applicable settings.
   factory Config.fromMap(JsonMap map) {
     return Config(
       desiredAccuracy: _parseEnum(
@@ -220,105 +228,251 @@ class Config {
     );
   }
 
-  /// SDK version.
+  /// The current SDK version.
   static const String version = '1.1.0';
 
   // Location settings
+  /// Desired location accuracy level.
   final DesiredAccuracy? desiredAccuracy;
+
+  /// Minimum distance in meters device must move before update is triggered.
   final double? distanceFilter;
+
+  /// Desired interval in milliseconds for location updates.
   final int? locationUpdateInterval;
+
+  /// Fastest interval in milliseconds at which app can handle updates.
   final int? fastestLocationUpdateInterval;
+
+  /// Interval in milliseconds for activity recognition updates.
   final int? activityRecognitionInterval;
+
+  /// Minutes device must be stationary before entering stopped state.
   final int? stopTimeout;
+
+  /// Minutes after which tracking automatically stops.
   final int? stopAfterElapsedMinutes;
+
+  /// Delay in milliseconds before stop detection is activated.
   final int? stopDetectionDelay;
+
+  /// Milliseconds to wait before motion triggers location tracking.
   final int? motionTriggerDelay;
+
+  /// Minimum confidence (0-100) required for activity recognition.
   final int? minimumActivityRecognitionConfidence;
+
+  /// Whether to use only significant location changes (iOS).
   final bool? useSignificantChangesOnly;
+
+  /// Whether to record consecutive locations with identical coordinates.
   final bool? allowIdenticalLocations;
+
+  /// Whether to disable motion/activity updates.
   final bool? disableMotionActivityUpdates;
+
+  /// Whether to disable automatic stop detection.
   final bool? disableStopDetection;
+
+  /// Whether to disable recording provider change events.
   final bool? disableProviderChangeRecord;
+
+  /// Whether to disable location authorization alerts (iOS).
   final bool? disableLocationAuthorizationAlert;
 
   // Background/foreground settings
+  /// Whether to enable headless mode for background operation.
   final bool? enableHeadless;
+
+  /// Whether to start tracking automatically on device boot.
   final bool? startOnBoot;
+
+  /// Whether to stop tracking when app terminates.
   final bool? stopOnTerminate;
+
+  /// Whether to enable foreground service notification (Android).
   final bool? foregroundService;
+
+  /// Whether to prevent app suspension during tracking (iOS).
   final bool? preventSuspend;
+
+  /// Whether iOS automatically pauses location updates (iOS).
   final bool? pausesLocationUpdatesAutomatically;
+
+  /// Whether to show background location indicator in status bar (iOS).
   final bool? showsBackgroundLocationIndicator;
 
   // Motion detection settings
+  /// Radius in meters within which device is considered stationary.
   final double? stationaryRadius;
+
+  /// Desired accuracy in meters for odometer distance calculations.
   final double? desiredOdometerAccuracy;
+
+  /// Multiplier for distance filter elasticity during motion.
   final double? elasticityMultiplier;
+
+  /// Maximum speed in m/s; locations exceeding this are filtered.
   final double? speedJumpFilter;
+
+  /// Whether to stop tracking when device becomes stationary.
   final bool? stopOnStationary;
 
   // Geofencing settings
+  /// Whether to use high accuracy mode for geofence monitoring.
   final bool? geofenceModeHighAccuracy;
+
+  /// Whether to trigger entry event if already inside geofence.
   final bool? geofenceInitialTriggerEntry;
+
+  /// Proximity radius in meters for geofence activation.
   final int? geofenceProximityRadius;
+
+  /// Maximum number of geofences to monitor simultaneously.
   final int? maxMonitoredGeofences;
 
   // HTTP sync settings
+  /// Timeout in seconds for acquiring a location fix.
   final int? locationTimeout;
+
+  /// Timeout in milliseconds for HTTP requests.
   final int? httpTimeout;
+
+  /// Maximum number of HTTP retry attempts.
   final int? maxRetry;
+
+  /// Initial delay in milliseconds before first retry.
   final int? retryDelay;
+
+  /// Multiplier for exponential backoff between retries.
   final double? retryDelayMultiplier;
+
+  /// Maximum delay in milliseconds between retries.
   final int? maxRetryDelay;
+
+  /// Background task identifier for iOS background processing.
   final String? bgTaskId;
+
+  /// URL endpoint for HTTP location sync.
   final String? url;
+
+  /// HTTP method for sync requests (GET, POST, PUT, etc.).
   final String? method;
+
+  /// Additional HTTP headers to include in sync requests.
   final JsonMap? headers;
+
+  /// Query parameters to append to sync URL.
   final JsonMap? params;
+
+  /// Extra data to include in every location record.
   final JsonMap? extras;
+
+  /// Whether to automatically sync locations to server.
   final bool? autoSync;
+
+  /// Whether to batch multiple locations in single HTTP request.
   final bool? batchSync;
+
+  /// Maximum number of locations to include in a single batch.
   final int? maxBatchSize;
+
+  /// Number of locations to queue before auto-syncing.
   final int? autoSyncThreshold;
+
+  /// Whether to disable auto-sync when on cellular network.
   final bool? disableAutoSyncOnCellular;
+
+  /// Maximum days to keep queued locations before discarding.
   final int? queueMaxDays;
+
+  /// Maximum number of queued locations before discarding oldest.
   final int? queueMaxRecords;
+
+  /// HTTP header name for idempotency key.
   final String? idempotencyHeader;
 
   // Persistence settings
+  /// Mode for persisting location data locally.
   final PersistMode? persistMode;
+
+  /// Maximum days to persist location data.
   final int? maxDaysToPersist;
+
+  /// Maximum number of location records to persist.
   final int? maxRecordsToPersist;
+
+  /// Template for customizing location data format.
   final String? locationTemplate;
+
+  /// Template for customizing geofence event format.
   final String? geofenceTemplate;
+
+  /// Root property name for location array in HTTP requests.
   final String? httpRootProperty;
 
   // Scheduling settings
+  /// List of time windows (HH:mm-HH:mm) when tracking is active.
   final List<String>? schedule;
+
+  /// Whether to use AlarmManager for schedule (Android).
   final bool? scheduleUseAlarmManager;
 
   // Force reload settings
+  /// Whether to force config reload on device boot.
   final bool? forceReloadOnBoot;
+
+  /// Whether to force config reload on location change.
   final bool? forceReloadOnLocationChange;
+
+  /// Whether to force config reload on motion change.
   final bool? forceReloadOnMotionChange;
+
+  /// Whether to force config reload on geofence event.
   final bool? forceReloadOnGeofence;
+
+  /// Whether to force config reload on heartbeat.
   final bool? forceReloadOnHeartbeat;
+
+  /// Whether to force config reload on schedule change.
   final bool? forceReloadOnSchedule;
+
+  /// Whether to include timestamp metadata in location records.
   final bool? enableTimestampMeta;
 
   // Notification and logging
+  /// Configuration for foreground service notification.
   final NotificationConfig? notification;
+
+  /// Logging verbosity level.
   final LogLevel? logLevel;
+
+  /// Maximum days to retain log files.
   final int? logMaxDays;
+
+  /// Interval in seconds for heartbeat events.
   final int? heartbeatInterval;
+
+  /// Rationale shown when requesting background location permission.
   final PermissionRationale? backgroundPermissionRationale;
+
+  /// Activity types that trigger location tracking.
   final List<ActivityType>? triggerActivities;
 
   // Advanced Locus 1.2.0+ features
+  /// Configuration for adaptive tracking optimization.
   final AdaptiveTrackingConfig? adaptiveTracking;
+
+  /// Configuration for low battery mode.
   final LowBatteryConfig? lowBattery;
+
+  /// Configuration for location spoofing detection.
   final SpoofDetectionConfig? spoofDetection;
 
+  /// Creates a copy of this [Config] with optionally modified fields.
+  ///
+  /// Returns a new [Config] instance with the specified fields updated
+  /// while preserving all other fields from the original.
   Config copyWith({
     DesiredAccuracy? desiredAccuracy,
     double? distanceFilter,
@@ -503,7 +657,10 @@ class Config {
     );
   }
 
-  /// Converts to map.
+  /// Converts this [Config] to a map representation.
+  ///
+  /// Returns a map containing all non-null configuration values,
+  /// suitable for serialization or platform channel communication.
   JsonMap toMap() {
     final map = <String, dynamic>{
       'version': version,
@@ -599,6 +756,9 @@ class Config {
     return map;
   }
 
+  /// Parses an enum value from a string representation.
+  ///
+  /// Returns the matching enum value or null if not found.
   static T? _parseEnum<T extends Enum>(String? value, List<T> values) {
     if (value == null) return null;
     for (final v in values) {
@@ -612,7 +772,9 @@ class Config {
 class ConfigPresets {
   const ConfigPresets._();
 
-  /// Lowest power usage with coarse updates.
+  /// Lowest power usage preset with coarse accuracy and infrequent updates.
+  ///
+  /// Best for passive tracking scenarios where battery life is critical.
   static const Config lowPower = Config(
     desiredAccuracy: DesiredAccuracy.low,
     distanceFilter: 200,
@@ -622,7 +784,9 @@ class ConfigPresets {
     batchSync: true,
   );
 
-  /// Balanced accuracy and battery usage.
+  /// Balanced preset offering moderate accuracy and reasonable battery usage.
+  ///
+  /// Good general-purpose configuration for most tracking scenarios.
   static const Config balanced = Config(
     desiredAccuracy: DesiredAccuracy.medium,
     distanceFilter: 50,
@@ -632,7 +796,9 @@ class ConfigPresets {
     batchSync: true,
   );
 
-  /// High accuracy for active tracking.
+  /// High accuracy preset for active tracking scenarios.
+  ///
+  /// Provides frequent updates with good accuracy for real-time tracking.
   static const Config tracking = Config(
     desiredAccuracy: DesiredAccuracy.high,
     distanceFilter: 10,
@@ -642,7 +808,10 @@ class ConfigPresets {
     batchSync: true,
   );
 
-  /// Highest accuracy, frequent updates (fitness/trails).
+  /// Highest accuracy preset with very frequent updates.
+  ///
+  /// Optimized for fitness tracking, hiking trails, and activities
+  /// requiring maximum precision and update frequency.
   static const Config trail = Config(
     desiredAccuracy: DesiredAccuracy.navigation,
     distanceFilter: 5,

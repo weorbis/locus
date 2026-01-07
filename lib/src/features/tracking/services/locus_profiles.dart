@@ -30,9 +30,9 @@ class LocusProfiles {
       await _profileManager!.setProfile(initialProfile);
     }
     if (enableAutomation) {
-      _profileManager!.startAutomation();
+      await _profileManager!.startAutomation();
     } else {
-      _profileManager!.stopAutomation();
+      await _profileManager!.stopAutomation();
     }
   }
 
@@ -46,18 +46,18 @@ class LocusProfiles {
   }
 
   /// Enables automation rules for tracking profiles.
-  static void startTrackingAutomation() {
-    _profileManager?.startAutomation();
+  static Future<void> startTrackingAutomation() async {
+    await _profileManager?.startAutomation();
   }
 
   /// Disables automation rules for tracking profiles.
-  static void stopTrackingAutomation() {
-    _profileManager?.stopAutomation();
+  static Future<void> stopTrackingAutomation() async {
+    await _profileManager?.stopAutomation();
   }
 
   /// Clears tracking profiles and automation rules.
-  static void clearTrackingProfiles() {
-    _profileManager?.dispose();
+  static Future<void> clearTrackingProfiles() async {
+    await _profileManager?.dispose();
     _profileManager = null;
   }
 }

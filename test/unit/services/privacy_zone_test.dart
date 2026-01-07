@@ -226,8 +226,8 @@ void main() {
       service = PrivacyZoneService(seed: 42); // Deterministic for testing
     });
 
-    tearDown(() {
-      service.dispose();
+    tearDown(() async {
+      await service.dispose();
     });
 
     group('zone management', () {
@@ -626,7 +626,7 @@ void main() {
         expect(persisted.length, 1);
         expect(persisted[0].length, 1);
 
-        service.dispose();
+        await service.dispose();
       });
     });
   });

@@ -16,8 +16,11 @@ class SQLiteStorage {
     }
     
     deinit {
-        if db != nil {
-            sqlite3_close(db)
+        queue.sync {
+            if let db = self.db {
+                sqlite3_close(db)
+                self.db = nil
+            }
         }
     }
     
@@ -25,7 +28,10 @@ class SQLiteStorage {
     
     private func openDatabase() {
         let fileManager = FileManager.default
-        let documentsUrl = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        guard let documentsUrl = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            db = nil
+            return
+        }
         let dbUrl = documentsUrl.appendingPathComponent(dbName)
         
         if sqlite3_open(dbUrl.path, &db) != SQLITE_OK {
@@ -34,6 +40,10 @@ class SQLiteStorage {
     }
     
     private func createTables() {
+        queue.sync {
+            guard let _ = self.db else { return }
+        }
+        
         let createStatements = [
             """
             CREATE TABLE IF NOT EXISTS locations (
@@ -94,13 +104,16 @@ class SQLiteStorage {
     }
     
     private func executeStatement(_ sql: String) {
-        var statement: OpaquePointer?
-        if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
-            if sqlite3_step(statement) != SQLITE_DONE {
-                // Statement failed
+        queue.sync {
+            guard let db = self.db else { return }
+            var statement: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
+                if sqlite3_step(statement) != SQLITE_DONE {
+                    // Statement failed
+                }
             }
+            sqlite3_finalize(statement)
         }
-        sqlite3_finalize(statement)
     }
     
     // MARK: - Migration from UserDefaults

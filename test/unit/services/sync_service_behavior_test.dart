@@ -11,12 +11,12 @@ void main() {
       service = SyncServiceImpl(() => mockLocus);
     });
 
-    tearDown(() {
-      mockLocus.dispose();
+    tearDown(() async {
+      await mockLocus.dispose();
     });
 
     test('setSyncBodyBuilder stores builder for sync payloads', () async {
-      service.setSyncBodyBuilder((locations, extras) async {
+      await service.setSyncBodyBuilder((locations, extras) async {
         return {
           'count': locations.length,
           'source': extras['source'],

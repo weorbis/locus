@@ -303,7 +303,7 @@ void main() {
   });
 
   group('ErrorRecoveryManager Edge Cases', () {
-    test('respects maxRetryDelay cap', () {
+    test('respects maxRetryDelay cap', () async {
       final manager = ErrorRecoveryManager(const ErrorRecoveryConfig(
         retryDelay: Duration(seconds: 60),
         retryBackoff: 10.0,
@@ -312,13 +312,13 @@ void main() {
       ));
 
       for (var i = 0; i < 10; i++) {
-        manager.handleError(LocusError.networkError());
+        await manager.handleError(LocusError.networkError());
       }
 
       final delay = manager.getRetryDelay(LocusErrorType.networkError);
       expect(delay, lessThanOrEqualTo(const Duration(minutes: 1)));
 
-      manager.dispose();
+      await manager.dispose();
     });
 
     test('scheduleRetry cancels previous timer', () async {
@@ -335,7 +335,7 @@ void main() {
 
       expect(callCount, 1);
 
-      manager.dispose();
+      await manager.dispose();
     });
   });
 
@@ -358,7 +358,7 @@ void main() {
 
       expect(events.length, 1);
 
-      manager.dispose();
+      await manager.dispose();
     });
   });
 

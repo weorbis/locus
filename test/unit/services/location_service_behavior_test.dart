@@ -11,8 +11,8 @@ void main() {
       service = LocationServiceImpl(() => mockLocus);
     });
 
-    tearDown(() {
-      mockLocus.dispose();
+    tearDown(() async {
+      await mockLocus.dispose();
     });
 
     test('getSummary returns empty summary when no locations exist', () async {

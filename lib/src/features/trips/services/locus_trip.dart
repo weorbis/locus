@@ -39,7 +39,7 @@ class LocusTrip {
   }
 
   /// Stops the active trip and returns a summary if available.
-  static TripSummary? stopTrip() {
+  static Future<TripSummary?>? stopTrip() {
     return _tripEngine?.stop();
   }
 

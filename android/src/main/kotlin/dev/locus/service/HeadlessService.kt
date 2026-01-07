@@ -2,8 +2,6 @@ package dev.locus.service
 
 import android.content.Context
 import android.content.Intent
-import android.os.Handler
-import android.os.Looper
 import androidx.core.app.JobIntentService
 import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.FlutterEngine
@@ -11,6 +9,7 @@ import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.view.FlutterCallbackInformation
+import kotlinx.coroutines.*
 
 class HeadlessService : JobIntentService() {
 
@@ -60,11 +59,13 @@ class HeadlessService : JobIntentService() {
         )
         channel.invokeMethod("headlessEvent", args)
 
-        Handler(Looper.getMainLooper()).postDelayed({
+        // Use coroutines instead of deprecated Handler
+        CoroutineScope(Dispatchers.Main).launch {
+            delay(ENGINE_IDLE_TIMEOUT_MS)
             FlutterEngineCache.getInstance().get(CACHE_KEY)?.let { cached ->
                 cached.destroy()
                 FlutterEngineCache.getInstance().remove(CACHE_KEY)
             }
-        }, ENGINE_IDLE_TIMEOUT_MS)
+        }
     }
 }

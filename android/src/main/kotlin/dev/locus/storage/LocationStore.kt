@@ -44,36 +44,46 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
         event: String?,
         odometer: Double
     ) {
-        writableDatabase.execSQL(
-            """
-            INSERT OR REPLACE INTO locations 
-            (id, timestamp, latitude, longitude, accuracy, speed, heading, altitude, is_moving, activity_type, activity_confidence, event, odometer) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent(),
-            arrayOf(
-                UUID.randomUUID().toString(),
-                location.time,
-                location.latitude,
-                location.longitude,
-                location.accuracy,
-                location.speed,
-                location.bearing,
-                location.altitude,
-                if (isMoving) 1 else 0,
-                activityType,
-                activityConfidence,
-                event,
-                odometer
+        try {
+            writableDatabase.execSQL(
+                """
+                INSERT OR REPLACE INTO locations 
+                (id, timestamp, latitude, longitude, accuracy, speed, heading, altitude, is_moving, activity_type, activity_confidence, event, odometer) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """.trimIndent(),
+                arrayOf(
+                    UUID.randomUUID().toString(),
+                    location.time,
+                    location.latitude,
+                    location.longitude,
+                    location.accuracy,
+                    location.speed,
+                    location.bearing,
+                    location.altitude,
+                    if (isMoving) 1 else 0,
+                    activityType,
+                    activityConfidence,
+                    event,
+                    odometer
+                )
             )
-        )
+        } catch (e: Exception) {
+            android.util.Log.e("LocationStore", "Failed to insert location: ${e.message}", e)
+        }
     }
 
     fun clear() {
-        writableDatabase.execSQL("DELETE FROM locations")
+        try {
+            writableDatabase.execSQL("DELETE FROM locations")
+        } catch (e: Exception) {
+            android.util.Log.e("LocationStore", "Failed to clear locations: ${e.message}", e)
+        }
     }
 
     fun insertPayload(payload: Map<String, Any>?, maxDays: Int, maxRecords: Int) {
         if (payload == null) return
+        
+        try {
 
         val coords = payload["coords"] as? Map<*, *> ?: return
         val latitude = coords["latitude"].toDoubleOrZero()
@@ -118,42 +128,50 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
             )
         )
 
-        if (maxDays > 0) pruneByAge(maxDays)
-        if (maxRecords > 0) pruneByCount(maxRecords)
+            if (maxDays > 0) pruneByAge(maxDays)
+            if (maxRecords > 0) pruneByCount(maxRecords)
+        } catch (e: Exception) {
+            // Log error but don't crash - graceful degradation
+            android.util.Log.e("LocationStore", "Failed to insert payload: ${e.message}", e)
+        }
     }
 
     fun readLocations(limit: Int): List<Map<String, Any>> {
         val results = mutableListOf<Map<String, Any>>()
         val limitValue = if (limit > 0) limit.toString() else null
 
-        readableDatabase.query(
-            "locations",
-            null,
-            null,
-            null,
-            null,
-            null,
-            "timestamp ASC",
-            limitValue
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                val record = mutableMapOf<String, Any>(
-                    "id" to cursor.getString(cursor.getColumnIndexOrThrow("id")),
-                    "timestamp" to cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
-                    "latitude" to cursor.getDouble(cursor.getColumnIndexOrThrow("latitude")),
-                    "longitude" to cursor.getDouble(cursor.getColumnIndexOrThrow("longitude")),
-                    "accuracy" to cursor.getDouble(cursor.getColumnIndexOrThrow("accuracy")),
-                    "speed" to cursor.getDouble(cursor.getColumnIndexOrThrow("speed")),
-                    "heading" to cursor.getDouble(cursor.getColumnIndexOrThrow("heading")),
-                    "altitude" to cursor.getDouble(cursor.getColumnIndexOrThrow("altitude")),
-                    "is_moving" to (cursor.getInt(cursor.getColumnIndexOrThrow("is_moving")) == 1),
-                    "activity_confidence" to cursor.getInt(cursor.getColumnIndexOrThrow("activity_confidence")),
-                    "odometer" to cursor.getDouble(cursor.getColumnIndexOrThrow("odometer"))
-                )
-                cursor.getString(cursor.getColumnIndexOrThrow("activity_type"))?.let { record["activity_type"] = it }
-                cursor.getString(cursor.getColumnIndexOrThrow("event"))?.let { record["event"] = it }
-                results.add(record)
+        try {
+            readableDatabase.query(
+                "locations",
+                null,
+                null,
+                null,
+                null,
+                null,
+                "timestamp ASC",
+                limitValue
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val record = mutableMapOf<String, Any>(
+                        "id" to cursor.getString(cursor.getColumnIndexOrThrow("id")),
+                        "timestamp" to cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
+                        "latitude" to cursor.getDouble(cursor.getColumnIndexOrThrow("latitude")),
+                        "longitude" to cursor.getDouble(cursor.getColumnIndexOrThrow("longitude")),
+                        "accuracy" to cursor.getDouble(cursor.getColumnIndexOrThrow("accuracy")),
+                        "speed" to cursor.getDouble(cursor.getColumnIndexOrThrow("speed")),
+                        "heading" to cursor.getDouble(cursor.getColumnIndexOrThrow("heading")),
+                        "altitude" to cursor.getDouble(cursor.getColumnIndexOrThrow("altitude")),
+                        "is_moving" to (cursor.getInt(cursor.getColumnIndexOrThrow("is_moving")) == 1),
+                        "activity_confidence" to cursor.getInt(cursor.getColumnIndexOrThrow("activity_confidence")),
+                        "odometer" to cursor.getDouble(cursor.getColumnIndexOrThrow("odometer"))
+                    )
+                    cursor.getString(cursor.getColumnIndexOrThrow("activity_type"))?.let { record["activity_type"] = it }
+                    cursor.getString(cursor.getColumnIndexOrThrow("event"))?.let { record["event"] = it }
+                    results.add(record)
+                }
             }
+        } catch (e: Exception) {
+            android.util.Log.e("LocationStore", "Failed to read locations: ${e.message}", e)
         }
         return results
     }
@@ -161,8 +179,12 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
     fun deleteLocations(ids: List<String>?) {
         if (ids.isNullOrEmpty()) return
 
-        val placeholders = ids.joinToString(",") { "?" }
-        writableDatabase.delete("locations", "id IN ($placeholders)", ids.toTypedArray())
+        try {
+            val placeholders = ids.joinToString(",") { "?" }
+            writableDatabase.delete("locations", "id IN ($placeholders)", ids.toTypedArray())
+        } catch (e: Exception) {
+            android.util.Log.e("LocationStore", "Failed to delete locations: ${e.message}", e)
+        }
     }
 
     private fun pruneByAge(maxDays: Int) {

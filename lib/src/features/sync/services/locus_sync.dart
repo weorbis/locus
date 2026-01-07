@@ -95,21 +95,33 @@ class LocusSync {
   // ============================================================
 
   /// Sets a callback to build custom HTTP sync body.
-  static void setSyncBodyBuilder(SyncBodyBuilder? builder) {
-    _syncBodyBuilder = builder;
+  static Future<void> setSyncBodyBuilder(SyncBodyBuilder? builder) async {
     _setupSyncBodyChannel();
 
     // Notify native side that we have a Dart-side builder
-    LocusChannels.methods.invokeMethod(
-      'setSyncBodyBuilderEnabled',
-      builder != null,
-    );
+    try {
+      await LocusChannels.methods.invokeMethod(
+        'setSyncBodyBuilderEnabled',
+        builder != null,
+      );
+      // Only set the builder after successful native call
+      _syncBodyBuilder = builder;
+    } on PlatformException catch (e) {
+      debugPrint('[Locus] ERROR: Failed to set sync body builder on native side: $e');
+      // Ensure builder is not set on error
+      _syncBodyBuilder = null;
+      rethrow;
+    } catch (e) {
+      debugPrint('[Locus] ERROR: Unexpected error setting sync body builder: $e');
+      _syncBodyBuilder = null;
+      rethrow;
+    }
   }
 
   /// Clears the sync body builder callback.
-  static void clearSyncBodyBuilder() {
+  static Future<void> clearSyncBodyBuilder() async {
     _syncBodyBuilder = null;
-    LocusChannels.methods.invokeMethod('setSyncBodyBuilderEnabled', false);
+    await LocusChannels.methods.invokeMethod('setSyncBodyBuilderEnabled', false);
   }
 
   /// Registers a headless-compatible sync body builder.
@@ -161,8 +173,8 @@ class LocusSync {
     List<Location> locations,
     JsonMap extras,
   ) async {
-    if (_syncBodyBuilder == null) return null;
-    return _syncBodyBuilder!(locations, extras);
+    // Use null-aware call to prevent race condition
+    return _syncBodyBuilder?.call(locations, extras);
   }
 
   // ============================================================

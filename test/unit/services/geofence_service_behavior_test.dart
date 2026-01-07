@@ -11,8 +11,8 @@ void main() {
       service = GeofenceServiceImpl(() => mockLocus);
     });
 
-    tearDown(() {
-      mockLocus.dispose();
+    tearDown(() async {
+      await mockLocus.dispose();
     });
 
     test('events stream emits geofence events from mock', () async {

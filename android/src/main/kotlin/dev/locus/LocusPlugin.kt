@@ -93,6 +93,8 @@ class LocusPlugin : FlutterPlugin,
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         androidContext = binding.applicationContext
+        // TODO: Consider using EncryptedSharedPreferences for sensitive data (requires androidx.security:security-crypto dependency)
+        // For now, using standard SharedPreferences with MODE_PRIVATE for basic protection
         prefs = androidContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         privacyModeEnabled = prefs?.getBoolean("bg_privacy_mode", false) ?: false
 

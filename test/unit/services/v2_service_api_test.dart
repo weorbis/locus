@@ -18,8 +18,8 @@ void main() {
       service = LocationServiceImpl(() => mockLocus);
     });
 
-    tearDown(() {
-      mockLocus.dispose();
+    tearDown(() async {
+      await mockLocus.dispose();
     });
 
     test('can be instantiated with a mock provider', () {
@@ -203,8 +203,8 @@ void main() {
       service = GeofenceServiceImpl(() => mockLocus);
     });
 
-    tearDown(() {
-      mockLocus.dispose();
+    tearDown(() async {
+      await mockLocus.dispose();
     });
 
     test('can be instantiated with a mock provider', () {
@@ -385,8 +385,8 @@ void main() {
       service = PrivacyServiceImpl(() => mockLocus);
     });
 
-    tearDown(() {
-      mockLocus.dispose();
+    tearDown(() async {
+      await mockLocus.dispose();
     });
 
     test('can be instantiated with a mock provider', () {
@@ -492,8 +492,8 @@ void main() {
       service = TripServiceImpl(() => mockLocus);
     });
 
-    tearDown(() {
-      mockLocus.dispose();
+    tearDown(() async {
+      await mockLocus.dispose();
     });
 
     test('can be instantiated with a mock provider', () {
@@ -523,8 +523,8 @@ void main() {
       expect(_wasMethodCalled(mockLocus, 'startTrip'), isTrue);
     });
 
-    test('stop delegates to stopTrip', () {
-      final summary = service.stop();
+    test('stop delegates to stopTrip', () async {
+      final summary = await service.stop();
       // MockLocus always returns a summary, but real impl may return null if no trip active
       expect(summary, isA<TripSummary?>());
       expect(_wasMethodCalled(mockLocus, 'stopTrip'), isTrue);
@@ -564,8 +564,8 @@ void main() {
       service = SyncServiceImpl(() => mockLocus);
     });
 
-    tearDown(() {
-      mockLocus.dispose();
+    tearDown(() async {
+      await mockLocus.dispose();
     });
 
     test('can be instantiated with a mock provider', () {
@@ -633,8 +633,8 @@ void main() {
       expect(decision, isA<SyncDecision>());
     });
 
-    test('setSyncBodyBuilder delegates to instance', () {
-      service.setSyncBodyBuilder((locations, extras) async {
+    test('setSyncBodyBuilder delegates to instance', () async {
+      await service.setSyncBodyBuilder((locations, extras) async {
         return {'locations': locations.length};
       });
       expect(_wasMethodCalled(mockLocus, 'setSyncBodyBuilder'), isTrue);
@@ -748,8 +748,8 @@ void main() {
       service = BatteryServiceImpl(() => mockLocus);
     });
 
-    tearDown(() {
-      mockLocus.dispose();
+    tearDown(() async {
+      await mockLocus.dispose();
     });
 
     test('can be instantiated with a mock provider', () {
@@ -862,7 +862,7 @@ void main() {
   });
 
   group('Service Provider Pattern', () {
-    test('services can share the same mock provider', () {
+    test('services can share the same mock provider', () async {
       final mockLocus = MockLocus();
       MockLocus provider() => mockLocus;
 
@@ -881,7 +881,7 @@ void main() {
       expect(syncService, isA<SyncService>());
       expect(batteryService, isA<BatteryService>());
 
-      mockLocus.dispose();
+      await mockLocus.dispose();
     });
 
     test('provider is called lazily when methods are invoked', () async {
@@ -900,10 +900,10 @@ void main() {
       await service.getLocations();
       expect(providerCalls, greaterThan(0));
 
-      mockLocus.dispose();
+      await mockLocus.dispose();
     });
 
-    test('stream access invokes provider', () {
+    test('stream access invokes provider', () async {
       var providerCalls = 0;
       final mockLocus = MockLocus();
 
@@ -916,7 +916,7 @@ void main() {
       final _ = service.stream;
       expect(providerCalls, greaterThan(0));
 
-      mockLocus.dispose();
+      await mockLocus.dispose();
     });
   });
 }

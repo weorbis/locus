@@ -92,9 +92,9 @@ void main() {
       tempDir = await Directory.systemTemp.createTemp('monorepo_test_');
     });
 
-    tearDown(() async {
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
+    tearDown(() {
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
       }
     });
 

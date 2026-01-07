@@ -23,7 +23,7 @@ class TripServiceImpl implements TripService {
   Future<void> start(TripConfig config) => _instance.startTrip(config);
 
   @override
-  TripSummary? stop() => _instance.stopTrip();
+  Future<TripSummary?>? stop() => _instance.stopTrip();
 
   @override
   TripState? getState() => _instance.getTripState();

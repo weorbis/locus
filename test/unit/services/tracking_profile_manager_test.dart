@@ -27,7 +27,7 @@ void main() {
         cooldownSeconds: 0,
       ),
     ]);
-    manager.startAutomation();
+    await manager.startAutomation();
 
     final location = Location(
       uuid: '1',
@@ -49,6 +49,6 @@ void main() {
     expect(applied?.distanceFilter, 10);
 
     await controller.close();
-    manager.dispose();
+    await manager.dispose();
   });
 }

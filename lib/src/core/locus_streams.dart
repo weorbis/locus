@@ -76,32 +76,35 @@ class LocusStreams {
 
   /// Sets the privacy zone service for filtering location events.
   /// When set, locations in privacy zones will be obfuscated or excluded.
-  static void setPrivacyZoneService(PrivacyZoneService? service) {
+  static Future<void> setPrivacyZoneService(PrivacyZoneService? service) async {
     _privacyZoneService = service;
     debugPrint(
         '[Locus] Privacy zone service ${service != null ? 'registered' : 'cleared'}');
 
-    // Inform native side to avoid persisting raw locations when privacy zones are active
-    unawaited(
-      LocusChannels.methods
-          .invokeMethod('setPrivacyMode', service != null)
-          .catchError((error) {
-        debugPrint('[Locus] Failed to set privacy mode on native side: $error');
-      }),
-    );
+    // Inform native side to avoid persisting raw locations when privacy zones are active.
+    try {
+      await LocusChannels.methods.invokeMethod('setPrivacyMode', service != null);
+    } catch (error) {
+      debugPrint('[Locus] Failed to set privacy mode on native side: $error');
+      // Non-critical, continue without propagating error
+    }
   }
 
-  static void _onListen() {
+  static Future<void> _onListen() async {
     _listenerCount += 1;
-    // Schedule start asynchronously to avoid blocking
-    Future.microtask(() => _ensureNativeStreamStarted());
+    // Start asynchronously to avoid blocking, but use proper async handling
+    await _ensureNativeStreamStarted().catchError((error) {
+      debugPrint('[Locus] Error starting native stream: $error');
+    });
   }
 
-  static void _onCancel() {
+  static Future<void> _onCancel() async {
     _listenerCount -= 1;
     if (_listenerCount < 0) _listenerCount = 0;
-    // Schedule stop asynchronously
-    Future.microtask(() => _maybeStopNativeStream());
+    // Stop asynchronously with proper error handling
+    await _maybeStopNativeStream().catchError((error) {
+      debugPrint('[Locus] Error stopping native stream: $error');
+    });
   }
 
   /// Ensures the native stream is started.
@@ -122,18 +125,18 @@ class LocusStreams {
     try {
       _nativeSubscription =
           LocusChannels.events.receiveBroadcastStream().listen(
-        (event) {
+        (event) async {
           try {
             final mapped = EventMapper.mapToEvent(event);
             _processEvent(mapped);
           } catch (e, stack) {
             debugPrint('[Locus] Event mapping error: $e');
-            _handleStreamError(e, stack, 'event_mapping');
+            await _handleStreamError(e, stack, 'event_mapping');
           }
         },
-        onError: (Object error, StackTrace stackTrace) {
+        onError: (Object error, StackTrace stackTrace) async {
           debugPrint('[Locus] Stream error: $error');
-          _handleStreamError(error, stackTrace, 'stream');
+          await _handleStreamError(error, stackTrace, 'stream');
         },
       );
     } catch (e) {
@@ -212,8 +215,8 @@ class LocusStreams {
   }
 
   /// Handles stream errors through the error recovery system.
-  static void _handleStreamError(
-      Object error, StackTrace stackTrace, String operation) {
+  static Future<void> _handleStreamError(
+      Object error, StackTrace stackTrace, String operation) async {
     // Import and use error recovery if configured
     final errorManager = _errorRecoveryManager;
 
@@ -227,15 +230,18 @@ class LocusStreams {
         isRecoverable: true,
       );
 
-      // Handle error asynchronously
-      Future.microtask(() async {
-        final action = await errorManager.handleError(locusError);
+      // Handle error with proper async chain for immediate recovery
+      await errorManager.handleError(locusError).then((action) {
         debugPrint('[Locus] Error recovery action: $action');
 
         // If action is not 'ignore', propagate to listeners
         if (action != RecoveryAction.ignore) {
           _eventController?.addError(error, stackTrace);
         }
+      }).catchError((recoveryError) {
+        debugPrint('[Locus] Error during error recovery: $recoveryError');
+        // Propagate original error if recovery fails
+        _eventController?.addError(error, stackTrace);
       });
     } else {
       // No error recovery configured, just propagate
@@ -302,9 +308,9 @@ class LocusStreams {
 
   /// Starts the native event stream (legacy - now handled automatically).
   @Deprecated('Use events getter instead, streams are managed automatically')
-  static void startNativeStream() {
+  static Future<void> startNativeStream() async {
     _listenerCount += 1;
-    Future.microtask(() => _ensureNativeStreamStarted());
+    await Future.microtask(() => _ensureNativeStreamStarted());
   }
 
   /// Stops the native event stream.

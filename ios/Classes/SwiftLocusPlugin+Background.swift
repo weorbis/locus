@@ -85,14 +85,30 @@ extension SwiftLocusPlugin {
   @available(iOS 13.0, *)
   func handleBackgroundRefresh(_ task: BGAppRefreshTask) {
     scheduleBackgroundRefresh()
+    
+    var isExpired = false
     task.expirationHandler = { [weak self] in
+      isExpired = true
       self?.appendLog("Background refresh expired", level: "warning")
     }
+    
     if configManager.batchSync || configManager.autoSync {
-      syncManager.attemptBatchSync()
-      _ = syncManager.syncQueue(limit: configManager.maxBatchSize)
+      let group = DispatchGroup()
+      
+      group.enter()
+      DispatchQueue.global(qos: .utility).async { [weak self] in
+        defer { group.leave() }
+        guard !isExpired else { return }
+        self?.syncManager.attemptBatchSync()
+        _ = self?.syncManager.syncQueue(limit: self?.configManager.maxBatchSize ?? 100)
+      }
+      
+      // Wait with timeout
+      let result = group.wait(timeout: .now() + 25) // iOS gives ~30 seconds
+      task.setTaskCompleted(success: result == .success && !isExpired)
+    } else {
+      task.setTaskCompleted(success: true)
     }
-    task.setTaskCompleted(success: true)
   }
 
   func scheduleBackgroundRefresh() {
@@ -115,30 +131,40 @@ extension SwiftLocusPlugin {
   }
 
   func dispatchHeadlessEvent(_ event: [String: Any]) {
-    if !configManager.enableHeadless {
-      return
-    }
+    guard configManager.enableHeadless else { return }
+    
     let dispatcher = UserDefaults.standard.object(forKey: SwiftLocusPlugin.headlessDispatcherKey) as? Int64 ?? 0
     let callback = UserDefaults.standard.object(forKey: SwiftLocusPlugin.headlessCallbackKey) as? Int64 ?? 0
-    if dispatcher == 0 || callback == 0 {
-      return
-    }
+    guard dispatcher != 0, callback != 0 else { return }
+    
     if headlessEngine == nil {
       guard let callbackInfo = FlutterCallbackCache.lookupCallbackInformation(dispatcher) else {
         return
       }
       let engine = FlutterEngine(name: "locus_headless_engine", project: nil, allowHeadlessExecution: true)
-      engine.run(withEntrypoint: callbackInfo.callbackName, libraryURI: callbackInfo.callbackLibraryPath)
+      guard engine.run(withEntrypoint: callbackInfo.callbackName, libraryURI: callbackInfo.callbackLibraryPath) else {
+        return
+      }
       headlessEngine = engine
+      
+      // Schedule cleanup after idle timeout
+      DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in
+        self?.cleanupHeadlessEngineIfIdle()
+      }
     }
-    guard let engine = headlessEngine else {
-      return
-    }
+    
+    guard let engine = headlessEngine else { return }
     let channel = FlutterMethodChannel(name: SwiftLocusPlugin.headlessChannelName, binaryMessenger: engine.binaryMessenger)
     channel.invokeMethod("headlessEvent", arguments: [
       "callbackHandle": callback,
       "event": event
     ])
+  }
+  
+  private func cleanupHeadlessEngineIfIdle() {
+    guard let engine = headlessEngine else { return }
+    engine.destroyContext()
+    headlessEngine = nil
   }
 
   func startBackgroundTask() -> Int {

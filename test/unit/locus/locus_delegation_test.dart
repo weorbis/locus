@@ -15,9 +15,9 @@ void main() {
     Locus.setMockInstance(mock);
   });
 
-  tearDown(() {
+  tearDown(() async {
     Locus.setMockInstance(original);
-    mock.dispose();
+    await mock.dispose();
   });
 
   test('setMockInstance replaces the default instance', () {
@@ -78,7 +78,7 @@ void main() {
     await Locus.requestPermission();
 
     await Locus.trips.start(const TripConfig());
-    Locus.trips.stop();
+    await Locus.trips.stop();
 
     await Locus.setTrackingProfiles(
       {TrackingProfile.standby: const Config()},

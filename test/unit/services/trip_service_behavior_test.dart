@@ -11,8 +11,8 @@ void main() {
       service = TripServiceImpl(() => mockLocus);
     });
 
-    tearDown(() {
-      mockLocus.dispose();
+    tearDown(() async {
+      await mockLocus.dispose();
     });
 
     test('start initializes state and stop returns summary', () async {
@@ -25,7 +25,7 @@ void main() {
       expect(state!.tripId, 'trip-123');
       expect(state.started, isTrue);
 
-      final summary = service.stop();
+      final summary = await service.stop();
       expect(summary, isNotNull);
       expect(summary!.tripId, 'trip-123');
       expect(summary.endedAt, isNotNull);

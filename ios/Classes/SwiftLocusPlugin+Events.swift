@@ -143,12 +143,13 @@ extension SwiftLocusPlugin {
   }
 
   func sendEvent(_ event: [String: Any]) {
-    if let sink = eventSink {
-      DispatchQueue.main.async { [weak self] in
-        self?.eventSink?(event)
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else { return }
+      if let sink = self.eventSink {
+        sink(event)
+      } else {
+        self.dispatchHeadlessEvent(event)
       }
-    } else {
-      dispatchHeadlessEvent(event)
     }
   }
 

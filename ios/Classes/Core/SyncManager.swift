@@ -28,6 +28,15 @@ class SyncManager {
         set { syncStateQueue.sync { _isSyncPaused = newValue } }
     }
     
+    private lazy var urlSession: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = config.httpTimeout
+        configuration.timeoutIntervalForResource = config.httpTimeout * 2
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.waitsForConnectivity = true
+        return URLSession(configuration: configuration)
+    }()
+    
     init(config: ConfigManager, storage: StorageManager) {
         self.config = config
         self.storage = storage
@@ -63,6 +72,7 @@ class SyncManager {
     /// The monitor can be restarted by calling restart().
     func release() {
         stopNetworkMonitor()
+        urlSession.invalidateAndCancel()
     }
     
     /// Restarts the network monitor after a release.
@@ -202,7 +212,7 @@ class SyncManager {
             var body = self.buildHttpBody(locationPayload: locationPayload, locations: nil)
             guard let request = self.makeRequest(urlString, body: body) else { return }
             
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            let task = self.urlSession.dataTask(with: request) { data, response, error in
                 self.handleResponse(data: data, response: response, error: error,
                                     payload: locationPayload, idsToDelete: idsToDelete,
                                     attempt: attempt, isBatch: false)
@@ -219,7 +229,7 @@ class SyncManager {
             var body = self.buildHttpBody(locationPayload: nil, locations: payloads)
             guard let request = self.makeRequest(urlString, body: body) else { return }
             
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            let task = self.urlSession.dataTask(with: request) { data, response, error in
                 self.handleResponse(data: data, response: response, error: error,
                                     payload: nil, idsToDelete: idsToDelete,
                                     attempt: attempt, isBatch: true, batchPayloads: payloads)
@@ -241,7 +251,7 @@ class SyncManager {
                 request.setValue(idempotencyKey, forHTTPHeaderField: header)
             }
             
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            let task = self.urlSession.dataTask(with: request) { data, response, error in
                 self.handleQueueResponse(data: data, response: response, error: error,
                                          payload: payload, id: id, type: type,
                                          idempotencyKey: idempotencyKey, attempt: attempt)

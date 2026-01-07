@@ -86,20 +86,33 @@ class PolygonGeofenceService {
   /// Adds multiple polygon geofences.
   ///
   /// Returns the number of polygons successfully added.
+  /// If persistence fails, already-added polygons are rolled back.
   Future<int> addPolygonGeofences(List<PolygonGeofence> polygons) async {
     int added = 0;
+    final addedKeys = <String>[];
 
-    for (final polygon in polygons) {
-      if (polygon.isValid && !_polygons.containsKey(polygon.identifier)) {
-        _polygons[polygon.identifier] = polygon;
-        _insideState[polygon.identifier] = false;
-        added++;
+    try {
+      for (final polygon in polygons) {
+        if (polygon.isValid && !_polygons.containsKey(polygon.identifier)) {
+          _polygons[polygon.identifier] = polygon;
+          _insideState[polygon.identifier] = false;
+          addedKeys.add(polygon.identifier);
+          added++;
+        }
       }
-    }
 
-    if (added > 0) {
-      await _persist();
-      debugPrint('[PolygonGeofenceService] Added $added polygon geofences');
+      if (added > 0) {
+        await _persist();
+        debugPrint('[PolygonGeofenceService] Added $added polygon geofences');
+      }
+    } catch (e) {
+      // Rollback: Remove all added polygons on persistence error
+      for (final key in addedKeys) {
+        _polygons.remove(key);
+        _insideState.remove(key);
+      }
+      debugPrint('[PolygonGeofenceService] Persistence error, rolled back $added geofences: $e');
+      rethrow;
     }
 
     return added;
@@ -263,7 +276,7 @@ class PolygonGeofenceService {
   }
 
   /// Disposes resources.
-  void dispose() {
-    _eventController.close();
+  Future<void> dispose() async {
+    await _eventController.close();
   }
 }

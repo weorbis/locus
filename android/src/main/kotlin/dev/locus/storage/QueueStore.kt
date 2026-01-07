@@ -41,17 +41,21 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
         val createdAt = System.currentTimeMillis()
         val payloadJson = JSONObject(payload).toString()
 
-        writableDatabase.execSQL(
-            """
-            INSERT OR REPLACE INTO queue 
-            (id, created_at, payload, retry_count, next_retry_at, idempotency_key, type) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent(),
-            arrayOf(id, createdAt, payloadJson, 0, null, idempotencyKey, type)
-        )
+        try {
+            writableDatabase.execSQL(
+                """
+                INSERT OR REPLACE INTO queue 
+                (id, created_at, payload, retry_count, next_retry_at, idempotency_key, type) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """.trimIndent(),
+                arrayOf(id, createdAt, payloadJson, 0, null, idempotencyKey, type)
+            )
 
-        if (maxDays > 0) pruneByAge(maxDays)
-        if (maxRecords > 0) pruneByCount(maxRecords)
+            if (maxDays > 0) pruneByAge(maxDays)
+            if (maxRecords > 0) pruneByCount(maxRecords)
+        } catch (e: Exception) {
+            android.util.Log.e("QueueStore", "Failed to insert queue payload: ${e.message}", e)
+        }
 
         return id
     }
@@ -60,53 +64,69 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
         val results = mutableListOf<Map<String, Any>>()
         val limitValue = if (limit > 0) limit.toString() else null
 
-        readableDatabase.query(
-            "queue",
-            null,
-            null,
-            null,
-            null,
-            null,
-            "created_at ASC",
-            limitValue
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                val record = mutableMapOf<String, Any>(
-                    "id" to cursor.getString(cursor.getColumnIndexOrThrow("id")),
-                    "createdAt" to cursor.getLong(cursor.getColumnIndexOrThrow("created_at")),
-                    "payload" to cursor.getString(cursor.getColumnIndexOrThrow("payload")),
-                    "retryCount" to cursor.getInt(cursor.getColumnIndexOrThrow("retry_count")),
-                    "idempotencyKey" to cursor.getString(cursor.getColumnIndexOrThrow("idempotency_key")),
-                    "type" to cursor.getString(cursor.getColumnIndexOrThrow("type"))
-                )
+        try {
+            readableDatabase.query(
+                "queue",
+                null,
+                null,
+                null,
+                null,
+                null,
+                "created_at ASC",
+                limitValue
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val record = mutableMapOf<String, Any>(
+                        "id" to cursor.getString(cursor.getColumnIndexOrThrow("id")),
+                        "createdAt" to cursor.getLong(cursor.getColumnIndexOrThrow("created_at")),
+                        "payload" to cursor.getString(cursor.getColumnIndexOrThrow("payload")),
+                        "retryCount" to cursor.getInt(cursor.getColumnIndexOrThrow("retry_count")),
+                        "idempotencyKey" to cursor.getString(cursor.getColumnIndexOrThrow("idempotency_key")),
+                        "type" to cursor.getString(cursor.getColumnIndexOrThrow("type"))
+                    )
 
-                val nextRetryAtIndex = cursor.getColumnIndexOrThrow("next_retry_at")
-                if (!cursor.isNull(nextRetryAtIndex)) {
-                    record["nextRetryAt"] = cursor.getLong(nextRetryAtIndex)
+                    val nextRetryAtIndex = cursor.getColumnIndexOrThrow("next_retry_at")
+                    if (!cursor.isNull(nextRetryAtIndex)) {
+                        record["nextRetryAt"] = cursor.getLong(nextRetryAtIndex)
+                    }
+
+                    results.add(record)
                 }
-
-                results.add(record)
             }
+        } catch (e: Exception) {
+            android.util.Log.e("QueueStore", "Failed to read queue: ${e.message}", e)
         }
         return results
     }
 
     fun updateRetry(id: String, retryCount: Int, nextRetryAt: Long) {
-        writableDatabase.execSQL(
-            "UPDATE queue SET retry_count = ?, next_retry_at = ? WHERE id = ?",
-            arrayOf(retryCount, nextRetryAt, id)
-        )
+        try {
+            writableDatabase.execSQL(
+                "UPDATE queue SET retry_count = ?, next_retry_at = ? WHERE id = ?",
+                arrayOf(retryCount, nextRetryAt, id)
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("QueueStore", "Failed to update retry: ${e.message}", e)
+        }
     }
 
     fun deleteByIds(ids: List<String>?) {
         if (ids.isNullOrEmpty()) return
 
-        val placeholders = ids.joinToString(",") { "?" }
-        writableDatabase.delete("queue", "id IN ($placeholders)", ids.toTypedArray())
+        try {
+            val placeholders = ids.joinToString(",") { "?" }
+            writableDatabase.delete("queue", "id IN ($placeholders)", ids.toTypedArray())
+        } catch (e: Exception) {
+            android.util.Log.e("QueueStore", "Failed to delete queue items: ${e.message}", e)
+        }
     }
 
     fun clear() {
-        writableDatabase.execSQL("DELETE FROM queue")
+        try {
+            writableDatabase.execSQL("DELETE FROM queue")
+        } catch (e: Exception) {
+            android.util.Log.e("QueueStore", "Failed to clear queue: ${e.message}", e)
+        }
     }
 
     private fun pruneByAge(maxDays: Int) {

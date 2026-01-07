@@ -325,8 +325,8 @@ class PrivacyZoneService {
   }
 
   /// Disposes of resources.
-  void dispose() {
-    _zoneChangesController.close();
+  Future<void> dispose() async {
+    await _zoneChangesController.close();
   }
 }
 
