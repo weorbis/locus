@@ -53,6 +53,9 @@ class ConfigManager {
     var queueMaxDays = 0
     var queueMaxRecords = 0
     var idempotencyHeader = "Idempotency-Key"
+    var dynamicHeaders: [String: String] = [:]
+    var syncOnCellular: Bool = true
+    var syncInterval: Int = 0
     
     // Logging
     var logLevel = "info"
