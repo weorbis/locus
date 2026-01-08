@@ -32,6 +32,18 @@ class SyncManager(
         fun onHttpEvent(eventData: Map<String, Any>)
         fun onLog(level: String, message: String)
         fun onSyncRequest()
+
+        /**
+         * Called when SyncManager needs Dart to build a custom sync body.
+         * Default implementation returns null to use native body builder.
+         */
+        fun buildSyncBody(
+            locations: List<Map<String, Any>>,
+            extras: Map<String, Any>,
+            callback: (JSONObject?) -> Unit
+        ) {
+            callback(null)
+        }
     }
 
     private val executor: ExecutorService = Executors.newFixedThreadPool(4)
@@ -42,6 +54,9 @@ class SyncManager(
     
     @Volatile
     private var isReleased = false
+
+    @Volatile
+    var syncBodyBuilderEnabled = false
 
     fun release() {
         isReleased = true
@@ -157,126 +172,62 @@ class SyncManager(
 
     fun enqueueHttp(locationPayload: Map<String, Any>, idsToDelete: List<String>?, attempt: Int) {
         if (isSyncPaused) return
-        
-        executor.execute {
-            listener.onSyncRequest()
-            try {
+
+        if (syncBodyBuilderEnabled) {
+            // Ask Dart to build the sync body asynchronously
+            listener.buildSyncBody(listOf(locationPayload), config.extras) { customBody ->
+                if (isReleased) return@buildSyncBody
+
+                executor.execute {
+                    listener.onSyncRequest()
+                    val body = (customBody ?: buildHttpBody(locationPayload, null)).apply {
+                        config.httpParams.forEach { (key, value) ->
+                            put(key, value)
+                        }
+                    }
+                    performHttpRequest(body, idsToDelete, attempt, locationPayload)
+                }
+            }
+        } else {
+            executor.execute {
+                listener.onSyncRequest()
                 val body = buildHttpBody(locationPayload, null).apply {
                     config.httpParams.forEach { (key, value) ->
                         put(key, value)
                     }
                 }
-
-                val connection = (URL(config.httpUrl).openConnection() as HttpURLConnection).apply {
-                    requestMethod = config.httpMethod
-                    connectTimeout = config.httpTimeoutMs
-                    readTimeout = config.httpTimeoutMs
-                    doOutput = true
-                    setRequestProperty("Content-Type", "application/json")
-                    config.httpHeaders.forEach { (key, value) ->
-                        setRequestProperty(key, value.toString())
-                    }
-                }
-
-                connection.outputStream.use { output ->
-                    output.write(body.toString().toByteArray())
-                    output.flush()
-                }
-
-                val status = connection.responseCode
-                val stream = if (status >= 400) {
-                    connection.errorStream ?: ByteArrayInputStream(ByteArray(0))
-                } else {
-                    connection.inputStream
-                }
-                
-                val responseText = BufferedReader(InputStreamReader(stream)).use { reader ->
-                    reader.readText()
-                }
-
-                val ok = status in 200..299
-                if (ok && !idsToDelete.isNullOrEmpty()) {
-                    locationStore.deleteLocations(idsToDelete)
-                }
-                
-                emitHttpEvent(status, ok, responseText)
-                log("info", "http $status")
-                
-                when {
-                    status == 401 -> {
-                        isSyncPaused = true
-                        log("error", "http 401 - sync paused")
-                    }
-                    !ok -> scheduleHttpRetry(locationPayload, idsToDelete, attempt + 1)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "HTTP sync failed: ${e.message}")
-                emitHttpEvent(0, false, e.message)
-                log("error", "http error ${e.message}")
-                scheduleHttpRetry(locationPayload, idsToDelete, attempt + 1)
+                performHttpRequest(body, idsToDelete, attempt, locationPayload)
             }
         }
     }
 
     private fun enqueueHttpBatch(payloads: List<Map<String, Any>>, idsToDelete: List<String>, attempt: Int) {
         if (isSyncPaused) return
-        
-        executor.execute {
-            listener.onSyncRequest()
-            try {
+
+        if (syncBodyBuilderEnabled) {
+            // Ask Dart to build the sync body asynchronously
+            listener.buildSyncBody(payloads, config.extras) { customBody ->
+                if (isReleased) return@buildSyncBody
+
+                executor.execute {
+                    listener.onSyncRequest()
+                    val body = (customBody ?: buildHttpBody(null, payloads)).apply {
+                        config.httpParams.forEach { (key, value) ->
+                            put(key, value)
+                        }
+                    }
+                    performBatchHttpRequest(body, idsToDelete, attempt, payloads)
+                }
+            }
+        } else {
+            executor.execute {
+                listener.onSyncRequest()
                 val body = buildHttpBody(null, payloads).apply {
                     config.httpParams.forEach { (key, value) ->
                         put(key, value)
                     }
                 }
-
-                val connection = (URL(config.httpUrl).openConnection() as HttpURLConnection).apply {
-                    requestMethod = config.httpMethod
-                    connectTimeout = config.httpTimeoutMs
-                    readTimeout = config.httpTimeoutMs
-                    doOutput = true
-                    setRequestProperty("Content-Type", "application/json")
-                    config.httpHeaders.forEach { (key, value) ->
-                        setRequestProperty(key, value.toString())
-                    }
-                }
-
-                connection.outputStream.use { output ->
-                    output.write(body.toString().toByteArray())
-                    output.flush()
-                }
-
-                val status = connection.responseCode
-                val stream = if (status >= 400) {
-                    connection.errorStream ?: ByteArrayInputStream(ByteArray(0))
-                } else {
-                    connection.inputStream
-                }
-                
-                val responseText = BufferedReader(InputStreamReader(stream)).use { reader ->
-                    reader.readText()
-                }
-
-                val ok = status in 200..299
-                if (ok && idsToDelete.isNotEmpty()) {
-                    locationStore.deleteLocations(idsToDelete)
-                }
-                
-                emitHttpEvent(status, ok, responseText)
-                log("info", "http $status")
-                
-                when {
-                    status == 401 -> {
-                        isSyncPaused = true
-                        log("error", "http 401 - sync paused")
-                    }
-                    !ok -> scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "HTTP sync failed: ${e.message}")
-                emitHttpEvent(0, false, e.message)
-                log("error", "http error ${e.message}")
-                scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
+                performBatchHttpRequest(body, idsToDelete, attempt, payloads)
             }
         }
     }
@@ -390,6 +341,120 @@ class SyncManager(
         put("queueId", id)
         type?.let { put("type", it) }
         idempotencyKey?.let { put("idempotencyKey", it) }
+    }
+
+    private fun performHttpRequest(
+        body: JSONObject,
+        idsToDelete: List<String>?,
+        attempt: Int,
+        originalPayload: Map<String, Any>
+    ) {
+        try {
+            val connection = (URL(config.httpUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = config.httpMethod
+                connectTimeout = config.httpTimeoutMs
+                readTimeout = config.httpTimeoutMs
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                config.httpHeaders.forEach { (key, value) ->
+                    setRequestProperty(key, value.toString())
+                }
+            }
+
+            connection.outputStream.use { output ->
+                output.write(body.toString().toByteArray())
+                output.flush()
+            }
+
+            val status = connection.responseCode
+            val stream = if (status >= 400) {
+                connection.errorStream ?: ByteArrayInputStream(ByteArray(0))
+            } else {
+                connection.inputStream
+            }
+
+            val responseText = BufferedReader(InputStreamReader(stream)).use { reader ->
+                reader.readText()
+            }
+
+            val ok = status in 200..299
+            if (ok && !idsToDelete.isNullOrEmpty()) {
+                locationStore.deleteLocations(idsToDelete)
+            }
+
+            emitHttpEvent(status, ok, responseText)
+            log("info", "http $status")
+
+            when {
+                status == 401 -> {
+                    isSyncPaused = true
+                    log("error", "http 401 - sync paused")
+                }
+                !ok -> scheduleHttpRetry(originalPayload, idsToDelete, attempt + 1)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "HTTP sync failed: ${e.message}")
+            emitHttpEvent(0, false, e.message)
+            log("error", "http error ${e.message}")
+            scheduleHttpRetry(originalPayload, idsToDelete, attempt + 1)
+        }
+    }
+
+    private fun performBatchHttpRequest(
+        body: JSONObject,
+        idsToDelete: List<String>,
+        attempt: Int,
+        payloads: List<Map<String, Any>>
+    ) {
+        try {
+            val connection = (URL(config.httpUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = config.httpMethod
+                connectTimeout = config.httpTimeoutMs
+                readTimeout = config.httpTimeoutMs
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                config.httpHeaders.forEach { (key, value) ->
+                    setRequestProperty(key, value.toString())
+                }
+            }
+
+            connection.outputStream.use { output ->
+                output.write(body.toString().toByteArray())
+                output.flush()
+            }
+
+            val status = connection.responseCode
+            val stream = if (status >= 400) {
+                connection.errorStream ?: ByteArrayInputStream(ByteArray(0))
+            } else {
+                connection.inputStream
+            }
+
+            val responseText = BufferedReader(InputStreamReader(stream)).use { reader ->
+                reader.readText()
+            }
+
+            val ok = status in 200..299
+            if (ok && idsToDelete.isNotEmpty()) {
+                locationStore.deleteLocations(idsToDelete)
+            }
+
+            emitHttpEvent(status, ok, responseText)
+            log("info", "http $status")
+
+            when {
+                status == 401 -> {
+                    isSyncPaused = true
+                    log("error", "http 401 - sync paused")
+                }
+                !ok -> scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "HTTP sync failed: ${e.message}")
+            emitHttpEvent(0, false, e.message)
+            log("error", "http error ${e.message}")
+            scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
+        }
     }
 
     private fun scheduleBatchRetry(payloads: List<Map<String, Any>>, idsToDelete: List<String>, attempt: Int) {

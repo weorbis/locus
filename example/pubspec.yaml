@@ -12,8 +12,10 @@ dependencies:
     sdk: flutter
 
   google_fonts: ^6.2.1
+  flutter_svg: ^2.0.10
 
-  locus: ^2.0.0
+  locus:
+    path: ../
 
   cupertino_icons: ^1.0.2
 
@@ -25,3 +27,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg width="512" height="512" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!-- Map/Card Base -->
+  <path fill="none" stroke="#1A1A2E" stroke-miterlimit="10" stroke-width="1.8" stroke-linecap="round" d="M15.91,11h4.88a2,2,0,0,1,2,2v7.81a2,2,0,0,1-2,2H14.93l-1.42-2.12a1.81,1.81,0,0,0-3,0L9.07,22.75H3.21a2,2,0,0,1-2-2V13a2,2,0,0,1,2-2H8.09"/>
+
+  <!-- Data Lines on Card -->
+  <line fill="none" stroke="#1A1A2E" stroke-miterlimit="10" stroke-width="1.8" stroke-linecap="round" x1="4.18" y1="14.93" x2="6.14" y2="14.93"/>
+  <line fill="none" stroke="#1A1A2E" stroke-miterlimit="10" stroke-width="1.8" stroke-linecap="round" x1="4.18" y1="18.84" x2="6.14" y2="18.84"/>
+
+  <!-- Location Pin -->
+  <path fill="#0F4C75" d="M15.91,5.16C15.91,8.09,12,11,12,11S8.09,8.09,8.09,5.16a3.91,3.91,0,0,1,7.82,0Z"/>
+
+  <!-- Pin Center Dot -->
+  <circle fill="#3282B8" cx="12" cy="5.16" r="1.2"/>
+</svg>

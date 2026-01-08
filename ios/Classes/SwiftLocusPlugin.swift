@@ -10,6 +10,8 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
   static let eventChannelName = "locus/events"
   static let headlessChannelName = "locus/headless"
   static let headlessDispatcherKey = "bg_headless_dispatcher"
+  static let headlessSyncBodyDispatcherKey = "bg_headless_sync_body_dispatcher"
+  static let headlessSyncBodyCallbackKey = "bg_headless_sync_body_callback"
   static let headlessCallbackKey = "bg_headless_callback"
   static let tripStateKey = "bg_trip_state"
 
@@ -38,11 +40,13 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
   var backgroundTaskCounter = 1
   var backgroundTasks: [Int: UIBackgroundTaskIdentifier] = [:]
   var registeredBgTaskId: String?
+  var methodChannel: FlutterMethodChannel?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let instance = SwiftLocusPlugin()
     let methodChannel = FlutterMethodChannel(name: methodChannelName, binaryMessenger: registrar.messenger())
     let eventChannel = FlutterEventChannel(name: eventChannelName, binaryMessenger: registrar.messenger())
+    instance.methodChannel = methodChannel
     registrar.addMethodCallDelegate(instance, channel: methodChannel)
     eventChannel.setStreamHandler(instance)
   }
@@ -267,6 +271,22 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       } else {
         result(FlutterError(code: "NOT_IMPLEMENTED", message: "Unknown headless method", details: nil))
       }
+    case "registerHeadlessSyncBodyBuilder":
+      if let args = call.arguments as? [String: Any],
+         let dispatcher = args["dispatcher"] as? Int64,
+         let callback = args["callback"] as? Int64 {
+        UserDefaults.standard.setValue(dispatcher, forKey: SwiftLocusPlugin.headlessSyncBodyDispatcherKey)
+        UserDefaults.standard.setValue(callback, forKey: SwiftLocusPlugin.headlessSyncBodyCallbackKey)
+        result(true)
+      } else {
+        result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected dispatcher and callback handles", details: nil))
+      }
+    case "setSyncBodyBuilderEnabled":
+      // Enable/disable the Dart-side sync body builder
+      if let enabled = call.arguments as? Bool {
+        syncManager.syncBodyBuilderEnabled = enabled
+      }
+      result(true)
     case "startBackgroundTask":
       result(startBackgroundTask())
     case "stopBackgroundTask":

@@ -35,6 +35,30 @@ extension SwiftLocusPlugin {
     appendLog(message, level: level)
   }
 
+  public func buildSyncBody(locations: [[String: Any]], extras: [String: Any], completion: @escaping ([String: Any]?) -> Void) {
+    // Invoke Dart to build the sync body
+    guard let channel = methodChannel else {
+      completion(nil)
+      return
+    }
+    
+    let args: [String: Any] = [
+      "locations": locations,
+      "extras": extras
+    ]
+    
+    DispatchQueue.main.async {
+      channel.invokeMethod("buildSyncBody", arguments: args) { result in
+        if let body = result as? [String: Any] {
+          completion(body)
+        } else {
+          // Dart returned null or error, use default body
+          completion(nil)
+        }
+      }
+    }
+  }
+
   // MARK: - SchedulerDelegate
   public func onScheduleCheck(shouldBeEnabled: Bool) {
     if shouldBeEnabled {

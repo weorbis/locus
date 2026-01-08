@@ -2,6 +2,9 @@ import Foundation
 import Network
 
 protocol SyncManagerDelegate: AnyObject {
+    /// Called when SyncManager needs Dart to build a custom sync body.
+    /// Returns nil to use default native body building.
+    func buildSyncBody(locations: [[String: Any]], extras: [String: Any], completion: @escaping ([String: Any]?) -> Void)
     func onHttpEvent(_ event: [String: Any])
     func onSyncEvent(_ event: [String: Any])
     func onLog(level: String, message: String)
@@ -10,6 +13,9 @@ protocol SyncManagerDelegate: AnyObject {
 class SyncManager {
     
     weak var delegate: SyncManagerDelegate?
+    
+    /// Whether a Dart-side sync body builder is enabled
+    var syncBodyBuilderEnabled = false
     private let storage: StorageManager
     private let config: ConfigManager
     
@@ -208,16 +214,34 @@ class SyncManager {
         guard let urlString = config.httpUrl else { return }
         guard !isSyncPaused else { return }
         
-        queue.async {
-            var body = self.buildHttpBody(locationPayload: locationPayload, locations: nil)
-            guard let request = self.makeRequest(urlString, body: body) else { return }
-            
-            let task = self.urlSession.dataTask(with: request) { data, response, error in
-                self.handleResponse(data: data, response: response, error: error,
-                                    payload: locationPayload, idsToDelete: idsToDelete,
-                                    attempt: attempt, isBatch: false)
+        // If sync body builder is enabled, ask Dart to build the body
+        if syncBodyBuilderEnabled {
+            delegate?.buildSyncBody(locations: [locationPayload], extras: config.extras) { [weak self] customBody in
+                guard let self = self else { return }
+                self.queue.async {
+                    let body = customBody ?? self.buildHttpBody(locationPayload: locationPayload, locations: nil)
+                    guard let request = self.makeRequest(urlString, body: body) else { return }
+                    
+                    let task = self.urlSession.dataTask(with: request) { data, response, error in
+                        self.handleResponse(data: data, response: response, error: error,
+                                          payload: locationPayload, idsToDelete: idsToDelete,
+                                          attempt: attempt, isBatch: false)
+                    }
+                    task.resume()
+                }
             }
-            task.resume()
+        } else {
+            queue.async {
+                let body = self.buildHttpBody(locationPayload: locationPayload, locations: nil)
+                guard let request = self.makeRequest(urlString, body: body) else { return }
+                
+                let task = self.urlSession.dataTask(with: request) { data, response, error in
+                    self.handleResponse(data: data, response: response, error: error,
+                                      payload: locationPayload, idsToDelete: idsToDelete,
+                                      attempt: attempt, isBatch: false)
+                }
+                task.resume()
+            }
         }
     }
     
@@ -225,16 +249,34 @@ class SyncManager {
         guard let urlString = config.httpUrl else { return }
         guard !isSyncPaused else { return }
         
-        queue.async {
-            var body = self.buildHttpBody(locationPayload: nil, locations: payloads)
-            guard let request = self.makeRequest(urlString, body: body) else { return }
-            
-            let task = self.urlSession.dataTask(with: request) { data, response, error in
-                self.handleResponse(data: data, response: response, error: error,
-                                    payload: nil, idsToDelete: idsToDelete,
-                                    attempt: attempt, isBatch: true, batchPayloads: payloads)
+        // If sync body builder is enabled, ask Dart to build the body
+        if syncBodyBuilderEnabled {
+            delegate?.buildSyncBody(locations: payloads, extras: config.extras) { [weak self] customBody in
+                guard let self = self else { return }
+                self.queue.async {
+                    let body = customBody ?? self.buildHttpBody(locationPayload: nil, locations: payloads)
+                    guard let request = self.makeRequest(urlString, body: body) else { return }
+                    
+                    let task = self.urlSession.dataTask(with: request) { data, response, error in
+                        self.handleResponse(data: data, response: response, error: error,
+                                          payload: nil, idsToDelete: idsToDelete,
+                                          attempt: attempt, isBatch: true, batchPayloads: payloads)
+                    }
+                    task.resume()
+                }
             }
-            task.resume()
+        } else {
+            queue.async {
+                let body = self.buildHttpBody(locationPayload: nil, locations: payloads)
+                guard let request = self.makeRequest(urlString, body: body) else { return }
+                
+                let task = self.urlSession.dataTask(with: request) { data, response, error in
+                    self.handleResponse(data: data, response: response, error: error,
+                                      payload: nil, idsToDelete: idsToDelete,
+                                      attempt: attempt, isBatch: true, batchPayloads: payloads)
+                }
+                task.resume()
+            }
         }
     }
     

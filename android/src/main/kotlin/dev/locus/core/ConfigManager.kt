@@ -48,6 +48,9 @@ class ConfigManager(context: Context) {
     @Volatile var httpHeaders: MutableMap<String, Any> = mutableMapOf()
     @Volatile var httpParams: MutableMap<String, Any> = mutableMapOf()
     @Volatile var httpExtras: MutableMap<String, Any> = mutableMapOf()
+
+    /** Alias for httpExtras to match iOS API */
+    val extras: Map<String, Any> get() = httpExtras
     var httpTimeoutMs: Int = 10000
     var maxRetry: Int = 0
     var retryDelayMs: Int = 5000

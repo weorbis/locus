@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter build:*)",
+      "Bash(flutter devices:*)",
+      "Bash(flutter run:*)",
+      "Bash(cat:*)",
+      "Bash(flutter pub get:*)",
+      "Bash(adb logcat:*)"
+    ]
+  }
+}

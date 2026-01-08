@@ -390,7 +390,8 @@ class GeofenceManager(
     private fun createGeofencePendingIntent(): PendingIntent {
         val intent = Intent(context, GeofenceBroadcastReceiver::class.java)
         val flags = if (Build.VERSION.SDK_INT >= 31) {
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            // Geofencing requires FLAG_MUTABLE so the system can add geofence data to the intent
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         } else {
             PendingIntent.FLAG_UPDATE_CURRENT
         }

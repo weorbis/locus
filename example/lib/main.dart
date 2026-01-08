@@ -1,45 +1,33 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart' hide Config;
 import 'package:locus/locus.dart';
 
-void main() => runApp(const MotionRecognitionApp());
+void main() => runApp(const LocusExampleApp());
 
-enum TrackingPreset {
-  lowPower,
-  balanced,
-  tracking,
-  trail,
-}
+// =============================================================================
+// App Entry Point
+// =============================================================================
 
-class MotionRecognitionApp extends StatefulWidget {
-  const MotionRecognitionApp({super.key});
+class LocusExampleApp extends StatefulWidget {
+  const LocusExampleApp({super.key});
 
   @override
-  State<MotionRecognitionApp> createState() => _MotionRecognitionAppState();
+  State<LocusExampleApp> createState() => _LocusExampleAppState();
 }
 
-class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
+class _LocusExampleAppState extends State<LocusExampleApp> {
   static const int _maxEventEntries = 250;
 
-  StreamSubscription<Location>? _locationSubscription;
-  StreamSubscription<Location>? _motionSubscription;
-  StreamSubscription<Activity>? _activitySubscription;
-  StreamSubscription<LocationAnomaly>? _anomalySubscription;
-  StreamSubscription<TripEvent>? _tripSubscription;
-  StreamSubscription<GeofenceWorkflowEvent>? _workflowSubscription;
-  StreamSubscription<ProviderChangeEvent>? _providerSubscription;
-  StreamSubscription<GeofenceEvent>? _geofenceSubscription;
-  StreamSubscription<dynamic>? _geofencesChangeSubscription;
-  StreamSubscription<Location>? _heartbeatSubscription;
-  StreamSubscription<Location>? _scheduleSubscription;
-  StreamSubscription<ConnectivityChangeEvent>? _connectivitySubscription;
-  StreamSubscription<bool>? _powerSaveSubscription;
-  StreamSubscription<bool>? _enabledSubscription;
-  StreamSubscription<HttpEvent>? _httpSubscription;
-  StreamSubscription<String>? _notificationActionSubscription;
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
+  // Stream subscriptions
+  final List<StreamSubscription<dynamic>> _subscriptions = [];
+
+  // State
   final List<String> _events = [];
   final Map<String, int> _eventCounts = {};
   Location? _latestLocation;
@@ -52,105 +40,86 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
   String? _lastNotificationAction;
   List<LogEntry>? _lastLog;
   TripSummary? _lastTripSummary;
-
   PowerState? _powerState;
   BatteryStats? _batteryStats;
-  bool _spoofDetectionEnabled = false;
-  bool _significantChangesEnabled = false;
-  String? _benchmarkStatus;
+  List<Location> _storedLocations = [];
 
+  // Toggles
   bool _isRunning = false;
   bool _isReady = false;
   bool _scheduleEnabled = false;
-  TrackingPreset _selectedPreset = TrackingPreset.tracking;
+  bool _spoofDetectionEnabled = false;
+  bool _significantChangesEnabled = false;
+  String? _benchmarkStatus;
   TrackingProfile? _currentProfile;
-
-  List<Location> _storedLocations = [];
 
   @override
   void initState() {
     super.initState();
-    // Run configuration without awaiting to keep initState synchronous.
     unawaited(_configure());
   }
+
+  @override
+  void dispose() {
+    for (final sub in _subscriptions) {
+      unawaited(sub.cancel());
+    }
+    super.dispose();
+  }
+
+  // ===========================================================================
+  // Configuration
+  // ===========================================================================
 
   Future<void> _configure() async {
     final isGranted = await Locus.requestPermission();
     if (!isGranted) {
-      _showSnackbar('Location permission is required to use this app.');
+      _showSnackbar('Location permission required', isSuccess: false);
       return;
     }
 
-    final config = _buildConfig(_selectedPreset);
-
-    await Locus.ready(config);
-    await _configureTrackingProfiles();
-    _configureWorkflow();
-    _setupListeners();
-    await _refreshState();
-
-    setState(() {
-      _isReady = true;
-    });
-  }
-
-  Config _buildConfig(TrackingPreset preset) {
-    final presetConfig = switch (preset) {
-      TrackingPreset.lowPower => ConfigPresets.lowPower,
-      TrackingPreset.balanced => ConfigPresets.balanced,
-      TrackingPreset.tracking => ConfigPresets.tracking,
-      TrackingPreset.trail => ConfigPresets.trail,
-    };
-
-    return presetConfig.copyWith(
+    final config = Config(
       stationaryRadius: 25,
       motionTriggerDelay: 15000,
       activityRecognitionInterval: 10000,
       startOnBoot: true,
       stopOnTerminate: false,
       enableHeadless: true,
-      disableAutoSyncOnCellular: true,
-      maxBatchSize: 20,
-      autoSyncThreshold: 10,
-      maxRetry: 3,
-      retryDelay: 5000,
-      retryDelayMultiplier: 2.0,
-      maxRetryDelay: 60000,
+      autoSync: true,
+      batchSync: true,
+      maxBatchSize: 5,
+      autoSyncThreshold: 1,
       persistMode: PersistMode.location,
       maxDaysToPersist: 7,
       maxRecordsToPersist: 200,
       maxMonitoredGeofences: 20,
       url: 'https://example.com/locations',
       logLevel: LogLevel.info,
-      logMaxDays: 7,
-      schedule: const ['08:00-12:00', '13:00-18:00'],
       notification: const NotificationConfig(
-        title: 'Locus',
+        title: 'Locus Example',
         text: 'Tracking location in background',
-        actions: ['PAUSE', 'STOP'],
       ),
     );
-  }
 
-  String _presetLabel(TrackingPreset preset) {
-    return switch (preset) {
-      TrackingPreset.lowPower => 'Low Power',
-      TrackingPreset.balanced => 'Balanced',
-      TrackingPreset.tracking => 'Tracking',
-      TrackingPreset.trail => 'Trail',
-    };
-  }
+    await Locus.ready(config);
+    await _configureProfiles();
+    _setupListeners();
+    await _refreshState();
 
-  Future<void> _applyPreset(TrackingPreset preset) async {
-    final config = _buildConfig(preset);
-    await Locus.setConfig(config);
-    setState(() {
-      _selectedPreset = preset;
+    // Demo: Custom sync body builder
+    await Locus.setSyncBodyBuilder((locations, extras) async {
+      return {
+        'app': 'locus_example',
+        'timestamp': DateTime.now().toIso8601String(),
+        'locations': locations.map((l) => l.toMap()).toList(),
+        ...extras,
+      };
     });
-    _recordEvent('preset', 'preset ${_presetLabel(preset)} applied');
+
+    setState(() => _isReady = true);
   }
 
-  Future<void> _configureTrackingProfiles() async {
+  Future<void> _configureProfiles() async {
     await Locus.setTrackingProfiles(
       {
         TrackingProfile.offDuty: ConfigPresets.lowPower,
@@ -159,271 +128,102 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
         TrackingProfile.arrived: ConfigPresets.trail,
       },
       initialProfile: TrackingProfile.standby,
-      enableAutomation: false,
     );
-    setState(() {
-      _currentProfile = Locus.currentTrackingProfile;
-    });
-  }
-
-  Future<void> _applyProfile(TrackingProfile profile) async {
-    await Locus.setTrackingProfile(profile);
-    setState(() {
-      _currentProfile = Locus.currentTrackingProfile;
-    });
-    _recordEvent('profile', 'profile ${profile.name} applied');
-  }
-
-  void _configureWorkflow() {
-    Locus.geofencing.registerWorkflows(const [
-      GeofenceWorkflow(
-        id: 'pickup_dropoff',
-        steps: [
-          GeofenceWorkflowStep(
-            id: 'pickup',
-            geofenceIdentifier: 'demo_geofence',
-            action: GeofenceAction.enter,
-          ),
-          GeofenceWorkflowStep(
-            id: 'dropoff',
-            geofenceIdentifier: 'demo_geofence',
-            action: GeofenceAction.exit,
-          ),
-        ],
-      ),
-    ]);
-  }
-
-  @override
-  void dispose() {
-    unawaited(_locationSubscription?.cancel());
-    unawaited(_motionSubscription?.cancel());
-    unawaited(_activitySubscription?.cancel());
-    unawaited(_anomalySubscription?.cancel());
-    unawaited(_tripSubscription?.cancel());
-    unawaited(_workflowSubscription?.cancel());
-    unawaited(_providerSubscription?.cancel());
-    unawaited(_geofenceSubscription?.cancel());
-    unawaited(_geofencesChangeSubscription?.cancel());
-    unawaited(_heartbeatSubscription?.cancel());
-    unawaited(_scheduleSubscription?.cancel());
-    unawaited(_connectivitySubscription?.cancel());
-    unawaited(_powerSaveSubscription?.cancel());
-    unawaited(_enabledSubscription?.cancel());
-    unawaited(_httpSubscription?.cancel());
-    unawaited(_notificationActionSubscription?.cancel());
-    super.dispose();
+    setState(() => _currentProfile = Locus.currentTrackingProfile);
   }
 
   void _setupListeners() {
-    _locationSubscription = Locus.location.stream.listen((location) {
-      _recordEvent(
-        'location',
-        _formatLocationEvent(location, 'location'),
-        updateState: () => _latestLocation = location,
-      );
-    }, onError: _onError);
-
-    _motionSubscription = Locus.location.motionChanges.listen((location) {
-      _recordEvent(
-        'motionchange',
-        _formatLocationEvent(location, 'motionchange'),
-        updateState: () => _latestLocation = location,
-      );
-    }, onError: _onError);
-
-    _activitySubscription = Locus.instance.activityStream.listen((activity) {
-      _recordEvent(
-        'activitychange',
-        'activity ${activity.type.name} (${activity.confidence}%)',
-        updateState: () => _lastActivity = activity,
-      );
-    }, onError: _onError);
-
-    _anomalySubscription = Locus.onLocationAnomaly(
-      (anomaly) {
-        _recordEvent(
-          'anomaly',
-          'anomaly ${anomaly.speedKph.toStringAsFixed(1)} kph over '
-              '${anomaly.distanceMeters.toStringAsFixed(0)} m',
-        );
-      },
-      config: const LocationAnomalyConfig(
-        maxSpeedKph: 200,
-        minDistanceMeters: 500,
-      ),
-      onError: _onError,
-    );
-
-    _tripSubscription = Locus.trips.events.listen((event) {
-      _recordEvent('trip', 'trip ${event.type.name}');
-      if (event.summary != null) {
-        setState(() {
-          _lastTripSummary = event.summary;
-        });
-      }
-    }, onError: _onError);
-
-    _workflowSubscription = Locus.geofencing.workflowEvents.listen((event) {
-      _recordEvent(
-        'workflow',
-        'workflow ${event.workflowId} ${event.status.name}',
-      );
-    }, onError: _onError);
-
-    _providerSubscription = Locus.instance.providerStream.listen((event) {
-      _recordEvent(
-        'providerchange',
-        'provider enabled=${event.enabled} auth=${event.authorizationStatus.name}',
-        updateState: () => _lastProvider = event,
-      );
-    }, onError: _onError);
-
-    _geofenceSubscription = Locus.geofencing.events.listen((event) {
-      _recordEvent(
-        'geofence',
-        'geofence ${event.geofence.identifier} ${event.action.name}',
-        updateState: () => _lastGeofence = event,
-      );
-    }, onError: _onError);
-
-    _geofencesChangeSubscription = Locus.geofencing.onGeofencesChange((event) {
-      _recordEvent('geofenceschange', 'geofences change: $event');
-    }, onError: _onError);
-
-    _heartbeatSubscription = Locus.location.heartbeats.listen((location) {
-      _recordEvent('heartbeat', _formatLocationEvent(location, 'heartbeat'));
-    }, onError: _onError);
-
-    _scheduleSubscription = Locus.instance.onSchedule((location) {
-      _recordEvent('schedule', _formatLocationEvent(location, 'schedule'));
-    }, onError: _onError);
-
-    _connectivitySubscription =
-        Locus.dataSync.connectivityEvents.listen((event) {
-      _recordEvent(
-        'connectivity',
-        'connectivity ${event.networkType ?? 'unknown'} connected=${event.connected}',
-        updateState: () => _lastConnectivity = event,
-      );
-    }, onError: _onError);
-
-    _powerSaveSubscription = Locus.instance.powerSaveStream.listen((enabled) {
-      _recordEvent('powersave', 'powersave enabled=$enabled');
-    }, onError: _onError);
-
-    _enabledSubscription = Locus.instance.enabledStream.listen((enabled) {
-      _recordEvent(
-        'enabledchange',
-        'enabled=$enabled',
-        updateState: () => _isRunning = enabled,
-      );
-    }, onError: _onError);
-
-    _httpSubscription = Locus.dataSync.events.listen((event) {
-      _recordEvent(
-        'http',
-        'http status=${event.status} ok=${event.ok}',
-        updateState: () => _lastHttp = event,
-      );
-    }, onError: _onError);
-
-    _notificationActionSubscription =
-        Locus.instance.onNotificationAction((action) {
-      _recordEvent(
-        'notification',
-        'notification action=$action',
-        updateState: () => _lastNotificationAction = action,
-      );
-    }, onError: _onError);
+    _subscriptions.addAll([
+      Locus.location.stream.listen((loc) {
+        _recordEvent('location', _formatLocation(loc));
+        setState(() => _latestLocation = loc);
+      }),
+      Locus.location.motionChanges.listen((loc) {
+        _recordEvent('motion', 'Motion: ${loc.isMoving == true ? "moving" : "stationary"}');
+        setState(() => _latestLocation = loc);
+      }),
+      Locus.instance.activityStream.listen((activity) {
+        _recordEvent('activity', 'Activity: ${activity.type.name} (${activity.confidence}%)');
+        setState(() => _lastActivity = activity);
+      }),
+      Locus.trips.events.listen((event) {
+        _recordEvent('trip', 'Trip: ${event.type.name}');
+        if (event.summary != null) setState(() => _lastTripSummary = event.summary);
+      }),
+      Locus.instance.providerStream.listen((event) {
+        _recordEvent('provider', 'Provider: ${event.authorizationStatus.name}');
+        setState(() => _lastProvider = event);
+      }),
+      Locus.geofencing.events.listen((event) {
+        _recordEvent('geofence', 'Geofence: ${event.geofence.identifier} ${event.action.name}');
+        setState(() => _lastGeofence = event);
+      }),
+      Locus.dataSync.connectivityEvents.listen((event) {
+        _recordEvent('connectivity', 'Network: ${event.connected ? "online" : "offline"}');
+        setState(() => _lastConnectivity = event);
+      }),
+      Locus.instance.enabledStream.listen((enabled) {
+        _recordEvent('state', 'Tracking: ${enabled ? "started" : "stopped"}');
+        setState(() => _isRunning = enabled);
+      }),
+      Locus.dataSync.events.listen((event) {
+        _recordEvent('http', 'HTTP: ${event.status} ${event.ok ? "OK" : "FAILED"}');
+        setState(() => _lastHttp = event);
+      }),
+      Locus.instance.onNotificationAction((action) {
+        _recordEvent('notification', 'Action: $action');
+        setState(() => _lastNotificationAction = action);
+      }),
+    ]);
   }
+
+  // ===========================================================================
+  // Actions
+  // ===========================================================================
 
   Future<void> _refreshState() async {
     final state = await Locus.getState();
     setState(() {
       _lastState = state;
       _isRunning = state.enabled;
-      _scheduleEnabled = state.schedulerEnabled ?? _scheduleEnabled;
+      _scheduleEnabled = state.schedulerEnabled ?? false;
     });
   }
 
-  Future<void> _startOrStopTracking() async {
+  Future<void> _toggleTracking() async {
     if (!_isReady) {
-      _showSnackbar('Call ready() first.');
+      _showSnackbar('SDK not ready', isSuccess: false);
       return;
     }
     if (_isRunning) {
       await Locus.stop();
+      _showSnackbar('Tracking stopped');
     } else {
       await Locus.start();
+      _showSnackbar('Tracking started');
     }
     await _refreshState();
   }
 
-  Future<void> _getCurrentPosition() async {
+  Future<void> _getPosition() async {
     try {
-      final location = await Locus.location.getCurrentPosition();
-      _showSnackbar(
-        'Position: ${location.coords.latitude.toStringAsFixed(5)}, ${location.coords.longitude.toStringAsFixed(5)}',
-      );
-      _recordEvent(
-        'currentposition',
-        _formatLocationEvent(location, 'getCurrentPosition'),
-        updateState: () => _latestLocation = location,
-      );
+      final loc = await Locus.location.getCurrentPosition();
+      setState(() => _latestLocation = loc);
+      _showSnackbar('Position: ${loc.coords.latitude.toStringAsFixed(4)}, ${loc.coords.longitude.toStringAsFixed(4)}');
+      _recordEvent('position', _formatLocation(loc));
     } catch (e) {
-      _onError(e);
+      _showSnackbar('Failed to get position', isSuccess: false);
     }
   }
 
-  Future<void> _toggleSchedule() async {
-    if (_scheduleEnabled) {
-      await Locus.stopSchedule();
-    } else {
-      await Locus.startSchedule();
-    }
-    setState(() {
-      _scheduleEnabled = !_scheduleEnabled;
-    });
+  Future<void> _setProfile(TrackingProfile profile) async {
+    await Locus.setTrackingProfile(profile);
+    setState(() => _currentProfile = profile);
+    _showSnackbar('Profile: ${profile.name}');
+    _recordEvent('profile', 'Switched to ${profile.name}');
   }
 
-  Future<void> _loadStoredLocations() async {
-    final locations = await Locus.location.getLocations(limit: 50);
-    setState(() {
-      _storedLocations = locations;
-    });
-  }
-
-  Future<void> _clearStoredLocations() async {
-    await Locus.location.destroyLocations();
-    setState(() {
-      _storedLocations = [];
-    });
-  }
-
-  Future<void> _startTrip() async {
-    await Locus.trips.start(const TripConfig(
-      startOnMoving: true,
-      updateIntervalSeconds: 30,
-      route: [
-        RoutePoint(latitude: 37.4219983, longitude: -122.084),
-        RoutePoint(latitude: 37.4279613, longitude: -122.0857497),
-      ],
-      routeDeviationThresholdMeters: 150,
-    ));
-    _recordEvent('trip', 'trip start requested');
-  }
-
-  Future<void> _stopTrip() async {
-    final summary = await Locus.trips.stop();
-    if (!mounted) return;
-    setState(() {
-      _lastTripSummary = summary;
-    });
-    _recordEvent('trip', 'trip stop requested');
-  }
-
-  Future<void> _addDemoGeofence() async {
+  Future<void> _addGeofence() async {
     await Locus.geofencing.add(const Geofence(
       identifier: 'demo_geofence',
       radius: 100,
@@ -431,790 +231,95 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
       longitude: -122.084,
       notifyOnEntry: true,
       notifyOnExit: true,
-      notifyOnDwell: true,
-      loiteringDelay: 300000,
-      extras: {'source': 'example'},
     ));
-    _showSnackbar('Geofence added');
+    final count = (await Locus.geofencing.getAll()).length;
+    _showSnackbar('Geofence added ($count total)');
+    _recordEvent('geofence', 'Added demo_geofence');
   }
 
-  Future<void> _removeAllGeofences() async {
+  Future<void> _clearGeofences() async {
+    final count = (await Locus.geofencing.getAll()).length;
     await Locus.geofencing.removeAll();
-    _showSnackbar('Geofences cleared');
+    _showSnackbar('Cleared $count geofence(s)');
+    _recordEvent('geofence', 'Cleared all');
   }
 
-  Future<void> _loadLog() async {
-    final log = await Locus.getLog();
-    setState(() {
-      _lastLog = log;
-    });
+  Future<void> _addPrivacyZone() async {
+    await Locus.privacy.add(PrivacyZone.create(
+      identifier: 'demo_zone',
+      latitude: 37.4219983,
+      longitude: -122.084,
+      radius: 200,
+      action: PrivacyZoneAction.obfuscate,
+    ));
+    final count = (await Locus.privacy.getAll()).length;
+    _showSnackbar('Privacy zone added ($count total)');
+    _recordEvent('privacy', 'Added demo_zone');
   }
 
-  void _clearEvents() {
-    setState(() {
-      _events.clear();
-      _eventCounts.clear();
-    });
+  Future<void> _clearPrivacyZones() async {
+    final count = (await Locus.privacy.getAll()).length;
+    await Locus.privacy.removeAll();
+    _showSnackbar('Cleared $count privacy zone(s)');
+    _recordEvent('privacy', 'Cleared all');
   }
 
-  void _recordEvent(
-    String type,
-    String message, {
-    VoidCallback? updateState,
-  }) {
-    final timestamp = _formatTimestamp(DateTime.now());
-    setState(() {
-      updateState?.call();
-      _events.insert(0, '[$timestamp] $message');
-      _eventCounts[type] = (_eventCounts[type] ?? 0) + 1;
-      if (_events.length > _maxEventEntries) {
-        _events.removeLast();
-      }
-    });
+  Future<void> _startTrip() async {
+    await Locus.trips.start(const TripConfig(startOnMoving: true));
+    _showSnackbar('Trip started');
+    _recordEvent('trip', 'Trip started');
   }
 
-  void _onError(Object error) {
-    if (mounted) {
-      _showSnackbar('Error: $error');
+  Future<void> _stopTrip() async {
+    final summary = await Locus.trips.stop();
+    setState(() => _lastTripSummary = summary);
+    if (summary != null) {
+      _showSnackbar('Trip: ${summary.distanceMeters.toStringAsFixed(0)}m');
+    } else {
+      _showSnackbar('Trip stopped');
     }
+    _recordEvent('trip', 'Trip stopped');
   }
 
-  void _showSnackbar(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+  Future<void> _syncNow() async {
+    final result = await Locus.dataSync.now();
+    _showSnackbar('Sync: $result');
+    _recordEvent('sync', 'Manual sync: $result');
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF2F5D50),
-      brightness: Brightness.light,
-    );
-
-    return MaterialApp(
-      theme: ThemeData(
-        colorScheme: colorScheme,
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF4F1EC),
-        textTheme: GoogleFonts.spaceGroteskTextTheme(),
-        cardTheme: CardThemeData(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        ),
-      ),
-      home: DefaultTabController(
-        length: 5,
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('Locus'),
-            actions: [
-              IconButton(
-                onPressed: _refreshState,
-                icon: const Icon(Icons.sync),
-              ),
-              IconButton(
-                onPressed: _clearEvents,
-                icon: const Icon(Icons.delete_outline),
-              ),
-            ],
-            bottom: const TabBar(
-              tabs: [
-                Tab(text: 'Overview', icon: Icon(Icons.route)),
-                Tab(text: 'Events', icon: Icon(Icons.timeline)),
-                Tab(text: 'Storage', icon: Icon(Icons.storage)),
-                Tab(text: 'Diagnostics', icon: Icon(Icons.tune)),
-                Tab(text: 'Advanced', icon: Icon(Icons.science)),
-              ],
-            ),
-          ),
-          body: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFFF4F1EC),
-                  Color(0xFFE7EFEA),
-                ],
-              ),
-            ),
-            child: TabBarView(
-              children: [
-                _buildOverviewTab(),
-                _buildEventsTab(),
-                _buildStorageTab(),
-                _buildDiagnosticsTab(),
-                _buildAdvancedTab(),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+  Future<void> _loadLocations() async {
+    final locs = await Locus.location.getLocations(limit: 50);
+    setState(() => _storedLocations = locs);
+    _showSnackbar('Loaded ${locs.length} location(s)');
   }
 
-  Widget _buildOverviewTab() {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          _buildStatusPanel(),
-          _buildControlPanel(),
-          _buildQuickStats(),
-        ],
-      ),
-    );
+  Future<void> _clearLocations() async {
+    await Locus.location.destroyLocations();
+    setState(() => _storedLocations = []);
+    _showSnackbar('Locations cleared');
   }
 
-  Widget _buildEventsTab() {
-    return Column(
-      children: [
-        _buildEventSummary(),
-        Expanded(child: _buildEventList()),
-      ],
-    );
+  Future<void> _loadLogs() async {
+    final logs = await Locus.getLog();
+    setState(() => _lastLog = logs);
+    _showSnackbar('Loaded ${logs.length} log entries');
   }
 
-  Widget _buildStorageTab() {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          _buildStoragePanel(),
-          _buildStoredList(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDiagnosticsTab() {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          _buildDiagnosticsPanel(),
-          _buildLogPanel(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusPanel() {
-    final location = _latestLocation;
-    final provider = _lastProvider;
-    final connectivity = _lastConnectivity;
-    final state = _lastState;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Status',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _buildStatusChip(
-                  label: _isReady ? 'Ready' : 'Not Ready',
-                  icon: Icons.flash_on,
-                  active: _isReady,
-                ),
-                _buildStatusChip(
-                  label: _isRunning ? 'Tracking' : 'Stopped',
-                  icon: _isRunning ? Icons.play_arrow : Icons.pause,
-                  active: _isRunning,
-                ),
-                _buildStatusChip(
-                  label: state?.isMoving == true ? 'Moving' : 'Stationary',
-                  icon: Icons.directions_walk,
-                  active: state?.isMoving == true,
-                ),
-                _buildStatusChip(
-                  label: _scheduleEnabled ? 'Schedule On' : 'Schedule Off',
-                  icon: Icons.schedule,
-                  active: _scheduleEnabled,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text('Odometer: ${state?.odometer?.toStringAsFixed(1) ?? '0'} m'),
-            const SizedBox(height: 6),
-            Text(
-              'Latest: ${location != null ? location.event ?? 'location' : 'N/A'}',
-            ),
-            if (location != null)
-              Text(
-                'Lat ${location.coords.latitude.toStringAsFixed(5)}, '
-                'Lng ${location.coords.longitude.toStringAsFixed(5)}',
-              ),
-            const SizedBox(height: 6),
-            Text(
-              'Provider: ${provider?.authorizationStatus.name ?? 'unknown'} | '
-              'Availability: ${provider?.availability.name ?? 'unknown'}',
-            ),
-            Text(
-              'Connectivity: ${connectivity?.networkType ?? 'unknown'} '
-              '(${connectivity?.connected == true ? 'online' : 'offline'})',
-            ),
-            if (_lastActivity != null)
-              Text(
-                'Activity: ${_lastActivity!.type.name} '
-                '(${_lastActivity!.confidence}%)',
-              ),
-            if (_lastHttp != null)
-              Text('Last HTTP: ${_lastHttp!.status} ok=${_lastHttp!.ok}'),
-            if (_lastGeofence != null)
-              Text(
-                'Last Geofence: ${_lastGeofence!.geofence.identifier} '
-                '${_lastGeofence!.action.name}',
-              ),
-            if (_currentProfile != null)
-              Text('Profile: ${_currentProfile!.name}'),
-            if (_lastTripSummary != null)
-              Text(
-                'Last Trip: ${_lastTripSummary!.distanceMeters.toStringAsFixed(0)} m '
-                'in ${_lastTripSummary!.durationSeconds}s',
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusChip({
-    required String label,
-    required IconData icon,
-    required bool active,
-  }) {
-    final color = active ? Theme.of(context).colorScheme.primary : Colors.grey;
-    return Chip(
-      avatar: Icon(icon, size: 16, color: color),
-      label: Text(label),
-      side: BorderSide(color: color.withValues(alpha: 0.4)),
-      backgroundColor: color.withValues(alpha: 0.1),
-    );
-  }
-
-  Widget _buildControlPanel() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Controls',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<TrackingPreset>(
-                    initialValue: _selectedPreset,
-                    decoration: const InputDecoration(
-                      labelText: 'Tracking preset',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: TrackingPreset.values
-                        .map(
-                          (preset) => DropdownMenuItem(
-                            value: preset,
-                            child: Text(_presetLabel(preset)),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (preset) async {
-                      if (preset != null) {
-                        await _applyPreset(preset);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton.icon(
-                  onPressed: _startOrStopTracking,
-                  icon: Icon(_isRunning ? Icons.pause : Icons.play_arrow),
-                  label: Text(_isRunning ? 'Stop Tracking' : 'Start Tracking'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _isRunning
-                        ? Colors.redAccent
-                        : Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _getCurrentPosition,
-                  icon: const Icon(Icons.my_location),
-                  label: const Text('Get Position'),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: _toggleSchedule,
-                  icon: const Icon(Icons.schedule),
-                  label: Text(
-                    _scheduleEnabled ? 'Stop Schedule' : 'Start Schedule',
-                  ),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: _addDemoGeofence,
-                  icon: const Icon(Icons.add_location_alt),
-                  label: const Text('Add Geofence'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _removeAllGeofences,
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Clear Geofences'),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: () => _applyProfile(TrackingProfile.offDuty),
-                  icon: const Icon(Icons.bedtime_outlined),
-                  label: const Text('Off Duty'),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: () => _applyProfile(TrackingProfile.standby),
-                  icon: const Icon(Icons.pause_circle_outline),
-                  label: const Text('Standby'),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: () => _applyProfile(TrackingProfile.enRoute),
-                  icon: const Icon(Icons.navigation_outlined),
-                  label: const Text('En Route'),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: () => _applyProfile(TrackingProfile.arrived),
-                  icon: const Icon(Icons.flag_outlined),
-                  label: const Text('Arrived'),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: _startTrip,
-                  icon: const Icon(Icons.flag_outlined),
-                  label: const Text('Start Trip'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => _stopTrip(),
-                  icon: const Icon(Icons.stop_circle_outlined),
-                  label: const Text('Stop Trip'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickStats() {
-    final entries = _eventCounts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Event Pulse',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            if (entries.isEmpty) const Text('No events recorded yet.'),
-            if (entries.isNotEmpty)
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: entries
-                    .map(
-                      (entry) => Chip(
-                        label: Text('${entry.key}: ${entry.value}'),
-                      ),
-                    )
-                    .toList(),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEventSummary() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Total events: ${_events.length}',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            Text(
-              'Max: $_maxEventEntries',
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEventList() {
-    return ListView.separated(
-      itemCount: _events.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (_, int idx) {
-        final entry = _events[idx];
-        return ListTile(
-          leading: const Icon(Icons.location_pin),
-          title: Text(entry),
-        );
-      },
-    );
-  }
-
-  Widget _buildStoragePanel() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Stored Locations',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton.tonalIcon(
-                  onPressed: _loadStoredLocations,
-                  icon: const Icon(Icons.download),
-                  label: const Text('Load'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _clearStoredLocations,
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Clear'),
-                ),
-                Chip(
-                  label: Text('Count: ${_storedLocations.length}'),
-                ),
-              ],
-            ),
-            if (_storedLocations.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Latest stored: ${_storedLocations.last.coords.latitude.toStringAsFixed(5)}, '
-                '${_storedLocations.last.coords.longitude.toStringAsFixed(5)}',
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStoredList() {
-    if (_storedLocations.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _storedLocations.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (_, int index) {
-            final location = _storedLocations[index];
-            return ListTile(
-              leading: const Icon(Icons.place_outlined),
-              title: Text(
-                '${location.coords.latitude.toStringAsFixed(5)}, '
-                '${location.coords.longitude.toStringAsFixed(5)}',
-              ),
-              subtitle: Text(
-                location.timestamp.toIso8601String(),
-              ),
-              trailing: Text(
-                '${location.coords.accuracy.toStringAsFixed(1)}m',
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDiagnosticsPanel() {
-    final state = _lastState;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Diagnostics',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            Text('Enabled: ${state?.enabled ?? false}'),
-            Text('Moving: ${state?.isMoving ?? false}'),
-            Text('Scheduler: ${state?.schedulerEnabled ?? false}'),
-            Text('Odometer: ${state?.odometer?.toStringAsFixed(1) ?? '0'}'),
-            const SizedBox(height: 8),
-            if (_lastProvider != null)
-              Text(
-                'Provider status: ${_lastProvider!.authorizationStatus.name}',
-              ),
-            if (_lastConnectivity != null)
-              Text(
-                'Network: ${_lastConnectivity!.networkType ?? 'unknown'} '
-                '(${_lastConnectivity!.connected ? 'online' : 'offline'})',
-              ),
-            if (_lastNotificationAction != null)
-              Text('Notification action: $_lastNotificationAction'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLogPanel() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Logs',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton.tonalIcon(
-                  onPressed: _loadLog,
-                  icon: const Icon(Icons.article_outlined),
-                  label: const Text('Load Log'),
-                ),
-              ],
-            ),
-            if (_lastLog != null) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  _lastLog!.isEmpty
-                      ? 'No logs yet.'
-                      : _formatLogEntries(_lastLog!),
-                  maxLines: 12,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAdvancedTab() {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          _buildBatteryOptimizationCard(),
-          _buildSpoofDetectionCard(),
-          _buildSignificantChangesCard(),
-          _buildErrorRecoveryCard(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBatteryOptimizationCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.battery_charging_full),
-                const SizedBox(width: 8),
-                Text(
-                  'Battery Optimization',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (_powerState != null) ...[
-              Text(
-                'Battery: ${_powerState!.batteryLevel}% '
-                '(${_powerState!.isCharging ? "Charging" : "Discharging"})',
-              ),
-              const SizedBox(height: 8),
-            ],
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.tonal(
-                  onPressed: _refreshBatteryStats,
-                  child: const Text('Refresh Stats'),
-                ),
-                FilledButton.tonal(
-                  onPressed: _benchmarkStatus == null ? _toggleBenchmark : null,
-                  child: const Text('Start Benchmark'),
-                ),
-                if (_benchmarkStatus != null)
-                  FilledButton(
-                    onPressed: _toggleBenchmark,
-                    style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                    child: const Text('Stop Benchmark'),
-                  ),
-              ],
-            ),
-            if (_batteryStats != null) ...[
-              const SizedBox(height: 16),
-              const Text('Stats:',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              Text(
-                  'GPS On Time: ${(_batteryStats!.gpsOnTimePercent * 100).toStringAsFixed(1)}%'),
-              Text(
-                  'Drain Rate: ${_batteryStats!.estimatedDrainPerHour?.toStringAsFixed(1) ?? "N/A"}%/hr'),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSpoofDetectionCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.security),
-                const SizedBox(width: 8),
-                Text(
-                  'Spoof Detection',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ],
-            ),
-            SwitchListTile(
-              title: const Text('Enable Detection'),
-              subtitle: const Text('Detect mock/spoofed locations'),
-              value: _spoofDetectionEnabled,
-              onChanged: (val) => _toggleSpoofDetection(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSignificantChangesCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.compare_arrows),
-                const SizedBox(width: 8),
-                Text(
-                  'Significant Changes',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ],
-            ),
-            SwitchListTile(
-              title: const Text('Monitor Changes'),
-              subtitle: const Text('Ultra-low power (~500m)'),
-              value: _significantChangesEnabled,
-              onChanged: (val) => _toggleSignificantChanges(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorRecoveryCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.healing),
-                const SizedBox(width: 8),
-                Text(
-                  'Error Recovery',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            FilledButton.tonal(
-              onPressed: _simulateError,
-              child: const Text('Simulate Network Error'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _refreshBatteryStats() async {
+  Future<void> _refreshBattery() async {
     final state = await Locus.battery.getPowerState();
     final stats = await Locus.battery.getStats();
     setState(() {
       _powerState = state;
       _batteryStats = stats;
     });
+    _showSnackbar('Battery: ${state.batteryLevel}%');
+    _recordEvent('battery', '${state.batteryLevel}%, GPS: ${(stats.gpsOnTimePercent * 100).toStringAsFixed(0)}%');
   }
 
   Future<void> _toggleBenchmark() async {
     if (_benchmarkStatus == null) {
       await Locus.startBatteryBenchmark();
-      setState(() => _benchmarkStatus = 'Running...');
+      setState(() => _benchmarkStatus = 'Running');
       _showSnackbar('Benchmark started');
     } else {
       await Locus.stopBatteryBenchmark();
@@ -1223,55 +328,936 @@ class _MotionRecognitionAppState extends State<MotionRecognitionApp> {
     }
   }
 
-  Future<void> _toggleSpoofDetection() async {
-    final newValue = !_spoofDetectionEnabled;
+  Future<void> _toggleSpoof() async {
+    final enabled = !_spoofDetectionEnabled;
     await Locus.setSpoofDetection(
-      newValue ? SpoofDetectionConfig.high : SpoofDetectionConfig.disabled,
+      enabled ? SpoofDetectionConfig.high : SpoofDetectionConfig.disabled,
     );
-    setState(() => _spoofDetectionEnabled = newValue);
-    _showSnackbar('Spoof detection ${newValue ? "enabled" : "disabled"}');
+    setState(() => _spoofDetectionEnabled = enabled);
+    _showSnackbar('Spoof detection: ${enabled ? "ON" : "OFF"}');
   }
 
-  Future<void> _toggleSignificantChanges() async {
-    final newValue = !_significantChangesEnabled;
-    if (newValue) {
-      await Locus.startSignificantChangeMonitoring(
-        SignificantChangeConfig.defaults,
-      );
+  Future<void> _toggleSignificant() async {
+    final enabled = !_significantChangesEnabled;
+    if (enabled) {
+      await Locus.startSignificantChangeMonitoring(SignificantChangeConfig.defaults);
     } else {
       await Locus.stopSignificantChangeMonitoring();
     }
-    setState(() => _significantChangesEnabled = newValue);
+    setState(() => _significantChangesEnabled = enabled);
+    _showSnackbar('Significant changes: ${enabled ? "ON" : "OFF"}');
   }
 
-  Future<void> _simulateError() async {
-    await Locus.handleError(LocusError.networkError(
-      message: 'Simulated connection failure',
-      originalError: 'Simulated',
-    ));
-    // The ErrorRecoveryManager logs this, so check logs
-    _showSnackbar('Simulated error injected');
+  // ===========================================================================
+  // Helpers
+  // ===========================================================================
+
+  void _recordEvent(String type, String message) {
+    final time = DateTime.now();
+    final ts = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:${time.second.toString().padLeft(2, '0')}';
+    setState(() {
+      _events.insert(0, '[$ts] $message');
+      _eventCounts[type] = (_eventCounts[type] ?? 0) + 1;
+      if (_events.length > _maxEventEntries) _events.removeLast();
+    });
   }
 
-  String _formatLocationEvent(Location location, String label) {
-    final lat = location.coords.latitude.toStringAsFixed(5);
-    final lng = location.coords.longitude.toStringAsFixed(5);
-    return '$label: $lat, $lng (acc ${location.coords.accuracy.toStringAsFixed(1)}m)';
+  void _showSnackbar(String message, {bool isSuccess = true}) {
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isSuccess ? Icons.check_circle_rounded : Icons.error_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message, style: const TextStyle(fontWeight: FontWeight.w500))),
+          ],
+        ),
+        backgroundColor: isSuccess ? const Color(0xFF2E7D5F) : const Color(0xFFB33A3A),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
-  String _formatTimestamp(DateTime time) {
-    final hours = time.hour.toString().padLeft(2, '0');
-    final minutes = time.minute.toString().padLeft(2, '0');
-    final seconds = time.second.toString().padLeft(2, '0');
-    return '$hours:$minutes:$seconds';
+  String _formatLocation(Location loc) {
+    return '${loc.coords.latitude.toStringAsFixed(5)}, ${loc.coords.longitude.toStringAsFixed(5)} (±${loc.coords.accuracy.toStringAsFixed(0)}m)';
   }
 
-  String _formatLogEntries(List<LogEntry> entries) {
-    return entries.take(12).map((entry) {
-      final timestamp = _formatTimestamp(entry.timestamp.toLocal());
-      final tag = entry.tag;
-      final level = tag == null ? entry.level : '${entry.level}/$tag';
-      return '[$timestamp] $level ${entry.message}';
-    }).join('\n');
+  // ===========================================================================
+  // Build
+  // ===========================================================================
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Locus Example',
+      scaffoldMessengerKey: _scaffoldMessengerKey,
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF2E5D4B),
+          brightness: Brightness.light,
+        ),
+        textTheme: GoogleFonts.interTextTheme(),
+        cardTheme: CardThemeData(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          color: Colors.white,
+        ),
+        appBarTheme: const AppBarTheme(
+          centerTitle: false,
+          elevation: 0,
+          scrolledUnderElevation: 1,
+        ),
+      ),
+      home: DefaultTabController(
+        length: 4,
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF5F5F5),
+          appBar: AppBar(
+            title: Row(
+              children: [
+                SvgPicture.asset(
+                  'assets/locus_logo.svg',
+                  width: 32,
+                  height: 32,
+                ),
+                const SizedBox(width: 10),
+                const Text('Locus', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            actions: [
+              IconButton(
+                onPressed: _refreshState,
+                icon: const Icon(Icons.refresh_rounded),
+                tooltip: 'Refresh',
+              ),
+            ],
+            bottom: const TabBar(
+              tabs: [
+                Tab(icon: Icon(Icons.dashboard_rounded), text: 'Dashboard'),
+                Tab(icon: Icon(Icons.list_alt_rounded), text: 'Events'),
+                Tab(icon: Icon(Icons.storage_rounded), text: 'Storage'),
+                Tab(icon: Icon(Icons.settings_rounded), text: 'Settings'),
+              ],
+            ),
+          ),
+          body: TabBarView(
+            children: [
+              _buildDashboard(),
+              _buildEvents(),
+              _buildStorage(),
+              _buildSettings(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // Dashboard Tab
+  // ===========================================================================
+
+  Widget _buildDashboard() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _buildStatusCard(),
+        const SizedBox(height: 16),
+        _buildTrackingControls(),
+        const SizedBox(height: 16),
+        _buildProfileSelector(),
+        const SizedBox(height: 16),
+        _buildQuickActions(),
+        const SizedBox(height: 16),
+        _buildEventStats(),
+      ],
+    );
+  }
+
+  Widget _buildStatusCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _StatusIndicator(active: _isReady, label: 'Ready'),
+                const SizedBox(width: 12),
+                _StatusIndicator(active: _isRunning, label: 'Tracking'),
+                const SizedBox(width: 12),
+                _StatusIndicator(
+                  active: _lastState?.isMoving ?? false,
+                  label: _lastState?.isMoving == true ? 'Moving' : 'Stationary',
+                ),
+              ],
+            ),
+            if (_latestLocation != null) ...[
+              const Divider(height: 32),
+              _InfoRow(
+                icon: Icons.location_on_outlined,
+                label: 'Location',
+                value: _formatLocation(_latestLocation!),
+              ),
+            ],
+            if (_lastActivity != null)
+              _InfoRow(
+                icon: Icons.directions_walk_rounded,
+                label: 'Activity',
+                value: '${_lastActivity!.type.name} (${_lastActivity!.confidence}%)',
+              ),
+            if (_lastConnectivity != null)
+              _InfoRow(
+                icon: Icons.wifi_rounded,
+                label: 'Network',
+                value: _lastConnectivity!.connected ? 'Online' : 'Offline',
+              ),
+            if (_lastState?.odometer != null)
+              _InfoRow(
+                icon: Icons.straighten_rounded,
+                label: 'Odometer',
+                value: '${_lastState!.odometer!.toStringAsFixed(0)} m',
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrackingControls() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _SectionHeader(icon: Icons.play_circle_outline, title: 'Tracking'),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _ActionButton(
+                    onPressed: _toggleTracking,
+                    icon: _isRunning ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                    label: _isRunning ? 'Stop' : 'Start',
+                    color: _isRunning ? Colors.red : Colors.green,
+                    filled: true,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _ActionButton(
+                    onPressed: _getPosition,
+                    icon: Icons.my_location_rounded,
+                    label: 'Get Position',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileSelector() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionHeader(
+              icon: Icons.tune_rounded,
+              title: 'Profile',
+              trailing: _currentProfile != null
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _currentProfile!.name,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _ProfileChip(
+                  label: 'Off Duty',
+                  icon: Icons.bedtime_outlined,
+                  selected: _currentProfile == TrackingProfile.offDuty,
+                  onTap: () => _setProfile(TrackingProfile.offDuty),
+                ),
+                _ProfileChip(
+                  label: 'Standby',
+                  icon: Icons.pause_circle_outline,
+                  selected: _currentProfile == TrackingProfile.standby,
+                  onTap: () => _setProfile(TrackingProfile.standby),
+                ),
+                _ProfileChip(
+                  label: 'En Route',
+                  icon: Icons.navigation_outlined,
+                  selected: _currentProfile == TrackingProfile.enRoute,
+                  onTap: () => _setProfile(TrackingProfile.enRoute),
+                ),
+                _ProfileChip(
+                  label: 'Arrived',
+                  icon: Icons.flag_outlined,
+                  selected: _currentProfile == TrackingProfile.arrived,
+                  onTap: () => _setProfile(TrackingProfile.arrived),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _SectionHeader(icon: Icons.bolt_rounded, title: 'Quick Actions'),
+            const SizedBox(height: 16),
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 3,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 1.1,
+              children: [
+                _QuickActionTile(
+                  icon: Icons.add_location_alt_rounded,
+                  label: 'Geofence',
+                  onTap: _addGeofence,
+                ),
+                _QuickActionTile(
+                  icon: Icons.delete_outline_rounded,
+                  label: 'Clear Geo',
+                  onTap: _clearGeofences,
+                ),
+                _QuickActionTile(
+                  icon: Icons.privacy_tip_outlined,
+                  label: 'Privacy',
+                  onTap: _addPrivacyZone,
+                ),
+                _QuickActionTile(
+                  icon: Icons.trip_origin_rounded,
+                  label: 'Start Trip',
+                  onTap: _startTrip,
+                ),
+                _QuickActionTile(
+                  icon: Icons.stop_circle_outlined,
+                  label: 'Stop Trip',
+                  onTap: _stopTrip,
+                ),
+                _QuickActionTile(
+                  icon: Icons.sync_rounded,
+                  label: 'Sync',
+                  onTap: _syncNow,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEventStats() {
+    final sorted = _eventCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _SectionHeader(icon: Icons.insights_rounded, title: 'Event Stats'),
+            const SizedBox(height: 16),
+            if (sorted.isEmpty)
+              const Text('No events yet', style: TextStyle(color: Colors.grey))
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: sorted.take(8).map((e) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F0F0),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${e.key}: ${e.value}',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                  );
+                }).toList(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // Events Tab
+  // ===========================================================================
+
+  Widget _buildEvents() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.white,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${_events.length} events',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+              ),
+              TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _events.clear();
+                    _eventCounts.clear();
+                  });
+                  _showSnackbar('Events cleared');
+                },
+                icon: const Icon(Icons.delete_outline, size: 20),
+                label: const Text('Clear'),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _events.isEmpty
+              ? const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.inbox_rounded, size: 48, color: Colors.grey),
+                      SizedBox(height: 12),
+                      Text('No events yet', style: TextStyle(color: Colors.grey)),
+                    ],
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: _events.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, indent: 56),
+                  itemBuilder: (_, i) => ListTile(
+                    leading: const CircleAvatar(
+                      radius: 16,
+                      backgroundColor: Color(0xFFF0F0F0),
+                      child: Icon(Icons.circle, size: 8, color: Colors.grey),
+                    ),
+                    title: Text(
+                      _events[i],
+                      style: const TextStyle(fontSize: 13, fontFamily: 'monospace'),
+                    ),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  // ===========================================================================
+  // Storage Tab
+  // ===========================================================================
+
+  Widget _buildStorage() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SectionHeader(
+                  icon: Icons.storage_rounded,
+                  title: 'Stored Locations',
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F0F0),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${_storedLocations.length}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ActionButton(
+                        onPressed: _loadLocations,
+                        icon: Icons.download_rounded,
+                        label: 'Load',
+                        filled: true,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _ActionButton(
+                        onPressed: _clearLocations,
+                        icon: Icons.delete_outline_rounded,
+                        label: 'Clear',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_storedLocations.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Card(
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _storedLocations.length.clamp(0, 20),
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (_, i) {
+                final loc = _storedLocations[i];
+                return ListTile(
+                  leading: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    child: Text(
+                      '${i + 1}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    _formatLocation(loc),
+                    style: const TextStyle(fontSize: 13, fontFamily: 'monospace'),
+                  ),
+                  subtitle: Text(
+                    loc.timestamp.toLocal().toString().substring(0, 19),
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SectionHeader(
+                  icon: Icons.article_outlined,
+                  title: 'Logs',
+                  trailing: _lastLog != null
+                      ? Text('${_lastLog!.length} entries', style: const TextStyle(fontSize: 12, color: Colors.grey))
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                _ActionButton(
+                  onPressed: _loadLogs,
+                  icon: Icons.refresh_rounded,
+                  label: 'Load Logs',
+                  filled: true,
+                ),
+                if (_lastLog != null && _lastLog!.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8F8F8),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _lastLog!.take(10).map((e) {
+                        final ts = '${e.timestamp.hour.toString().padLeft(2, '0')}:${e.timestamp.minute.toString().padLeft(2, '0')}';
+                        return '[$ts] ${e.level}: ${e.message}';
+                      }).join('\n'),
+                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ===========================================================================
+  // Settings Tab
+  // ===========================================================================
+
+  Widget _buildSettings() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SectionHeader(
+                  icon: Icons.battery_charging_full_rounded,
+                  title: 'Battery',
+                  trailing: _powerState != null
+                      ? Text('${_powerState!.batteryLevel}%', style: const TextStyle(fontWeight: FontWeight.w600))
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                if (_batteryStats != null) ...[
+                  _InfoRow(
+                    icon: Icons.gps_fixed,
+                    label: 'GPS On Time',
+                    value: '${(_batteryStats!.gpsOnTimePercent * 100).toStringAsFixed(1)}%',
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ActionButton(
+                        onPressed: _refreshBattery,
+                        icon: Icons.refresh_rounded,
+                        label: 'Refresh',
+                        filled: true,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _ActionButton(
+                        onPressed: _toggleBenchmark,
+                        icon: _benchmarkStatus != null ? Icons.stop_rounded : Icons.speed_rounded,
+                        label: _benchmarkStatus ?? 'Benchmark',
+                        color: _benchmarkStatus != null ? Colors.red : null,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Column(
+            children: [
+              SwitchListTile(
+                secondary: const Icon(Icons.security_rounded),
+                title: const Text('Spoof Detection'),
+                subtitle: const Text('Detect mock locations'),
+                value: _spoofDetectionEnabled,
+                onChanged: (_) => _toggleSpoof(),
+              ),
+              const Divider(height: 1),
+              SwitchListTile(
+                secondary: const Icon(Icons.compare_arrows_rounded),
+                title: const Text('Significant Changes'),
+                subtitle: const Text('Ultra-low power monitoring'),
+                value: _significantChangesEnabled,
+                onChanged: (_) => _toggleSignificant(),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _SectionHeader(icon: Icons.info_outline_rounded, title: 'About'),
+                const SizedBox(height: 16),
+                const Text(
+                  'Locus Example App demonstrates the core features of the Locus SDK including location tracking, geofencing, privacy zones, and sync.',
+                  style: TextStyle(color: Colors.grey, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// =============================================================================
+// Reusable Components
+// =============================================================================
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.icon, required this.title, this.trailing});
+
+  final IconData icon;
+  final String title;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(width: 10),
+        Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        const Spacer(),
+        if (trailing != null) trailing!,
+      ],
+    );
+  }
+}
+
+class _StatusIndicator extends StatelessWidget {
+  const _StatusIndicator({required this.active, required this.label});
+
+  final bool active;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: active ? const Color(0xFFE8F5E9) : const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: active ? const Color(0xFF4CAF50) : const Color(0xFFE0E0E0),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: active ? const Color(0xFF4CAF50) : const Color(0xFFBDBDBD),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: active ? const Color(0xFF2E7D32) : const Color(0xFF757575),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({required this.icon, required this.label, required this.value});
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.grey),
+          const SizedBox(width: 8),
+          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          const Spacer(),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.onPressed,
+    required this.icon,
+    required this.label,
+    this.color,
+    this.filled = false,
+  });
+
+  final VoidCallback onPressed;
+  final IconData icon;
+  final String label;
+  final Color? color;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveColor = color ?? Theme.of(context).colorScheme.primary;
+
+    if (filled) {
+      return FilledButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+        style: FilledButton.styleFrom(
+          backgroundColor: effectiveColor,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+      );
+    }
+
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18, color: effectiveColor),
+      label: Text(label, style: TextStyle(color: effectiveColor)),
+      style: OutlinedButton.styleFrom(
+        side: BorderSide(color: effectiveColor.withAlpha(100)),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      ),
+    );
+  }
+}
+
+class _ProfileChip extends StatelessWidget {
+  const _ProfileChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: selected
+                ? Theme.of(context).colorScheme.primaryContainer
+                : const Color(0xFFF5F5F5),
+            borderRadius: BorderRadius.circular(12),
+            border: selected
+                ? Border.all(color: Theme.of(context).colorScheme.primary.withAlpha(100))
+                : null,
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: selected
+                    ? Theme.of(context).colorScheme.primary
+                    : Colors.grey,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                  color: selected
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickActionTile extends StatelessWidget {
+  const _QuickActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFF8F8F8),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 22, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(height: 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

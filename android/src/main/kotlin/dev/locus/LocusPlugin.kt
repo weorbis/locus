@@ -11,6 +11,8 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -70,6 +72,7 @@ class LocusPlugin : FlutterPlugin,
     private var methodChannel: MethodChannel? = null
     private var eventChannel: EventChannel? = null
     private var androidContext: Context? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var prefs: SharedPreferences? = null
     private var isListenerRegistered = false
 
@@ -170,6 +173,43 @@ class LocusPlugin : FlutterPlugin,
 
                 override fun onSyncRequest() {
                     stats.onSyncRequest()
+                }
+
+                override fun buildSyncBody(
+                    locations: List<Map<String, Any>>,
+                    extras: Map<String, Any>,
+                    callback: (JSONObject?) -> Unit
+                ) {
+                    val channel = methodChannel
+                    if (channel == null) {
+                        callback(null)
+                        return
+                    }
+                    // Must invoke on main thread for Flutter MethodChannel
+                    mainHandler.post {
+                        val args = mapOf(
+                            "locations" to locations,
+                            "extras" to extras
+                        )
+                        channel.invokeMethod("buildSyncBody", args, object : MethodChannel.Result {
+                            override fun success(result: Any?) {
+                                @Suppress("UNCHECKED_CAST")
+                                val body = when (result) {
+                                    is Map<*, *> -> JSONObject(result as Map<String, Any>)
+                                    is String -> try { JSONObject(result) } catch (e: Exception) { null }
+                                    else -> null
+                                }
+                                callback(body)
+                            }
+                            override fun error(code: String, message: String?, details: Any?) {
+                                Log.e(TAG, "buildSyncBody error: $code - $message")
+                                callback(null)
+                            }
+                            override fun notImplemented() {
+                                callback(null)
+                            }
+                        })
+                    }
                 }
             }
         )
@@ -566,6 +606,11 @@ class LocusPlugin : FlutterPlugin,
                     configManager?.httpHeaders?.clear()
                     configManager?.httpHeaders?.putAll(headers)
                 }
+                result.success(true)
+            }
+            "setSyncBodyBuilderEnabled" -> {
+                val enabled = call.arguments as? Boolean ?: false
+                syncManager?.syncBodyBuilderEnabled = enabled
                 result.success(true)
             }
             else -> {
