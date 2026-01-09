@@ -128,7 +128,7 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
       extras: _syncContext,
       adaptiveTracking: AdaptiveTrackingConfig.balanced,
       logLevel: LogLevel.info,
-      notification: NotificationConfig(
+      notification: const NotificationConfig(
         title: 'Locus Example',
         text: 'Tracking location in background',
       ),
@@ -171,30 +171,29 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
   }
 
   Future<void> _configureProfiles({bool enableAutomation = false}) async {
-    final rules =
-        enableAutomation
-            ? [
-              const TrackingProfileRule(
-                profile: TrackingProfile.enRoute,
-                type: TrackingProfileRuleType.activity,
-                activity: ActivityType.inVehicle,
-                cooldownSeconds: 60,
-              ),
-              const TrackingProfileRule(
-                profile: TrackingProfile.standby,
-                type: TrackingProfileRuleType.activity,
-                activity: ActivityType.still,
-                cooldownSeconds: 60,
-              ),
-              const TrackingProfileRule(
-                profile: TrackingProfile.arrived,
-                type: TrackingProfileRuleType.geofence,
-                geofenceAction: GeofenceAction.enter,
-                geofenceIdentifier: 'delivery_dropoff',
-                cooldownSeconds: 120,
-              ),
-            ]
-            : const <TrackingProfileRule>[];
+    final rules = enableAutomation
+        ? [
+            const TrackingProfileRule(
+              profile: TrackingProfile.enRoute,
+              type: TrackingProfileRuleType.activity,
+              activity: ActivityType.inVehicle,
+              cooldownSeconds: 60,
+            ),
+            const TrackingProfileRule(
+              profile: TrackingProfile.standby,
+              type: TrackingProfileRuleType.activity,
+              activity: ActivityType.still,
+              cooldownSeconds: 60,
+            ),
+            const TrackingProfileRule(
+              profile: TrackingProfile.arrived,
+              type: TrackingProfileRuleType.geofence,
+              geofenceAction: GeofenceAction.enter,
+              geofenceIdentifier: 'delivery_dropoff',
+              cooldownSeconds: 120,
+            ),
+          ]
+        : const <TrackingProfileRule>[];
     await Locus.setTrackingProfiles({
       TrackingProfile.offDuty: ConfigPresets.lowPower,
       TrackingProfile.standby: ConfigPresets.balanced,
@@ -835,9 +834,8 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
             ),
           ],
         ),
-        backgroundColor: isSuccess
-            ? const Color(0xFF2E7D5F)
-            : const Color(0xFFB33A3A),
+        backgroundColor:
+            isSuccess ? const Color(0xFF2E7D5F) : const Color(0xFFB33A3A),
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1611,14 +1609,11 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      _lastLog!
-                          .take(10)
-                          .map((e) {
-                            final ts =
-                                '${e.timestamp.hour.toString().padLeft(2, '0')}:${e.timestamp.minute.toString().padLeft(2, '0')}';
-                            return '[$ts] ${e.level}: ${e.message}';
-                          })
-                          .join('\n'),
+                      _lastLog!.take(10).map((e) {
+                        final ts =
+                            '${e.timestamp.hour.toString().padLeft(2, '0')}:${e.timestamp.minute.toString().padLeft(2, '0')}';
+                        return '[$ts] ${e.level}: ${e.message}';
+                      }).join('\n'),
                       style: const TextStyle(
                         fontSize: 11,
                         fontFamily: 'monospace',
@@ -1910,8 +1905,8 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
               children: [
                 Expanded(
                   child: _ActionButton(
-                    onPressed: () =>
-                        _setAdaptiveTracking(AdaptiveTrackingConfig.balanced, 'Balanced'),
+                    onPressed: () => _setAdaptiveTracking(
+                        AdaptiveTrackingConfig.balanced, 'Balanced'),
                     icon: Icons.tune,
                     label: 'Balanced',
                     filled: true,
@@ -1920,8 +1915,8 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: _ActionButton(
-                    onPressed: () =>
-                        _setAdaptiveTracking(AdaptiveTrackingConfig.aggressive, 'Aggressive'),
+                    onPressed: () => _setAdaptiveTracking(
+                        AdaptiveTrackingConfig.aggressive, 'Aggressive'),
                     icon: Icons.flash_on,
                     label: 'Aggressive',
                   ),
@@ -1933,8 +1928,8 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
               children: [
                 Expanded(
                   child: _ActionButton(
-                    onPressed: () =>
-                        _setAdaptiveTracking(AdaptiveTrackingConfig.disabled, 'Disabled'),
+                    onPressed: () => _setAdaptiveTracking(
+                        AdaptiveTrackingConfig.disabled, 'Disabled'),
                     icon: Icons.power_settings_new,
                     label: 'Disable',
                   ),
@@ -1966,7 +1961,8 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
               _InfoRow(
                 icon: Icons.linear_scale,
                 label: 'Distance Filter',
-                value: '${_adaptiveSettings!.distanceFilter.toStringAsFixed(0)} m',
+                value:
+                    '${_adaptiveSettings!.distanceFilter.toStringAsFixed(0)} m',
               ),
               _InfoRow(
                 icon: Icons.favorite_border,
@@ -2038,8 +2034,8 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
               children: [
                 Expanded(
                   child: _ActionButton(
-                    onPressed: () =>
-                        _applySyncPolicy(SyncPolicy.conservative, 'Conservative'),
+                    onPressed: () => _applySyncPolicy(
+                        SyncPolicy.conservative, 'Conservative'),
                     icon: Icons.slow_motion_video,
                     label: 'Conservative',
                   ),
@@ -2244,8 +2240,7 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
               child: _InfoRow(
                 icon: Icons.warning_rounded,
                 label: 'Last Anomaly',
-                value:
-                    '${_lastAnomaly!.speedKph.toStringAsFixed(0)} kph',
+                value: '${_lastAnomaly!.speedKph.toStringAsFixed(0)} kph',
               ),
             ),
           ],
@@ -2329,7 +2324,7 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
                 _InfoRow(
                   icon: Icons.directions_walk_rounded,
                   label: 'Moving',
-                  value: snapshot.state!.isMoving! ? 'Yes' : 'No',
+                  value: snapshot.state!.isMoving ? 'Yes' : 'No',
                 ),
             ],
           ],

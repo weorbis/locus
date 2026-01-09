@@ -60,15 +60,31 @@ class SyncManager(
 
     private val executor: ExecutorService = Executors.newFixedThreadPool(4)
     private val mainScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    
+
+    /**
+     * Sync is PAUSED by default on startup.
+     *
+     * This prevents race conditions where sync fires before the app has established
+     * required context (auth tokens, task IDs, etc.) after app restart.
+     *
+     * The app MUST call resumeSync() after initialization is complete.
+     * This is typically done after:
+     * 1. Locus.ready() is called
+     * 2. Auth tokens are refreshed
+     * 3. Tracking context is restored (task ID, owner ID, etc.)
+     */
     @Volatile
-    private var isSyncPaused = false
-    
+    private var isSyncPaused = true
+
     @Volatile
     private var isReleased = false
 
     @Volatile
     var syncBodyBuilderEnabled = false
+
+    init {
+        Log.i(TAG, "SyncManager initialized - sync PAUSED by default (call resumeSync() when app is ready)")
+    }
 
     fun release() {
         isReleased = true
@@ -96,14 +112,20 @@ class SyncManager(
 
     fun pause() {
         isSyncPaused = true
-        Log.d("locus.SyncManager", "sync paused by app request")
+        Log.i(TAG, "Sync PAUSED by app request")
     }
 
     fun resumeSync() {
+        Log.i(TAG, "Sync RESUMED by app request - processing any pending locations...")
         isSyncPaused = false
         syncStoredLocations(config.maxBatchSize)
         syncQueue(0)
     }
+
+    /**
+     * Check if sync is currently paused.
+     */
+    fun isPaused(): Boolean = isSyncPaused
 
     fun attemptBatchSync() {
         if (isSyncPaused) {

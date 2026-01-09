@@ -283,8 +283,8 @@ class MethodChannelLocus implements LocusInterface {
   }
 
   @override
-  Future<bool> resumeSync() async {
-    return LocusSync.resumeSync();
+  Future<bool> resume() async {
+    return LocusSync.resume();
   }
 
   @override

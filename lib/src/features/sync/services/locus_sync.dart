@@ -24,7 +24,13 @@ class LocusSync {
   // ============================================================
 
   /// Whether sync is currently paused.
-  static bool _isPaused = false;
+  ///
+  /// Sync starts PAUSED by default to prevent race conditions where sync
+  /// fires before the app has established required context (auth tokens,
+  /// task IDs, etc.) after app restart.
+  ///
+  /// Call [resume] after app initialization is complete.
+  static bool _isPaused = true;
 
   /// Whether sync is currently paused.
   static bool get isPaused => _isPaused;
@@ -39,7 +45,7 @@ class LocusSync {
   /// Pauses all sync operations.
   ///
   /// Locations will continue to be collected but won't be synced
-  /// until [resumeSync] is called.
+  /// until [resume] is called.
   static Future<void> pause() async {
     _isPaused = true;
     await LocusChannels.methods.invokeMethod('pauseSync');
@@ -52,8 +58,26 @@ class LocusSync {
     return result == true;
   }
 
-  /// Resumes syncing after a pause (e.g., token refresh).
-  static Future<bool> resumeSync() async {
+  /// Resumes syncing after app initialization or token refresh.
+  ///
+  /// **IMPORTANT**: Sync is paused by default on app startup. You MUST call
+  /// this method after your app has completed initialization:
+  ///
+  /// ```dart
+  /// // 1. Initialize Locus
+  /// await Locus.ready(config);
+  ///
+  /// // 2. Set up auth and context
+  /// await refreshAuthToken();
+  /// await restoreTrackingContext();
+  ///
+  /// // 3. Now it's safe to sync
+  /// await Locus.dataSync.resume();
+  /// ```
+  ///
+  /// Calling this before context is established can result in 400 errors
+  /// from the server due to missing required fields.
+  static Future<bool> resume() async {
     _isPaused = false;
     final result = await LocusChannels.methods.invokeMethod('resumeSync');
     return result == true;

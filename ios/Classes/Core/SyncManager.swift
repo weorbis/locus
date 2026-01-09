@@ -32,8 +32,12 @@ class SyncManager {
     private var isMonitorRunning = false
     
     // Thread-safe sync pause state
+    // IMPORTANT: Sync starts PAUSED by default to prevent race conditions where
+    // sync fires before the app has established required context (auth tokens,
+    // task IDs, etc.) after app restart.
+    // The app MUST call resumeSync() after initialization is complete.
     private let syncStateQueue = DispatchQueue(label: "dev.locus.syncstate")
-    private var _isSyncPaused = false
+    private var _isSyncPaused = true
     private var isSyncPaused: Bool {
         get { syncStateQueue.sync { _isSyncPaused } }
         set { syncStateQueue.sync { _isSyncPaused = newValue } }
@@ -52,6 +56,7 @@ class SyncManager {
         self.config = config
         self.storage = storage
         startNetworkMonitor()
+        NSLog("[Locus] SyncManager initialized - sync PAUSED by default (call resumeSync() when app is ready)")
     }
     
     deinit {
@@ -114,14 +119,18 @@ class SyncManager {
 
     func pause() {
         isSyncPaused = true
-        delegate?.onLog(level: "info", message: "Sync paused via API")
+        delegate?.onLog(level: "info", message: "Sync PAUSED by app request")
     }
 
     func resumeSync() {
+        delegate?.onLog(level: "info", message: "Sync RESUMED by app request - processing any pending locations...")
         isSyncPaused = false
         syncStoredLocations(limit: config.maxBatchSize)
         _ = syncQueue(limit: 0)
     }
+
+    /// Check if sync is currently paused.
+    var isPaused: Bool { isSyncPaused }
     
     func attemptBatchSync() {
         guard let url = config.httpUrl, !url.isEmpty, isAutoSyncAllowed() else { return }

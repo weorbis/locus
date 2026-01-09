@@ -150,14 +150,17 @@ abstract class LocusInterface {
   /// Pauses all sync operations.
   ///
   /// When paused, locations will continue to be collected and stored,
-  /// but no HTTP sync requests will be sent until [resumeSync] is called.
+  /// but no HTTP sync requests will be sent until [resume] is called.
   Future<void> pauseSync();
 
   /// Triggers an immediate sync of pending locations.
   Future<bool> sync();
 
-  /// Resumes sync after a pause.
-  Future<bool> resumeSync();
+  /// Resumes sync after a pause or app startup.
+  ///
+  /// Sync is paused by default on app startup to prevent race conditions.
+  /// Call this after your app has completed initialization.
+  Future<bool> resume();
 
   /// Destroys all stored locations.
   Future<bool> destroyLocations();

@@ -33,7 +33,7 @@ class SyncServiceImpl implements SyncService {
   Future<void> pause() => _instance.pauseSync();
 
   @override
-  Future<bool> resume() => _instance.resumeSync();
+  Future<bool> resume() => _instance.resume();
 
   @override
   void setPreSyncValidator(PreSyncValidator? validator) =>

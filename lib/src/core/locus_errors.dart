@@ -383,7 +383,7 @@ class LocusDiagnosticMessages {
 
   /// Message when sync is paused due to 401.
   static const String syncPaused401 =
-      '[Locus] Sync paused: Received 401 Unauthorized. Call Locus.resumeSync() after refreshing your auth token.';
+      '[Locus] Sync paused: Received 401 Unauthorized. Call Locus.dataSync.resume() after refreshing your auth token.';
 
   /// Message when headless task registration fails.
   static const String headlessRegistrationFailed =
