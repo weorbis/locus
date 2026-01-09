@@ -613,6 +613,27 @@ class LocusPlugin : FlutterPlugin,
                 syncManager?.syncBodyBuilderEnabled = enabled
                 result.success(true)
             }
+            "registerHeadlessSyncBodyBuilder" -> {
+                when (val args = call.arguments) {
+                    is Map<*, *> -> {
+                        val map = args.asMap()
+                        val dispatcher = map?.get("dispatcher") as? Number
+                        val callback = map?.get("callback") as? Number
+                        if (dispatcher != null && callback != null) {
+                            prefs?.edit()
+                                ?.putLong("bg_headless_sync_body_dispatcher", dispatcher.toLong())
+                                ?.putLong("bg_headless_sync_body_callback", callback.toLong())
+                                ?.apply()
+                            result.success(true)
+                        } else {
+                            result.error("INVALID_ARGUMENT", "Expected dispatcher and callback handles", null)
+                        }
+                    }
+                    else -> {
+                        result.error("INVALID_ARGUMENT", "Expected map argument", null)
+                    }
+                }
+            }
             else -> {
                 result.notImplemented()
             }
