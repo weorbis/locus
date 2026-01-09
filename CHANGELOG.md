@@ -44,6 +44,7 @@ All notable changes to this project will be documented in this file.
 - **Dynamic headers support**: `setDynamicHeaders()` now works on both Android and iOS
 - **Sync policy support (iOS)**: `setSyncPolicy()` handler added for iOS platform parity
 - **Metered connection detection (iOS)**: `isMeteredConnection()` handler for WiFi-only sync
+- **Tracking data cleanup helper**: `Locus.clearTrackingData()` for clearing stored locations and (optionally) the sync queue without stopping tracking
 
 ### Fixed
 

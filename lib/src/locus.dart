@@ -161,6 +161,32 @@ class Locus {
   }
 
   // ============================================================
+  // Data Management
+  // ============================================================
+
+  /// Clears stored tracking data without stopping the service.
+  ///
+  /// This is a lightweight cleanup helper:
+  /// - [clearLocations] removes stored locations (history + pending sync).
+  /// - [clearSyncQueue] clears the custom payload queue managed by `dataSync`.
+  ///
+  /// This does not stop tracking or remove geofences/trip state.
+  static Future<void> clearTrackingData({
+    bool clearLocations = true,
+    bool clearSyncQueue = false,
+  }) async {
+    final futures = <Future<dynamic>>[];
+    if (clearLocations) {
+      futures.add(location.destroyLocations());
+    }
+    if (clearSyncQueue) {
+      futures.add(dataSync.clearQueue());
+    }
+    if (futures.isEmpty) return;
+    await Future.wait(futures);
+  }
+
+  // ============================================================
   // Scheduling Methods
   // ============================================================
 
