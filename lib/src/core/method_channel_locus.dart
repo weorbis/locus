@@ -38,10 +38,7 @@ class MethodChannelLocus implements LocusInterface {
   // Lifecycle Methods
   // ============================================================
   @override
-  Future<GeolocationState> ready(
-    Config config, {
-    bool skipValidation = false,
-  }) {
+  Future<GeolocationState> ready(Config config, {bool skipValidation = false}) {
     return LocusLifecycle.ready(config, skipValidation: skipValidation);
   }
 
@@ -273,6 +270,14 @@ class MethodChannelLocus implements LocusInterface {
   // Sync Methods
   // ============================================================
   @override
+  bool get isSyncPaused => LocusSync.isPaused;
+
+  @override
+  Future<void> pauseSync() async {
+    await LocusSync.pause();
+  }
+
+  @override
   Future<bool> sync() {
     return LocusSync.sync();
   }
@@ -285,6 +290,19 @@ class MethodChannelLocus implements LocusInterface {
   @override
   Future<bool> destroyLocations() {
     return LocusSync.destroyLocations();
+  }
+
+  // ============================================================
+  // Pre-Sync Validation
+  // ============================================================
+  @override
+  void setPreSyncValidator(PreSyncValidator? validator) {
+    LocusSync.setPreSyncValidator(validator);
+  }
+
+  @override
+  void clearPreSyncValidator() {
+    LocusSync.clearPreSyncValidator();
   }
 
   // ============================================================
@@ -348,8 +366,11 @@ class MethodChannelLocus implements LocusInterface {
     String? type,
     String? idempotencyKey,
   }) {
-    return LocusSync.enqueue(payload,
-        type: type, idempotencyKey: idempotencyKey);
+    return LocusSync.enqueue(
+      payload,
+      type: type,
+      idempotencyKey: idempotencyKey,
+    );
   }
 
   @override
@@ -398,9 +419,9 @@ class MethodChannelLocus implements LocusInterface {
 
   @override
   Stream<Activity> get activityStream {
-    return events
-        .where((event) => event.type == EventType.activityChange)
-        .map((event) {
+    return events.where((event) => event.type == EventType.activityChange).map((
+      event,
+    ) {
       final data = event.data;
       if (data is Activity) return data;
       if (data is Location && data.activity != null) return data.activity!;
@@ -492,7 +513,8 @@ class MethodChannelLocus implements LocusInterface {
   Future<void> _updateDynamicHeaders() async {
     if (_headersCallback == null) {
       debugPrint(
-          '[Locus] refreshHeaders called but no headersCallback is set. Use setHeadersCallback() first.');
+        '[Locus] refreshHeaders called but no headersCallback is set. Use setHeadersCallback() first.',
+      );
       return;
     }
     try {
@@ -765,15 +787,15 @@ class MethodChannelLocus implements LocusInterface {
   SpoofDetectionEvent? analyzeForSpoofing(
     Location location, {
     bool? isMockProvider,
-  }) =>
-      LocusFeatures.analyzeForSpoofing(location,
-          isMockProvider: isMockProvider);
+  }) => LocusFeatures.analyzeForSpoofing(
+    location,
+    isMockProvider: isMockProvider,
+  );
 
   @override
   Future<void> startSignificantChangeMonitoring([
     SignificantChangeConfig config = const SignificantChangeConfig(),
-  ]) =>
-      LocusFeatures.startSignificantChangeMonitoring(config);
+  ]) => LocusFeatures.startSignificantChangeMonitoring(config);
 
   @override
   Future<void> stopSignificantChangeMonitoring() =>
@@ -833,11 +855,13 @@ class MethodChannelLocus implements LocusInterface {
     LocationAnomalyConfig config = const LocationAnomalyConfig(),
   }) {
     final source = events
-        .where((event) =>
-            event.type == EventType.location ||
-            event.type == EventType.motionChange ||
-            event.type == EventType.heartbeat ||
-            event.type == EventType.schedule)
+        .where(
+          (event) =>
+              event.type == EventType.location ||
+              event.type == EventType.motionChange ||
+              event.type == EventType.heartbeat ||
+              event.type == EventType.schedule,
+        )
         .map((event) => event.data as Location);
     return LocationAnomalyDetector.watch(source, config: config);
   }
@@ -856,11 +880,13 @@ class MethodChannelLocus implements LocusInterface {
     LocationQualityConfig config = const LocationQualityConfig(),
   }) {
     final source = events
-        .where((event) =>
-            event.type == EventType.location ||
-            event.type == EventType.motionChange ||
-            event.type == EventType.heartbeat ||
-            event.type == EventType.schedule)
+        .where(
+          (event) =>
+              event.type == EventType.location ||
+              event.type == EventType.motionChange ||
+              event.type == EventType.heartbeat ||
+              event.type == EventType.schedule,
+        )
         .map((event) => event.data)
         .where((data) => data is Location)
         .cast<Location>();
@@ -894,9 +920,7 @@ class MethodChannelLocus implements LocusInterface {
       return null;
     }
     final power = await getPowerState();
-    final result = _activeBenchmark!.finish(
-      currentBattery: power.batteryLevel,
-    );
+    final result = _activeBenchmark!.finish(currentBattery: power.batteryLevel);
     _activeBenchmark = null;
     return result;
   }
@@ -920,9 +944,7 @@ class MethodChannelLocus implements LocusInterface {
   }
 
   @override
-  Future<SyncDecision> evaluateSyncPolicy({
-    required SyncPolicy policy,
-  }) async {
+  Future<SyncDecision> evaluateSyncPolicy({required SyncPolicy policy}) async {
     final power = await getPowerState();
     final behavior = policy.getBehavior(
       networkType: await _getNetworkType(),
@@ -959,8 +981,9 @@ class MethodChannelLocus implements LocusInterface {
   }
 
   Future<bool> _isMeteredConnection() async {
-    final result =
-        await LocusChannels.methods.invokeMethod('isMeteredConnection');
+    final result = await LocusChannels.methods.invokeMethod(
+      'isMeteredConnection',
+    );
     return result == true;
   }
 }

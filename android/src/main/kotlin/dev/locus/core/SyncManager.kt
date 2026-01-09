@@ -82,6 +82,11 @@ class SyncManager(
         currentPayload?.let { enqueueHttp(it, null, 0) }
     }
 
+    fun pause() {
+        isSyncPaused = true
+        Log.d("locus.SyncManager", "sync paused by app request")
+    }
+
     fun resumeSync() {
         isSyncPaused = false
         syncStoredLocations(config.maxBatchSize)

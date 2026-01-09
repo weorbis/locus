@@ -10,13 +10,13 @@ import 'package:locus/locus.dart';
 /// Example:
 /// ```dart
 /// final mock = MockSyncService();
-/// 
+///
 /// // Enqueue items
 /// await mock.enqueue({'type': 'location', 'data': {...}});
-/// 
+///
 /// // Simulate successful sync
 /// mock.simulateSync(success: true);
-/// 
+///
 /// // Listen to events
 /// mock.events.listen((event) {
 ///   print('Sync ${event.success ? 'succeeded' : 'failed'}');
@@ -43,23 +43,23 @@ class MockSyncService implements SyncService {
   @override
   Future<bool> now() async {
     if (_isPaused) return false;
-    
+
     if (_queue.isEmpty) {
       return true; // Nothing to sync
     }
-    
+
     _syncCount++;
-    
+
     // Simulate successful sync by default
     const event = HttpEvent(
       status: 200,
       ok: true,
       responseText: '{"status":"ok"}',
     );
-    
+
     _eventsController.add(event);
     _queue.clear();
-    
+
     return true;
   }
 
@@ -69,10 +69,24 @@ class MockSyncService implements SyncService {
     return true;
   }
 
-  /// Pauses sync (opposite of resume).
-  Future<bool> pause() async {
+  @override
+  bool get isPaused => _isPaused;
+
+  @override
+  Future<void> pause() async {
     _isPaused = true;
-    return true;
+  }
+
+  PreSyncValidator? _preSyncValidator;
+
+  @override
+  void setPreSyncValidator(PreSyncValidator? validator) {
+    _preSyncValidator = validator;
+  }
+
+  @override
+  void clearPreSyncValidator() {
+    _preSyncValidator = null;
   }
 
   @override
@@ -108,9 +122,7 @@ class MockSyncService implements SyncService {
   }
 
   @override
-  void setHeadersCallback(
-    Future<Map<String, String>> Function()? callback,
-  ) {
+  void setHeadersCallback(Future<Map<String, String>> Function()? callback) {
     _headersCallback = callback;
   }
 
@@ -138,14 +150,16 @@ class MockSyncService implements SyncService {
     String? idempotencyKey,
   }) async {
     final id = 'mock-${_queue.length}-${DateTime.now().millisecondsSinceEpoch}';
-    _queue.add(QueueItem(
-      id: id,
-      payload: payload,
-      createdAt: DateTime.now(),
-      retryCount: 0,
-      type: type,
-      idempotencyKey: idempotencyKey,
-    ));
+    _queue.add(
+      QueueItem(
+        id: id,
+        payload: payload,
+        createdAt: DateTime.now(),
+        retryCount: 0,
+        type: type,
+        idempotencyKey: idempotencyKey,
+      ),
+    );
     return id;
   }
 
@@ -186,11 +200,12 @@ class MockSyncService implements SyncService {
     final event = HttpEvent(
       status: statusCode,
       ok: success,
-      responseText: responseText ?? (success ? '{"status":"ok"}' : '{"error":"failed"}'),
+      responseText:
+          responseText ?? (success ? '{"status":"ok"}' : '{"error":"failed"}'),
     );
-    
+
     _eventsController.add(event);
-    
+
     if (success) {
       _queue.clear();
       _syncCount++;
@@ -199,17 +214,13 @@ class MockSyncService implements SyncService {
 
   /// Simulates a connectivity change event.
   void simulateConnectivityChange(bool connected, {String? networkType}) {
-    _connectivityController.add(ConnectivityChangeEvent(
-      connected: connected,
-      networkType: networkType,
-    ));
+    _connectivityController.add(
+      ConnectivityChangeEvent(connected: connected, networkType: networkType),
+    );
   }
 
   /// Gets the current sync policy.
   SyncPolicy? get currentPolicy => _policy;
-
-  /// Whether sync is currently paused.
-  bool get isPaused => _isPaused;
 
   /// Number of successful syncs performed.
   int get syncCount => _syncCount;
@@ -222,10 +233,7 @@ class MockSyncService implements SyncService {
     void Function(HttpEvent) callback, {
     Function? onError,
   }) {
-    return _eventsController.stream.listen(
-      callback,
-      onError: onError,
-    );
+    return _eventsController.stream.listen(callback, onError: onError);
   }
 
   @override
@@ -233,24 +241,21 @@ class MockSyncService implements SyncService {
     void Function(ConnectivityChangeEvent) callback, {
     Function? onError,
   }) {
-    return _connectivityController.stream.listen(
-      callback,
-      onError: onError,
-    );
+    return _connectivityController.stream.listen(callback, onError: onError);
   }
 
   @override
   Future<int> syncQueue({int? limit}) async {
     if (_queue.isEmpty) return 0;
-    
+
     final itemsToSync = limit != null && limit < _queue.length
         ? _queue.sublist(0, limit)
         : _queue;
-    
+
     final count = itemsToSync.length;
     _queue.removeRange(0, count);
     _syncCount++;
-    
+
     return count;
   }
 

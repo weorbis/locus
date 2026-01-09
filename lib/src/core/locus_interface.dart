@@ -4,6 +4,7 @@ import 'package:locus/src/config/config.dart';
 import 'package:locus/src/shared/events.dart';
 import 'package:locus/src/models.dart';
 import 'package:locus/src/services.dart';
+import 'package:locus/src/services/sync_service.dart';
 
 /// Callback type for headless background events.
 typedef HeadlessEventCallback = Future<void> Function(HeadlessEvent event);
@@ -15,10 +16,8 @@ typedef HeadlessEventCallback = Future<void> Function(HeadlessEvent event);
 /// [extras] contains the extras from Config.
 ///
 /// Must return a JSON-serializable Map that will be sent as the request body.
-typedef SyncBodyBuilder = Future<JsonMap> Function(
-  List<Location> locations,
-  JsonMap extras,
-);
+typedef SyncBodyBuilder =
+    Future<JsonMap> Function(List<Location> locations, JsonMap extras);
 
 /// Context passed to headless sync body builder.
 class SyncBodyContext {
@@ -31,10 +30,7 @@ class SyncBodyContext {
     final extras = Map<String, dynamic>.from(map['extras'] as Map? ?? {});
     return SyncBodyContext(locations: locations, extras: extras);
   }
-  const SyncBodyContext({
-    required this.locations,
-    required this.extras,
-  });
+  const SyncBodyContext({required this.locations, required this.extras});
 
   /// Pending locations to sync.
   final List<Location> locations;
@@ -53,10 +49,7 @@ abstract class LocusInterface {
   // ============================================================
   // Lifecycle Methods
   // ============================================================
-  Future<GeolocationState> ready(
-    Config config, {
-    bool skipValidation = false,
-  });
+  Future<GeolocationState> ready(Config config, {bool skipValidation = false});
 
   Future<GeolocationState> start();
   Future<GeolocationState> stop();
@@ -76,8 +69,10 @@ abstract class LocusInterface {
 
   Future<List<Location>> getLocations({int? limit});
   Future<List<Location>> queryLocations(LocationQuery query);
-  Future<LocationSummary> getLocationSummary(
-      {DateTime? date, LocationQuery? query});
+  Future<LocationSummary> getLocationSummary({
+    DateTime? date,
+    LocationQuery? query,
+  });
   Future<bool> changePace(bool isMoving);
   Future<double> setOdometer(double value);
 
@@ -149,9 +144,37 @@ abstract class LocusInterface {
   // ============================================================
   // Sync Methods
   // ============================================================
+
+  /// Whether sync is currently paused.
+  bool get isSyncPaused;
+
+  /// Pauses all sync operations.
+  ///
+  /// When paused, locations will continue to be collected and stored,
+  /// but no HTTP sync requests will be sent until [resumeSync] is called.
+  Future<void> pauseSync();
+
+  /// Triggers an immediate sync of pending locations.
   Future<bool> sync();
+
+  /// Resumes sync after a pause.
   Future<bool> resumeSync();
+
+  /// Destroys all stored locations.
   Future<bool> destroyLocations();
+
+  // ============================================================
+  // Pre-Sync Validation
+  // ============================================================
+
+  /// Sets a callback for pre-sync validation.
+  ///
+  /// The callback is invoked before each sync attempt. Return `true` to
+  /// proceed with the sync, `false` to skip and keep locations queued.
+  void setPreSyncValidator(PreSyncValidator? validator);
+
+  /// Clears the pre-sync validator callback.
+  void clearPreSyncValidator();
 
   // ============================================================
   // Sync Body Builder
@@ -433,7 +456,5 @@ abstract class LocusInterface {
   // Sync Policy
   // ============================================================
   Future<void> setSyncPolicy(SyncPolicy policy);
-  Future<SyncDecision> evaluateSyncPolicy({
-    required SyncPolicy policy,
-  });
+  Future<SyncDecision> evaluateSyncPolicy({required SyncPolicy policy});
 }

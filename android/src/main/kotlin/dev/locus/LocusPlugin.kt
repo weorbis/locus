@@ -562,6 +562,10 @@ class LocusPlugin : FlutterPlugin,
                 locationTracker?.syncNow()
                 result.success(true)
             }
+            "pauseSync" -> {
+                syncManager?.pause()
+                result.success(true)
+            }
             "resumeSync" -> {
                 syncManager?.resumeSync()
                 result.success(true)

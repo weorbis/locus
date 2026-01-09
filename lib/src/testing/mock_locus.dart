@@ -27,6 +27,7 @@ import 'package:locus/src/core/locus_interface.dart';
 import 'package:locus/src/shared/events.dart';
 import 'package:locus/src/models.dart';
 import 'package:locus/src/services.dart';
+import 'package:locus/src/services/sync_service.dart';
 
 // Testing module exports the full LocusInterface for mock implementations.
 // The main library only exports: SyncBodyBuilder, SyncBodyContext, HeadlessEventCallback
@@ -57,11 +58,9 @@ export 'package:locus/src/core/locus_interface.dart';
 /// ```
 class MockLocus implements LocusInterface {
   /// Creates a new MockLocus instance.
-  MockLocus({
-    GeolocationState? initialState,
-    Config? initialConfig,
-  })  : _state = initialState ?? const GeolocationState(enabled: false),
-        _config = initialConfig ?? const Config();
+  MockLocus({GeolocationState? initialState, Config? initialConfig})
+    : _state = initialState ?? const GeolocationState(enabled: false),
+      _config = initialConfig ?? const Config();
 
   GeolocationState _state;
   Config _config;
@@ -410,12 +409,14 @@ class MockLocus implements LocusInterface {
   }) async {
     _methodCalls.add('enqueue');
     final id = 'mock-queue-${_queue.length}';
-    _queue.add(QueueItem(
-      id: id,
-      payload: payload,
-      createdAt: DateTime.now(),
-      retryCount: 0,
-    ));
+    _queue.add(
+      QueueItem(
+        id: id,
+        payload: payload,
+        createdAt: DateTime.now(),
+        retryCount: 0,
+      ),
+    );
     return id;
   }
 
@@ -620,6 +621,36 @@ class MockLocus implements LocusInterface {
     _methodCalls.add('resumeSync');
     return true;
   }
+
+  // ============================================================
+  // Sync Pause/Validation (Mock)
+  // ============================================================
+  bool _isSyncPaused = false;
+  PreSyncValidator? _preSyncValidator;
+
+  @override
+  bool get isSyncPaused => _isSyncPaused;
+
+  @override
+  Future<void> pauseSync() async {
+    _methodCalls.add('pauseSync');
+    _isSyncPaused = true;
+  }
+
+  @override
+  void setPreSyncValidator(PreSyncValidator? validator) {
+    _methodCalls.add('setPreSyncValidator');
+    _preSyncValidator = validator;
+  }
+
+  @override
+  void clearPreSyncValidator() {
+    _methodCalls.add('clearPreSyncValidator');
+    _preSyncValidator = null;
+  }
+
+  /// The current pre-sync validator (for test verification).
+  PreSyncValidator? get preSyncValidator => _preSyncValidator;
 
   // ============================================================
   // Sync Body Builder (Mock)
@@ -1010,11 +1041,13 @@ class MockLocus implements LocusInterface {
   }) {
     final previous = _powerState;
     _powerState = state;
-    _powerStateController.add(PowerStateChangeEvent(
-      previous: previous,
-      current: state,
-      changeType: changeType,
-    ));
+    _powerStateController.add(
+      PowerStateChangeEvent(
+        previous: previous,
+        current: state,
+        changeType: changeType,
+      ),
+    );
   }
 
   @override
@@ -1245,9 +1278,7 @@ class MockLocus implements LocusInterface {
   SyncPolicy? get syncPolicy => _syncPolicy;
 
   @override
-  Future<SyncDecision> evaluateSyncPolicy({
-    required SyncPolicy policy,
-  }) async {
+  Future<SyncDecision> evaluateSyncPolicy({required SyncPolicy policy}) async {
     final power = _powerState;
     final behavior = policy.getBehavior(
       networkType: NetworkType.wifi,
@@ -1416,7 +1447,8 @@ extension MockGeofenceExtension on Geofence {
     Map<String, dynamic>? extras,
   }) {
     return Geofence(
-      identifier: identifier ??
+      identifier:
+          identifier ??
           'mock-geofence-${DateTime.now().millisecondsSinceEpoch}',
       latitude: latitude,
       longitude: longitude,

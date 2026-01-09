@@ -24,10 +24,23 @@ class SyncServiceImpl implements SyncService {
       _instance.connectivityStream;
 
   @override
+  bool get isPaused => _instance.isSyncPaused;
+
+  @override
   Future<bool> now() => _instance.sync();
 
   @override
+  Future<void> pause() => _instance.pauseSync();
+
+  @override
   Future<bool> resume() => _instance.resumeSync();
+
+  @override
+  void setPreSyncValidator(PreSyncValidator? validator) =>
+      _instance.setPreSyncValidator(validator);
+
+  @override
+  void clearPreSyncValidator() => _instance.clearPreSyncValidator();
 
   @override
   Future<void> setPolicy(SyncPolicy policy) => _instance.setSyncPolicy(policy);
@@ -46,8 +59,7 @@ class SyncServiceImpl implements SyncService {
   @override
   Future<bool> registerHeadlessSyncBodyBuilder(
     Future<JsonMap> Function(SyncBodyContext context) builder,
-  ) =>
-      _instance.registerHeadlessSyncBodyBuilder(builder);
+  ) => _instance.registerHeadlessSyncBodyBuilder(builder);
 
   @override
   void setHeadersCallback(Future<Map<String, String>> Function()? callback) =>
@@ -68,8 +80,7 @@ class SyncServiceImpl implements SyncService {
     JsonMap payload, {
     String? type,
     String? idempotencyKey,
-  }) =>
-      _instance.enqueue(payload, type: type, idempotencyKey: idempotencyKey);
+  }) => _instance.enqueue(payload, type: type, idempotencyKey: idempotencyKey);
 
   @override
   Future<List<QueueItem>> getQueue({int? limit}) =>
@@ -89,13 +100,11 @@ class SyncServiceImpl implements SyncService {
   StreamSubscription<HttpEvent> onHttp(
     void Function(HttpEvent) callback, {
     Function? onError,
-  }) =>
-      _instance.onHttp(callback, onError: onError);
+  }) => _instance.onHttp(callback, onError: onError);
 
   @override
   StreamSubscription<ConnectivityChangeEvent> onConnectivityChange(
     void Function(ConnectivityChangeEvent) callback, {
     Function? onError,
-  }) =>
-      _instance.onConnectivityChange(callback, onError: onError);
+  }) => _instance.onConnectivityChange(callback, onError: onError);
 }

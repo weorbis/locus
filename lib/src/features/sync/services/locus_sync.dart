@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:locus/src/models.dart';
 import 'package:locus/src/core/locus_interface.dart';
 import 'package:locus/src/core/locus_channels.dart';
+import 'package:locus/src/services/sync_service.dart';
 
 /// Sync operations.
 class LocusSync {
@@ -19,17 +20,41 @@ class LocusSync {
   static bool _hasHeadlessBuilder = false;
 
   // ============================================================
+  // Sync Pause State
+  // ============================================================
+
+  /// Whether sync is currently paused.
+  static bool _isPaused = false;
+
+  /// Whether sync is currently paused.
+  static bool get isPaused => _isPaused;
+
+  /// Pre-sync validator callback.
+  static PreSyncValidator? _preSyncValidator;
+
+  // ============================================================
   // Standard Sync Methods
   // ============================================================
 
+  /// Pauses all sync operations.
+  ///
+  /// Locations will continue to be collected but won't be synced
+  /// until [resumeSync] is called.
+  static Future<void> pause() async {
+    _isPaused = true;
+    await LocusChannels.methods.invokeMethod('pauseSync');
+  }
+
   /// Triggers an immediate sync of pending locations.
   static Future<bool> sync() async {
+    if (_isPaused) return false;
     final result = await LocusChannels.methods.invokeMethod('sync');
     return result == true;
   }
 
   /// Resumes syncing after a pause (e.g., token refresh).
   static Future<bool> resumeSync() async {
+    _isPaused = false;
     final result = await LocusChannels.methods.invokeMethod('resumeSync');
     return result == true;
   }
@@ -38,6 +63,40 @@ class LocusSync {
   static Future<bool> destroyLocations() async {
     final result = await LocusChannels.methods.invokeMethod('destroyLocations');
     return result == true;
+  }
+
+  // ============================================================
+  // Pre-Sync Validation
+  // ============================================================
+
+  /// Sets a callback for pre-sync validation.
+  ///
+  /// The callback is invoked before each sync attempt. Return `true` to
+  /// proceed with the sync, `false` to skip and keep locations queued.
+  static void setPreSyncValidator(PreSyncValidator? validator) {
+    _preSyncValidator = validator;
+  }
+
+  /// Clears the pre-sync validator callback.
+  static void clearPreSyncValidator() {
+    _preSyncValidator = null;
+  }
+
+  /// Validates sync with the registered validator.
+  ///
+  /// Called by native side before each sync attempt via method channel.
+  /// Returns true if sync should proceed, false to skip.
+  static Future<bool> validatePreSync(
+    List<Location> locations,
+    JsonMap extras,
+  ) async {
+    if (_preSyncValidator == null) return true;
+    try {
+      return await _preSyncValidator!(locations, extras);
+    } catch (e) {
+      debugPrint('[Locus] Pre-sync validator threw an error: $e');
+      return false; // Skip sync on error
+    }
   }
 
   /// Enqueues a custom payload for offline-first delivery.
@@ -69,8 +128,9 @@ class LocusSync {
     );
     if (result is List) {
       return result
-          .map((item) =>
-              QueueItem.fromMap(Map<String, dynamic>.from(item as Map)))
+          .map(
+            (item) => QueueItem.fromMap(Map<String, dynamic>.from(item as Map)),
+          )
           .toList();
     }
     return [];
@@ -107,12 +167,16 @@ class LocusSync {
       // Only set the builder after successful native call
       _syncBodyBuilder = builder;
     } on PlatformException catch (e) {
-      debugPrint('[Locus] ERROR: Failed to set sync body builder on native side: $e');
+      debugPrint(
+        '[Locus] ERROR: Failed to set sync body builder on native side: $e',
+      );
       // Ensure builder is not set on error
       _syncBodyBuilder = null;
       rethrow;
     } catch (e) {
-      debugPrint('[Locus] ERROR: Unexpected error setting sync body builder: $e');
+      debugPrint(
+        '[Locus] ERROR: Unexpected error setting sync body builder: $e',
+      );
       _syncBodyBuilder = null;
       rethrow;
     }
@@ -121,7 +185,10 @@ class LocusSync {
   /// Clears the sync body builder callback.
   static Future<void> clearSyncBodyBuilder() async {
     _syncBodyBuilder = null;
-    await LocusChannels.methods.invokeMethod('setSyncBodyBuilderEnabled', false);
+    await LocusChannels.methods.invokeMethod(
+      'setSyncBodyBuilderEnabled',
+      false,
+    );
   }
 
   /// Registers a headless-compatible sync body builder.
@@ -131,33 +198,36 @@ class LocusSync {
   static Future<bool> registerHeadlessSyncBodyBuilder(
     Future<JsonMap> Function(SyncBodyContext context) builder,
   ) async {
-    final dispatcherHandle =
-        PluginUtilities.getCallbackHandle(_headlessSyncBodyDispatcher);
+    final dispatcherHandle = PluginUtilities.getCallbackHandle(
+      _headlessSyncBodyDispatcher,
+    );
     final callbackHandle = PluginUtilities.getCallbackHandle(builder);
 
     if (dispatcherHandle == null || callbackHandle == null) {
       debugPrint(
-          '[Locus] ERROR: Failed to register headless sync body builder.');
+        '[Locus] ERROR: Failed to register headless sync body builder.',
+      );
       debugPrint('[Locus]   Could not obtain callback handles.');
       debugPrint(
-          '[Locus]   Ensure your builder is a top-level or static function, not a closure.');
+        '[Locus]   Ensure your builder is a top-level or static function, not a closure.',
+      );
       debugPrint('[Locus]   Example:');
       debugPrint('[Locus]     @pragma("vm:entry-point")');
       debugPrint(
-          '[Locus]     Future<Map<String, dynamic>> buildSyncBody(SyncBodyContext ctx) async {');
+        '[Locus]     Future<Map<String, dynamic>> buildSyncBody(SyncBodyContext ctx) async {',
+      );
       debugPrint(
-          '[Locus]       return {"locations": ctx.locations.map((l) => l.toJson()).toList()};');
+        '[Locus]       return {"locations": ctx.locations.map((l) => l.toJson()).toList()};',
+      );
       debugPrint('[Locus]     }');
       return false;
     }
 
-    final result = await LocusChannels.methods.invokeMethod(
-      'registerHeadlessSyncBodyBuilder',
-      {
-        'dispatcher': dispatcherHandle.toRawHandle(),
-        'callback': callbackHandle.toRawHandle(),
-      },
-    );
+    final result = await LocusChannels.methods
+        .invokeMethod('registerHeadlessSyncBodyBuilder', {
+          'dispatcher': dispatcherHandle.toRawHandle(),
+          'callback': callbackHandle.toRawHandle(),
+        });
 
     _hasHeadlessBuilder = result == true;
     return _hasHeadlessBuilder;
@@ -189,24 +259,35 @@ class LocusSync {
     _channelSetup = true;
 
     LocusChannels.methods.setMethodCallHandler((call) async {
-      if (call.method == 'buildSyncBody') {
-        if (_syncBodyBuilder == null) {
-          return null;
-        }
+      switch (call.method) {
+        case 'buildSyncBody':
+          if (_syncBodyBuilder == null) {
+            return null;
+          }
 
-        final args = Map<String, dynamic>.from(call.arguments as Map);
-        final context = SyncBodyContext.fromMap(args);
+          final args = Map<String, dynamic>.from(call.arguments as Map);
+          final context = SyncBodyContext.fromMap(args);
 
-        try {
-          final body =
-              await _syncBodyBuilder!(context.locations, context.extras);
-          return body;
-        } catch (e) {
-          debugPrint('Locus: Error in sync body builder: $e');
+          try {
+            final body = await _syncBodyBuilder!(
+              context.locations,
+              context.extras,
+            );
+            return body;
+          } catch (e) {
+            debugPrint('Locus: Error in sync body builder: $e');
+            return null;
+          }
+
+        case 'validatePreSync':
+          // Pre-sync validation call from native
+          final args = Map<String, dynamic>.from(call.arguments as Map);
+          final context = SyncBodyContext.fromMap(args);
+          return validatePreSync(context.locations, context.extras);
+
+        default:
           return null;
-        }
       }
-      return null;
     });
   }
 
@@ -232,8 +313,9 @@ class LocusSync {
       }
 
       final handle = CallbackHandle.fromRawHandle(rawHandle);
-      final callback = PluginUtilities.getCallbackFromHandle(handle)
-          as Future<JsonMap> Function(SyncBodyContext)?;
+      final callback =
+          PluginUtilities.getCallbackFromHandle(handle)
+              as Future<JsonMap> Function(SyncBodyContext)?;
 
       if (callback == null) {
         debugPrint('Locus: Could not resolve headless sync body callback');
