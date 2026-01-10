@@ -4,8 +4,6 @@ include: package:flutter_lints/flutter.yaml
 # are expected - the lints resolve correctly when using `flutter analyze`.
 
 analyzer:
-  exclude:
-    - 'bin/**'
 
 linter:
   rules:
@@ -21,7 +19,7 @@ linter:
     unnecessary_late: true
     prefer_single_quotes: true
     sort_constructors_first: true
-    
+
     # Async safety rules
     unawaited_futures: true
     cancel_subscriptions: true
@@ -34,10 +32,10 @@ linter:
     null_closures: true
     comment_references: true
     annotate_overrides: true
-    
+
     # Public API documentation
     public_member_api_docs: false
-    
+
     # Additional safety
     unnecessary_null_checks: true
     no_leading_underscores_for_library_prefixes: true

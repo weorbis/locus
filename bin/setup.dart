@@ -3,7 +3,7 @@
 /// Automatically configures Android and iOS platform files for Locus.
 ///
 /// Usage:
-///   dart run locus:setup [options]
+///   `dart run locus:setup [options]`
 ///
 /// Options:
 ///   -i, --interactive    Run in interactive mode with prompts
@@ -48,20 +48,21 @@ void main(List<String> args) async {
   try {
     results = parser.parse(args);
   } catch (e) {
-    print('Error: $e');
-    print('Usage: dart run locus:setup [options]');
-    print(parser.usage);
+    stdout.writeln('Error: $e');
+    stdout.writeln('Usage: dart run locus:setup [options]');
+    stdout.writeln(parser.usage);
     exit(1);
   }
 
   if (results['help'] as bool) {
-    print('Locus Setup Wizard v$_version');
-    print('');
-    print('Automatically configures Android and iOS platform files for Locus.');
-    print('');
-    print('Usage: dart run locus:setup [options]');
-    print('');
-    print(parser.usage);
+    stdout.writeln('Locus Setup Wizard v$_version');
+    stdout.writeln('');
+    stdout.writeln(
+        'Automatically configures Android and iOS platform files for Locus.');
+    stdout.writeln('');
+    stdout.writeln('Usage: dart run locus:setup [options]');
+    stdout.writeln('');
+    stdout.writeln(parser.usage);
     exit(0);
   }
 
@@ -70,7 +71,7 @@ void main(List<String> args) async {
   final includeActivity = results['activity'] as bool;
   final interactive = results['interactive'] as bool;
 
-  print(_header);
+  stdout.writeln(_header);
 
   var hasErrors = false;
 
@@ -88,7 +89,7 @@ void main(List<String> args) async {
   }
 
   if (hasErrors) {
-    print('''
+    stdout.writeln('''
 ║                                                               ║
 ║  ────────────────────────────────────────────────────────────║
 ║  ⚠️  Setup completed with warnings. Review messages above.    ║
@@ -96,20 +97,24 @@ void main(List<String> args) async {
 ╚══════════════════════════════════════════════════════════════╝
 ''');
   } else {
-    print(_footer);
+    stdout.writeln(_footer);
   }
 }
 
 Future<bool> setupAndroid({required bool includeActivity}) async {
-  print('║                                                               ║');
-  print('║  Setting up Android...                                        ║');
+  stdout.writeln(
+      '║                                                               ║');
+  stdout.writeln(
+      '║  Setting up Android...                                        ║');
 
-  final manifestPath = 'android/app/src/main/AndroidManifest.xml';
+  const manifestPath = 'android/app/src/main/AndroidManifest.xml';
   final manifestFile = File(manifestPath);
 
   if (!manifestFile.existsSync()) {
-    print('║  ✗ AndroidManifest.xml not found at $manifestPath           ║');
-    print('║    Run this command from your Flutter project root.         ║');
+    stdout.writeln(
+        '║  ✗ AndroidManifest.xml not found at $manifestPath           ║');
+    stdout.writeln(
+        '║    Run this command from your Flutter project root.         ║');
     return false;
   }
 
@@ -165,8 +170,8 @@ Future<bool> setupAndroid({required bool includeActivity}) async {
 }
 
 Future<void> _checkAndroidMinSdk() async {
-  final gradlePath = 'android/app/build.gradle';
-  final gradleKtsPath = 'android/app/build.gradle.kts';
+  const gradlePath = 'android/app/build.gradle';
+  const gradleKtsPath = 'android/app/build.gradle.kts';
 
   File? gradleFile;
 
@@ -188,7 +193,7 @@ Future<void> _checkAndroidMinSdk() async {
   final patterns = [
     RegExp(r'minSdkVersion\s*[=:]\s*(\d+)'),
     RegExp(r'minSdk\s*[=:]\s*(\d+)'),
-    RegExp(r"minSdkVersion\.get\(\)"), // Flutter's default
+    RegExp(r'minSdkVersion\.get\(\)'), // Flutter's default
   ];
 
   int? minSdk;
@@ -223,15 +228,19 @@ Future<bool> setupIos({
   required bool interactive,
   required bool includeActivity,
 }) async {
-  print('║                                                               ║');
-  print('║  Setting up iOS...                                            ║');
+  stdout.writeln(
+      '║                                                               ║');
+  stdout.writeln(
+      '║  Setting up iOS...                                            ║');
 
-  final plistPath = 'ios/Runner/Info.plist';
+  const plistPath = 'ios/Runner/Info.plist';
   final plistFile = File(plistPath);
 
   if (!plistFile.existsSync()) {
-    print('║  ✗ Info.plist not found at $plistPath                       ║');
-    print('║    Run this command from your Flutter project root.         ║');
+    stdout.writeln(
+        '║  ✗ Info.plist not found at $plistPath                       ║');
+    stdout.writeln(
+        '║    Run this command from your Flutter project root.         ║');
     return false;
   }
 
@@ -292,7 +301,7 @@ Future<bool> setupIos({
 }
 
 Future<void> _checkIosDeploymentTarget() async {
-  final podfilePath = 'ios/Podfile';
+  const podfilePath = 'ios/Podfile';
   final podfile = File(podfilePath);
 
   if (!podfile.existsSync()) {
@@ -398,5 +407,5 @@ void _printStatus(String message, {bool isNew = true, bool isWarning = false}) {
   final icon = isWarning ? '⚠' : (isNew ? '✓' : '✓');
   final padding = 60 - message.length - 4;
   final paddedMessage = message + ' ' * (padding > 0 ? padding : 0);
-  print('║  $icon $paddedMessage║');
+  stdout.writeln('║  $icon $paddedMessage║');
 }

@@ -1,5 +1,6 @@
 /// Comprehensive tests for GeofenceService API.
 library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:locus/locus.dart';
 import '../../helpers/helpers.dart';
@@ -23,7 +24,8 @@ void main() {
         final events = <GeofenceEvent>[];
         final sub = service.events.listen(events.add);
 
-        final geofence = GeofenceFactory().named('test').at(37.0, -122.0).build();
+        final geofence =
+            GeofenceFactory().named('test').at(37.0, -122.0).build();
         final event = GeofenceEvent(
           geofence: geofence,
           action: GeofenceAction.enter,
@@ -94,7 +96,8 @@ void main() {
 
     group('remove', () {
       test('should remove geofence by identifier', () async {
-        final geofence = GeofenceFactory().named('test').at(37.0, -122.0).build();
+        final geofence =
+            GeofenceFactory().named('test').at(37.0, -122.0).build();
         await service.add(geofence);
 
         final result = await service.remove('test');
@@ -112,8 +115,10 @@ void main() {
 
     group('removeAll', () {
       test('should remove all geofences', () async {
-        await service.add(GeofenceFactory().named('g1').at(37.0, -122.0).build());
-        await service.add(GeofenceFactory().named('g2').at(37.1, -122.1).build());
+        await service
+            .add(GeofenceFactory().named('g1').at(37.0, -122.0).build());
+        await service
+            .add(GeofenceFactory().named('g2').at(37.1, -122.1).build());
 
         final result = await service.removeAll();
 
@@ -144,7 +149,8 @@ void main() {
 
     group('get', () {
       test('should return geofence by identifier', () async {
-        final geofence = GeofenceFactory().named('test').at(37.0, -122.0).build();
+        final geofence =
+            GeofenceFactory().named('test').at(37.0, -122.0).build();
         await service.add(geofence);
 
         final result = await service.get('test');
@@ -162,7 +168,8 @@ void main() {
 
     group('exists', () {
       test('should return true for existing geofence', () async {
-        final geofence = GeofenceFactory().named('test').at(37.0, -122.0).build();
+        final geofence =
+            GeofenceFactory().named('test').at(37.0, -122.0).build();
         await service.add(geofence);
 
         final result = await service.exists('test');
@@ -188,15 +195,12 @@ void main() {
 
     group('polygon geofences', () {
       test('should add polygon geofence', () async {
-        final polygon = PolygonGeofenceFactory()
-            .named('campus')
-            .addVertices([
-              (37.42, -122.08),
-              (37.43, -122.08),
-              (37.43, -122.07),
-              (37.42, -122.07),
-            ])
-            .build();
+        final polygon = PolygonGeofenceFactory().named('campus').addVertices([
+          (37.42, -122.08),
+          (37.43, -122.08),
+          (37.43, -122.07),
+          (37.42, -122.07),
+        ]).build();
 
         final result = await service.addPolygon(polygon);
 
@@ -272,7 +276,8 @@ void main() {
           received = event;
         });
 
-        final geofence = GeofenceFactory().named('test').at(37.0, -122.0).build();
+        final geofence =
+            GeofenceFactory().named('test').at(37.0, -122.0).build();
         final event = GeofenceEvent(
           geofence: geofence,
           action: GeofenceAction.enter,

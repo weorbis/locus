@@ -1,5 +1,6 @@
 /// Comprehensive tests for BatteryService API.
 library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:locus/locus.dart';
 

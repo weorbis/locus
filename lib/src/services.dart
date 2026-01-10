@@ -12,6 +12,7 @@ export 'services/privacy_service.dart';
 export 'services/trip_service.dart';
 export 'services/sync_service.dart';
 export 'services/battery_service.dart';
+export 'services/diagnostics_service.dart';
 
 // Service implementations
 export 'services/location_service_impl.dart';
@@ -20,6 +21,7 @@ export 'services/privacy_service_impl.dart';
 export 'services/trip_service_impl.dart';
 export 'services/sync_service_impl.dart';
 export 'services/battery_service_impl.dart';
+export 'services/diagnostics_service_impl.dart';
 
 // ============================================================
 // Feature Services

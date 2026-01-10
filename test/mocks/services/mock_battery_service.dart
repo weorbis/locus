@@ -10,14 +10,14 @@ import 'package:locus/locus.dart';
 /// Example:
 /// ```dart
 /// final mock = MockBatteryService();
-/// 
+///
 /// // Simulate low battery
 /// mock.setLevel(15);
 /// mock.setPowerSaveMode(true);
-/// 
+///
 /// // Trigger events
 /// mock.emitPowerStateChange(PowerState.lowPower);
-/// 
+///
 /// // Verify stats
 /// final stats = await mock.getStats();
 /// expect(stats.level, 15);
@@ -84,11 +84,11 @@ class MockBatteryService implements BatteryService {
   }) async {
     final steps = drainPercent;
     final interval = duration ~/ steps;
-    
+
     for (var i = 0; i < steps; i++) {
       await Future.delayed(interval);
       _level = (_level - 1).clamp(0, 100);
-      
+
       if (_level <= 20 && !_isPowerSaveMode) {
         setPowerSaveMode(true);
       }
@@ -130,7 +130,7 @@ class MockBatteryService implements BatteryService {
     // Simple estimation: assume 1% per hour at current drain rate
     final hoursRemaining = _level.toDouble();
     final lowPowerHoursRemaining = _level * 1.5;
-    
+
     return BatteryRunway(
       duration: Duration(hours: hoursRemaining.toInt()),
       lowPowerDuration: Duration(hours: lowPowerHoursRemaining.toInt()),
@@ -159,7 +159,7 @@ class MockBatteryService implements BatteryService {
         : _level > 20
             ? DesiredAccuracy.medium
             : DesiredAccuracy.low;
-    
+
     return AdaptiveSettings(
       desiredAccuracy: accuracy,
       distanceFilter: _level > 50 ? 10 : 50,
@@ -180,10 +180,10 @@ class MockBatteryService implements BatteryService {
   @override
   Future<BenchmarkResult?> stopBenchmark() async {
     if (_benchmarkStartTime == null) return null;
-    
+
     final duration = DateTime.now().difference(_benchmarkStartTime!);
     final batteryUsed = _benchmarkStartLevel - _level;
-    
+
     final result = BenchmarkResult(
       duration: duration,
       drainPercent: batteryUsed,
@@ -196,7 +196,7 @@ class MockBatteryService implements BatteryService {
         'walking': const Duration(minutes: 20),
       },
     );
-    
+
     _benchmarkStartTime = null;
     return result;
   }

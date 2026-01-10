@@ -3,7 +3,7 @@
 /// Migrate Locus SDK from v1.x to v2.0
 ///
 /// Usage:
-///   dart run locus:migrate [options]
+///   `dart run locus:migrate [options]`
 ///
 /// Options:
 ///   --dry-run       Preview changes without modifying files
@@ -25,9 +25,6 @@ import 'src/migrate/analyzer.dart';
 import 'src/migrate/migrator.dart';
 import 'src/migrate/cli.dart';
 import 'src/migrate/report.dart';
-import 'src/migrate/patterns.dart';
-
-const _version = '2.0.0';
 
 class MigrateArgsParser {
   final ArgParser _parser = ArgParser()
@@ -99,15 +96,6 @@ class MigrateArgsParser {
 }
 
 class MigrateCommandRunner extends Command<void> {
-  @override
-  final name = 'migrate';
-
-  @override
-  final description = 'Migrate Locus SDK from v1.x to v2.0';
-
-  @override
-  final aliases = ['m', 'upgrade'];
-
   MigrateCommandRunner() {
     argParser.addFlag(
       'dry-run',
@@ -151,6 +139,14 @@ class MigrateCommandRunner extends Command<void> {
       defaultsTo: false,
     );
   }
+  @override
+  final name = 'migrate';
+
+  @override
+  final description = 'Migrate Locus SDK from v1.x to v2.0';
+
+  @override
+  final aliases = ['m', 'upgrade'];
 
   @override
   String get invocation {
@@ -175,7 +171,7 @@ class MigrateCommandRunner extends Command<void> {
     final showHelp = results['help'] as bool;
 
     if (showHelp) {
-      print('''Migrate Locus SDK from v1.x to v2.0
+      stdout.writeln('''Migrate Locus SDK from v1.x to v2.0
 
 Usage:
   dart run locus:migrate [options]
@@ -205,7 +201,7 @@ Examples:
 
 What gets migrated:
   • Locus.start() → Locus.location.start()
-  • Locus.onLocation(cb) → Locus.location.onLocation.listen(cb)
+  • Locus.onLocation(cb) → Locus.location.onLocation(cb)
   • Locus.addGeofence(g) → Locus.geofencing.addGeofence(g)
   • ... and 50+ more patterns
 
@@ -221,7 +217,7 @@ For more information, see:
 
     final projectDir = Directory(path);
 
-    if (!await projectDir.exists()) {
+    if (!projectDir.existsSync()) {
       stderr.write('Error: Directory not found: $path\n');
       exit(1);
     }
@@ -242,7 +238,7 @@ For more information, see:
 
       if (format == 'json') {
         final generator = MigrationReportGenerator(verbose: verbose);
-        print(generator.generateJsonSummary(result));
+        stdout.writeln(generator.generateJsonSummary(result));
       } else {
         cli.printMigrationResult(result);
       }
@@ -267,7 +263,7 @@ class StandaloneRunner extends CommandRunner<void> {
 
   @override
   String get invocation {
-    return '${executableName} [options]';
+    return '$executableName [options]';
   }
 }
 

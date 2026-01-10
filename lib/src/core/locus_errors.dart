@@ -375,7 +375,8 @@ class GeofenceValidationException extends LocusException {
   ///   'radius': 100,
   /// });
   /// ```
-  const GeofenceValidationException({required String field, required String reason})
+  const GeofenceValidationException(
+      {required String field, required String reason})
       : super(
           'Invalid geofence: $field - $reason',
           suggestion:

@@ -83,7 +83,8 @@ class LocusStreams {
 
     // Inform native side to avoid persisting raw locations when privacy zones are active.
     try {
-      await LocusChannels.methods.invokeMethod('setPrivacyMode', service != null);
+      await LocusChannels.methods
+          .invokeMethod('setPrivacyMode', service != null);
     } catch (error) {
       debugPrint('[Locus] Failed to set privacy mode on native side: $error');
       // Non-critical, continue without propagating error

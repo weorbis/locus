@@ -12,7 +12,8 @@ import 'package:locus/locus.dart';
 /// ```dart
 /// expect(location, isLocationAt(37.7749, -122.4194));
 /// ```
-Matcher isLocationAt(double latitude, double longitude, {double tolerance = 0.0001}) {
+Matcher isLocationAt(double latitude, double longitude,
+    {double tolerance = 0.0001}) {
   return _LocationMatcher(latitude, longitude, tolerance);
 }
 
@@ -26,10 +27,10 @@ class _LocationMatcher extends Matcher {
   @override
   bool matches(dynamic item, Map matchState) {
     if (item is! Location) return false;
-    
+
     final latDiff = (item.coords.latitude - expectedLat).abs();
     final lngDiff = (item.coords.longitude - expectedLng).abs();
-    
+
     return latDiff <= tolerance && lngDiff <= tolerance;
   }
 
@@ -85,7 +86,8 @@ class _IsMovingMatcher extends Matcher {
 
   @override
   Description describe(Description description) {
-    return description.add(expectedMoving ? 'moving location' : 'stationary location');
+    return description
+        .add(expectedMoving ? 'moving location' : 'stationary location');
   }
 }
 
@@ -179,14 +181,14 @@ class _IsInsideGeofenceMatcher extends Matcher {
   @override
   bool matches(dynamic item, Map matchState) {
     if (item is! Location) return false;
-    
+
     final distance = _calculateDistance(
       geofence.latitude,
       geofence.longitude,
       item.coords.latitude,
       item.coords.longitude,
     );
-    
+
     return distance <= geofence.radius;
   }
 
@@ -204,13 +206,13 @@ class _IsInsideGeofenceMatcher extends Matcher {
     const earthRadius = 6371000.0; // meters
     final dLat = (lat2 - lat1) * 0.017453292519943295;
     final dLon = (lon2 - lon1) * 0.017453292519943295;
-    
+
     final a = (dLat / 2) * (dLat / 2) +
         (lat1 * 0.017453292519943295).cos() *
             (lat2 * 0.017453292519943295).cos() *
             (dLon / 2) *
             (dLon / 2);
-    
+
     final c = 2 * a.sqrt().atan2((1 - a).sqrt());
     return earthRadius * c;
   }

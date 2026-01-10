@@ -111,7 +111,8 @@ class PolygonGeofenceService {
         _polygons.remove(key);
         _insideState.remove(key);
       }
-      debugPrint('[PolygonGeofenceService] Persistence error, rolled back $added geofences: $e');
+      debugPrint(
+          '[PolygonGeofenceService] Persistence error, rolled back $added geofences: $e');
       rethrow;
     }
 

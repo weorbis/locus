@@ -70,5 +70,6 @@ abstract class PrivacyService {
   /// // Later, cancel the subscription
   /// subscription.cancel();
   /// ```
-  StreamSubscription<PrivacyZoneEvent> onChange(void Function(PrivacyZoneEvent) callback);
+  StreamSubscription<PrivacyZoneEvent> onChange(
+      void Function(PrivacyZoneEvent) callback);
 }

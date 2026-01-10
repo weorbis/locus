@@ -175,11 +175,11 @@ class PolygonGeofenceFactory {
   ) {
     final halfWidth = width / 2;
     final halfHeight = height / 2;
-    
+
     // Convert meters to approximate degrees
     final latOffset = halfHeight / 111000; // ~111km per degree latitude
     final lngOffset = halfWidth / (111000 * centerLat.cos());
-    
+
     _vertices.clear();
     _vertices.addAll([
       GeoPoint(
@@ -199,7 +199,7 @@ class PolygonGeofenceFactory {
         longitude: centerLng + lngOffset,
       ),
     ]);
-    
+
     return this;
   }
 
@@ -208,7 +208,7 @@ class PolygonGeofenceFactory {
     if (_vertices.length < 3) {
       throw ArgumentError('Polygon must have at least 3 vertices');
     }
-    
+
     return PolygonGeofence(
       identifier: _identifier,
       vertices: _vertices,

@@ -49,11 +49,13 @@ class PrivacyServiceImpl implements PrivacyService {
       _instance.setPrivacyZoneEnabled(identifier, enabled);
 
   @override
-  StreamSubscription<PrivacyZoneEvent> onChange(void Function(PrivacyZoneEvent) callback) {
+  StreamSubscription<PrivacyZoneEvent> onChange(
+      void Function(PrivacyZoneEvent) callback) {
     return _instance.privacyZoneEvents.listen(
       callback,
       onError: (error, stackTrace) {
-        debugPrint('[PrivacyService] Error in privacyZoneEvents stream: $error');
+        debugPrint(
+            '[PrivacyService] Error in privacyZoneEvents stream: $error');
       },
     );
   }

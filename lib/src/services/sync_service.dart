@@ -16,11 +16,10 @@ import 'package:locus/src/core/locus_interface.dart';
 ///
 /// [locations] - The locations about to be synced.
 /// [extras] - The current config extras (context data).
-typedef PreSyncValidator =
-    Future<bool> Function(
-      List<Location> locations,
-      Map<String, dynamic> extras,
-    );
+typedef PreSyncValidator = Future<bool> Function(
+  List<Location> locations,
+  Map<String, dynamic> extras,
+);
 
 /// Service interface for sync operations.
 ///

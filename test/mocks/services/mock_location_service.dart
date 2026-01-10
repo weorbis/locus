@@ -10,16 +10,16 @@ import 'package:locus/locus.dart';
 /// Example:
 /// ```dart
 /// final mock = MockLocationService();
-/// 
+///
 /// // Emit locations
 /// mock.emitLocation(Location(...));
-/// 
+///
 /// // Simulate movement
 /// await mock.simulateRoute([
 ///   (37.4219, -122.084),
 ///   (37.4220, -122.083),
 /// ]);
-/// 
+///
 /// // Query history
 /// final locations = await mock.query(LocationQuery(...));
 /// ```
@@ -45,7 +45,7 @@ class MockLocationService implements LocationService {
   void emitLocation(Location location) {
     _locations.add(location);
     _locationController.add(location);
-    
+
     // Auto-update motion state
     if (location.isMoving != null && location.isMoving != _isMoving) {
       _isMoving = location.isMoving!;
@@ -84,15 +84,15 @@ class MockLocationService implements LocationService {
         isMoving: speed > 0,
         odometer: _odometer,
       );
-      
+
       emitLocation(location);
-      
+
       // Calculate distance to next waypoint and update odometer
       if (i < waypoints.length - 1) {
         final next = waypoints[i + 1];
         _odometer += _calculateDistance(lat, lng, next.$1, next.$2);
       }
-      
+
       if (i < waypoints.length - 1) {
         await Future.delayed(interval);
       }
@@ -111,7 +111,7 @@ class MockLocationService implements LocationService {
     if (_locations.isNotEmpty) {
       return _locations.last;
     }
-    
+
     // Return a default mock location
     final location = Location(
       uuid: 'mock-current',
@@ -128,11 +128,11 @@ class MockLocationService implements LocationService {
       odometer: _odometer,
       extras: extras,
     );
-    
+
     if (persist ?? false) {
       _locations.add(location);
     }
-    
+
     return location;
   }
 
@@ -155,7 +155,7 @@ class MockLocationService implements LocationService {
     LocationQuery? query,
   }) async {
     LocationQuery effectiveQuery;
-    
+
     if (query != null) {
       effectiveQuery = query;
     } else if (date != null) {
@@ -167,7 +167,7 @@ class MockLocationService implements LocationService {
       final startOfDay = DateTime(now.year, now.month, now.day);
       effectiveQuery = LocationQuery(from: startOfDay, to: now);
     }
-    
+
     final locations = await this.query(effectiveQuery);
     return LocationHistoryCalculator.calculateSummary(locations);
   }
@@ -210,13 +210,13 @@ class MockLocationService implements LocationService {
     const earthRadius = 6371000.0; // meters
     final dLat = (lat2 - lat1) * 0.017453292519943295; // Convert to radians
     final dLon = (lon2 - lon1) * 0.017453292519943295;
-    
+
     final a = (dLat / 2).sin() * (dLat / 2).sin() +
         (lat1 * 0.017453292519943295).cos() *
             (lat2 * 0.017453292519943295).cos() *
             (dLon / 2).sin() *
             (dLon / 2).sin();
-    
+
     final c = 2 * a.sqrt().atan2((1 - a).sqrt());
     return earthRadius * c;
   }

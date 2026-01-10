@@ -6,7 +6,6 @@ library;
 
 import 'dart:async';
 
-
 /// Waits for a stream to emit a specific value or match a condition.
 ///
 /// Example:

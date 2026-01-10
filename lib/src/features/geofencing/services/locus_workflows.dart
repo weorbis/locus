@@ -12,7 +12,8 @@ class LocusWorkflows {
     return _workflowEngine!.events;
   }
 
-  static Future<void> registerGeofenceWorkflows(List<GeofenceWorkflow> workflows) async {
+  static Future<void> registerGeofenceWorkflows(
+      List<GeofenceWorkflow> workflows) async {
     _workflowEngine ??= GeofenceWorkflowEngine(events: LocusStreams.events);
     _workflowEngine!.registerWorkflows(workflows);
     await _workflowEngine!.start();

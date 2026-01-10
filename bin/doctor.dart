@@ -3,11 +3,12 @@
 /// Diagnoses Locus configuration and platform setup issues.
 ///
 /// Usage:
-///   dart run locus:doctor [options]
+///   `dart run locus:doctor [options]`
 ///
 /// Options:
 ///   --fix    Attempt to automatically fix issues
 ///   -h, --help    Show this help message
+
 library;
 
 import 'dart:io';
@@ -25,26 +26,26 @@ void main(List<String> args) async {
   try {
     results = parser.parse(args);
   } catch (e) {
-    print('Error: $e');
-    print('Usage: dart run locus:doctor [options]');
-    print(parser.usage);
+    stdout.writeln('Error: $e');
+    stdout.writeln('Usage: dart run locus:doctor [options]');
+    stdout.writeln(parser.usage);
     exit(1);
   }
 
   if (results['help'] as bool) {
-    print('Locus Doctor v$_version');
-    print('');
-    print('Diagnoses Locus configuration and platform setup issues.');
-    print('');
-    print('Usage: dart run locus:doctor [options]');
-    print('');
-    print(parser.usage);
+    stdout.writeln('Locus Doctor v$_version');
+    stdout.writeln('');
+    stdout.writeln('Diagnoses Locus configuration and platform setup issues.');
+    stdout.writeln('');
+    stdout.writeln('Usage: dart run locus:doctor [options]');
+    stdout.writeln('');
+    stdout.writeln(parser.usage);
     exit(0);
   }
 
   final shouldFix = results['fix'] as bool;
 
-  print('''
+  stdout.writeln('''
 ╔══════════════════════════════════════════════════════════════╗
 ║                      Locus - Doctor                           ║
 ╠══════════════════════════════════════════════════════════════╣
@@ -67,33 +68,40 @@ void main(List<String> args) async {
   await _checkPackage();
 
   // Summary
-  print('║                                                               ║');
-  print('║  ────────────────────────────────────────────────────────────║');
+  stdout.writeln(
+      '║                                                               ║');
+  stdout.writeln(
+      '║  ────────────────────────────────────────────────────────────║');
 
   if (issueCount == 0) {
-    print('║  ✅ All checks passed! Your project is ready.                 ║');
+    stdout.writeln(
+        '║  ✅ All checks passed! Your project is ready.                 ║');
   } else if (shouldFix && fixedCount > 0) {
-    print(
+    stdout.writeln(
         '║  🔧 Fixed $fixedCount issue(s). ${issueCount - fixedCount} remaining.                          ║');
   } else {
-    print(
+    stdout.writeln(
         '║  ⚠️  Found $issueCount issue(s). Run with --fix to auto-repair.      ║');
   }
 
-  print('║                                                               ║');
-  print('╚══════════════════════════════════════════════════════════════╝');
+  stdout.writeln(
+      '║                                                               ║');
+  stdout.writeln(
+      '╚══════════════════════════════════════════════════════════════╝');
 
   exit(issueCount > fixedCount ? 1 : 0);
 }
 
 Future<(int, int)> _checkAndroid(bool shouldFix) async {
-  print('║                                                               ║');
-  print('║  Checking Android configuration...                            ║');
+  stdout.writeln(
+      '║                                                               ║');
+  stdout.writeln(
+      '║  Checking Android configuration...                            ║');
 
   var issues = 0;
   var fixed = 0;
 
-  final manifestPath = 'android/app/src/main/AndroidManifest.xml';
+  const manifestPath = 'android/app/src/main/AndroidManifest.xml';
   final manifestFile = File(manifestPath);
 
   if (!manifestFile.existsSync()) {
@@ -159,8 +167,8 @@ Future<(int, int)> _checkAndroid(bool shouldFix) async {
 }
 
 Future<bool> _checkMinSdkVersion() async {
-  final gradlePath = 'android/app/build.gradle';
-  final gradleKtsPath = 'android/app/build.gradle.kts';
+  const gradlePath = 'android/app/build.gradle';
+  const gradleKtsPath = 'android/app/build.gradle.kts';
 
   File? gradleFile;
   if (File(gradleKtsPath).existsSync()) {
@@ -208,13 +216,15 @@ Future<bool> _checkMinSdkVersion() async {
 }
 
 Future<(int, int)> _checkIos(bool shouldFix) async {
-  print('║                                                               ║');
-  print('║  Checking iOS configuration...                                ║');
+  stdout.writeln(
+      '║                                                               ║');
+  stdout.writeln(
+      '║  Checking iOS configuration...                                ║');
 
   var issues = 0;
   var fixed = 0;
 
-  final plistPath = 'ios/Runner/Info.plist';
+  const plistPath = 'ios/Runner/Info.plist';
   final plistFile = File(plistPath);
 
   if (!plistFile.existsSync()) {
@@ -284,7 +294,7 @@ Future<(int, int)> _checkIos(bool shouldFix) async {
       } else {
         final insertPoint = content.lastIndexOf('</dict>');
         if (insertPoint != -1) {
-          final bgModes = '''
+          const bgModes = '''
 \t<key>UIBackgroundModes</key>
 \t<array>
 \t\t<string>location</string>
@@ -312,7 +322,7 @@ Future<(int, int)> _checkIos(bool shouldFix) async {
 }
 
 Future<void> _checkIosDeploymentTarget() async {
-  final podfilePath = 'ios/Podfile';
+  const podfilePath = 'ios/Podfile';
   final podfile = File(podfilePath);
 
   if (!podfile.existsSync()) {
@@ -338,8 +348,10 @@ Future<void> _checkIosDeploymentTarget() async {
 }
 
 Future<void> _checkPackage() async {
-  print('║                                                               ║');
-  print('║  Checking package configuration...                            ║');
+  stdout.writeln(
+      '║                                                               ║');
+  stdout.writeln(
+      '║  Checking package configuration...                            ║');
 
   // Check pubspec.yaml for locus dependency
   final pubspecFile = File('pubspec.yaml');
@@ -369,11 +381,11 @@ void _printCheck(String message, bool passed, [String? note]) {
   final fullMessage = '$message$noteStr';
   final padding = 57 - fullMessage.length;
   final paddedMessage = fullMessage + ' ' * (padding > 0 ? padding : 0);
-  print('║  $icon $paddedMessage║');
+  stdout.writeln('║  $icon $paddedMessage║');
 }
 
 void _printFix(String message) {
   final padding = 55 - message.length;
   final paddedMessage = message + ' ' * (padding > 0 ? padding : 0);
-  print('║    → $paddedMessage║');
+  stdout.writeln('║    → $paddedMessage║');
 }

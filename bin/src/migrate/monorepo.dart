@@ -2,17 +2,16 @@ import 'dart:io';
 
 /// Represents a single package/app in a monorepo
 class PackageInMonorepo {
-  final String path;
-  final String name;
-  final bool isApp;
-  final bool usesLocus;
-
   PackageInMonorepo({
     required this.path,
     required this.name,
     required this.isApp,
     this.usesLocus = false,
   });
+  final String path;
+  final String name;
+  final bool isApp;
+  final bool usesLocus;
 
   String get displayName => isApp ? '$name (app)' : name;
 
@@ -37,17 +36,16 @@ class PackageInMonorepo {
 
 /// Result of monorepo detection
 class MonorepoDetectionResult {
-  final bool isMonorepo;
-  final List<PackageInMonorepo> packages;
-  final List<PackageInMonorepo> packagesWithLocus;
-  final String rootPath;
-
   MonorepoDetectionResult({
     required this.isMonorepo,
     required this.packages,
     required this.packagesWithLocus,
     required this.rootPath,
   });
+  final bool isMonorepo;
+  final List<PackageInMonorepo> packages;
+  final List<PackageInMonorepo> packagesWithLocus;
+  final String rootPath;
 
   bool get hasLocusUsage => packagesWithLocus.isNotEmpty;
   int get totalPackages => packages.length;
@@ -102,7 +100,7 @@ class MonorepoDetector {
 
     // Check if root has pubspec.yaml - single project case
     final rootPubspec = File('${rootDir.path}/pubspec.yaml');
-    if (await rootPubspec.exists()) {
+    if (rootPubspec.existsSync()) {
       final name = await _extractPackageName(rootPubspec);
       final rootPath = rootDir.absolute.path;
       if (!visited.contains(rootPath)) {
@@ -118,7 +116,7 @@ class MonorepoDetector {
     // Check common monorepo subdirectories first (packages/, apps/, etc.)
     for (final subdir in _monorepoSubdirs) {
       final subdirPath = Directory('${rootDir.path}/$subdir');
-      if (await subdirPath.exists()) {
+      if (subdirPath.existsSync()) {
         final subPackages = await _findPackagesInDirectory(subdirPath, visited);
         packages.addAll(subPackages);
       }
@@ -148,7 +146,7 @@ class MonorepoDetector {
       await for (final entity in dir.list(recursive: false)) {
         if (entity is Directory && !_shouldIgnoreDir(entity.path)) {
           final pubspec = File('${entity.path}/pubspec.yaml');
-          if (await pubspec.exists()) {
+          if (pubspec.existsSync()) {
             final path = entity.absolute.path;
             if (!visited.contains(path)) {
               visited.add(path);
@@ -184,7 +182,7 @@ class MonorepoDetector {
           if (_monorepoSubdirs.contains(dirName)) continue;
 
           final pubspec = File('${entity.path}/pubspec.yaml');
-          if (await pubspec.exists()) {
+          if (pubspec.existsSync()) {
             final path = entity.absolute.path;
             if (!visited.contains(path)) {
               visited.add(path);
@@ -208,7 +206,7 @@ class MonorepoDetector {
   /// Checks if a package uses Locus SDK
   static Future<bool> _checkLocusUsage(Directory packageDir) async {
     final pubspec = File('${packageDir.path}/pubspec.yaml');
-    if (!await pubspec.exists()) return false;
+    if (!pubspec.existsSync()) return false;
 
     try {
       final content = await pubspec.readAsString();
@@ -219,7 +217,7 @@ class MonorepoDetector {
 
       // Also check lib/ directory for locus imports
       final libDir = Directory('${packageDir.path}/lib');
-      if (await libDir.exists()) {
+      if (libDir.existsSync()) {
         await for (final file in libDir.list(recursive: true)) {
           if (file is File && file.path.endsWith('.dart')) {
             final fileContent = await file.readAsString();
@@ -260,7 +258,7 @@ class MonorepoDetector {
   /// Checks if a directory is a Flutter app
   static Future<bool> _isFlutterApp(Directory dir) async {
     final pubspec = File('${dir.path}/pubspec.yaml');
-    if (!await pubspec.exists()) return false;
+    if (!pubspec.existsSync()) return false;
 
     try {
       final content = await pubspec.readAsString();
@@ -268,7 +266,7 @@ class MonorepoDetector {
       if (content.contains('sdk: flutter')) {
         // Check if it has a main.dart (indicates app vs package)
         final mainDart = File('${dir.path}/lib/main.dart');
-        if (await mainDart.exists()) return true;
+        if (mainDart.existsSync()) return true;
 
         // Also check for flutter: uses-material-design or similar app indicators
         if (content.contains('uses-material-design:') ||

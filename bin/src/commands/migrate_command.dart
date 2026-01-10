@@ -7,15 +7,6 @@ import '../migrate/cli.dart';
 import '../migrate/monorepo.dart';
 
 class MigrateCommand extends Command<void> {
-  @override
-  final name = 'migrate';
-
-  @override
-  final description = 'Migrate Locus SDK from v1.x to v2.0';
-
-  @override
-  final aliases = ['m', 'upgrade'];
-
   MigrateCommand() {
     argParser
       ..addFlag(
@@ -94,6 +85,14 @@ class MigrateCommand extends Command<void> {
         valueHelp: 'category',
       );
   }
+  @override
+  final name = 'migrate';
+
+  @override
+  final description = 'Migrate Locus SDK from v1.x to v2.0';
+
+  @override
+  final aliases = ['m', 'upgrade'];
 
   @override
   String get invocation {
@@ -122,13 +121,13 @@ class MigrateCommand extends Command<void> {
     final onlyCategories = (results['only-category'] as List<String>).toSet();
 
     if (showHelp) {
-      print(usage);
+      stdout.writeln(usage);
       return;
     }
 
     final projectDir = Directory(path);
 
-    if (!await projectDir.exists()) {
+    if (!projectDir.existsSync()) {
       stderr.write('Error: Directory not found: $path\n');
       exit(1);
     }
@@ -169,7 +168,7 @@ class MigrateCommand extends Command<void> {
         );
 
         if (format == 'json') {
-          print(_generateMonorepoJsonOutput(result));
+          stdout.writeln(_generateMonorepoJsonOutput(result));
         } else {
           if (analyzeOnly) {
             cli.printAnalysisOnly(result.analysis.aggregated);
@@ -191,7 +190,7 @@ class MigrateCommand extends Command<void> {
         );
 
         if (format == 'json') {
-          print(_generateJsonOutput(result));
+          stdout.writeln(_generateJsonOutput(result));
         } else {
           if (analyzeOnly) {
             cli.printAnalysisOnly(result.analysis);
@@ -218,7 +217,7 @@ class MigrateCommand extends Command<void> {
     bool verbose,
   ) async {
     final backupDir = Directory('${projectDir.path}/.locus/backup');
-    if (!await backupDir.exists()) {
+    if (!backupDir.existsSync()) {
       cli.error('No backup directory found at ${backupDir.path}');
       cli.info('Make sure you have run a migration with --backup enabled.');
       exit(1);
@@ -348,7 +347,7 @@ class MigrateCommand extends Command<void> {
 
     for (int i = 0; i < list.length; i++) {
       final value = list[i];
-      buffer.write('$nextSpaces');
+      buffer.write(nextSpaces);
 
       if (value is Map<String, dynamic>) {
         buffer.write(_jsonEncode(value, indent + 1));

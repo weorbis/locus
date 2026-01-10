@@ -11,7 +11,7 @@ import 'package:locus/locus.dart';
 /// Example:
 /// ```dart
 /// final mock = MockPrivacyService();
-/// 
+///
 /// // Add privacy zone
 /// await mock.add(PrivacyZone.create(
 ///   identifier: 'home',
@@ -20,17 +20,17 @@ import 'package:locus/locus.dart';
 ///   radius: 100,
 ///   action: PrivacyZoneAction.obfuscate,
 /// ));
-/// 
+///
 /// // Check if location is in privacy zone
 /// final isPrivate = mock.isLocationInPrivacyZone(location);
-/// 
+///
 /// // Apply privacy rules
 /// final filtered = mock.applyPrivacy(location);
 /// ```
 class MockPrivacyService implements PrivacyService {
   final List<PrivacyZone> _zones = [];
   final _eventsController = StreamController<PrivacyZoneEvent>.broadcast();
-  
+
   final List<void Function(PrivacyZoneEvent)> _callbacks = [];
 
   @override
@@ -40,7 +40,7 @@ class MockPrivacyService implements PrivacyService {
   Future<void> add(PrivacyZone zone) async {
     _zones.removeWhere((z) => z.identifier == zone.identifier);
     _zones.add(zone);
-    
+
     _emitEvent(PrivacyZoneEvent(
       type: PrivacyZoneEventType.added,
       zone: zone,
@@ -60,7 +60,7 @@ class MockPrivacyService implements PrivacyService {
           (z) => z?.identifier == identifier,
           orElse: () => null,
         );
-    
+
     if (zone != null) {
       _zones.removeWhere((z) => z.identifier == identifier);
       _emitEvent(PrivacyZoneEvent(
@@ -104,7 +104,7 @@ class MockPrivacyService implements PrivacyService {
   Future<bool> setEnabled(String identifier, bool enabled) async {
     final zone = await get(identifier);
     if (zone == null) return false;
-    
+
     // Update the zone (create a new one with updated enabled status)
     final updatedZone = PrivacyZone.create(
       identifier: zone.identifier,
@@ -115,13 +115,14 @@ class MockPrivacyService implements PrivacyService {
       action: zone.action,
       obfuscationRadius: zone.obfuscationRadius,
     );
-    
+
     await add(updatedZone);
     return true;
   }
 
   @override
-  StreamSubscription<PrivacyZoneEvent> onChange(void Function(PrivacyZoneEvent) callback) {
+  StreamSubscription<PrivacyZoneEvent> onChange(
+      void Function(PrivacyZoneEvent) callback) {
     _callbacks.add(callback);
     return _eventsController.stream.listen(callback);
   }
@@ -141,14 +142,14 @@ class MockPrivacyService implements PrivacyService {
   bool isLocationInPrivacyZone(Location location) {
     for (final zone in _zones) {
       if (!zone.enabled) continue;
-      
+
       final distance = _calculateDistance(
         zone.latitude,
         zone.longitude,
         location.coords.latitude,
         location.coords.longitude,
       );
-      
+
       if (distance <= zone.radius) {
         return true;
       }
@@ -160,14 +161,14 @@ class MockPrivacyService implements PrivacyService {
   PrivacyZone? getZoneForLocation(Location location) {
     for (final zone in _zones) {
       if (!zone.enabled) continue;
-      
+
       final distance = _calculateDistance(
         zone.latitude,
         zone.longitude,
         location.coords.latitude,
         location.coords.longitude,
       );
-      
+
       if (distance <= zone.radius) {
         return zone;
       }
@@ -181,22 +182,23 @@ class MockPrivacyService implements PrivacyService {
   Location? applyPrivacy(Location location) {
     final zone = getZoneForLocation(location);
     if (zone == null) return location;
-    
+
     switch (zone.action) {
       case PrivacyZoneAction.exclude:
         return null; // Location should be excluded
-      
+
       case PrivacyZoneAction.obfuscate:
         // Obfuscate by adding random offset
         final random = math.Random();
         final radius = zone.obfuscationRadius;
         final angle = random.nextDouble() * 2 * math.pi;
         final distance = random.nextDouble() * radius;
-        
+
         final latOffset = (distance / 111000) * math.cos(angle);
-        final lngOffset = (distance / 111000) * math.sin(angle) /
+        final lngOffset = (distance / 111000) *
+            math.sin(angle) /
             math.cos(location.coords.latitude * math.pi / 180);
-        
+
         return Location(
           uuid: location.uuid,
           timestamp: location.timestamp,
@@ -223,7 +225,7 @@ class MockPrivacyService implements PrivacyService {
           (z) => z?.identifier == identifier,
           orElse: () => null,
         );
-    
+
     if (zone != null) {
       _emitEvent(PrivacyZoneEvent(
         type: PrivacyZoneEventType.added,
@@ -238,7 +240,7 @@ class MockPrivacyService implements PrivacyService {
           (z) => z?.identifier == identifier,
           orElse: () => null,
         );
-    
+
     if (zone != null) {
       _emitEvent(PrivacyZoneEvent(
         type: PrivacyZoneEventType.removed,
@@ -256,13 +258,13 @@ class MockPrivacyService implements PrivacyService {
     const earthRadius = 6371000.0; // meters
     final dLat = _toRadians(lat2 - lat1);
     final dLon = _toRadians(lon2 - lon1);
-    
+
     final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(_toRadians(lat1)) *
             math.cos(_toRadians(lat2)) *
             math.sin(dLon / 2) *
             math.sin(dLon / 2);
-    
+
     final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
     return earthRadius * c;
   }

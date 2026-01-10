@@ -3,14 +3,6 @@ import 'analyzer.dart';
 import 'patterns.dart';
 
 class AppliedChange {
-  final String filePath;
-  final int line;
-  final String patternId;
-  final String original;
-  final String replacement;
-  final bool success;
-  final String? failureReason;
-
   AppliedChange({
     required this.filePath,
     required this.line,
@@ -20,6 +12,13 @@ class AppliedChange {
     required this.success,
     this.failureReason,
   });
+  final String filePath;
+  final int line;
+  final String patternId;
+  final String original;
+  final String replacement;
+  final bool success;
+  final String? failureReason;
 
   Map<String, dynamic> toJson() => {
         'filePath': filePath,
@@ -33,12 +32,6 @@ class AppliedChange {
 }
 
 class MigrationResult {
-  final MigrationAnalysisResult analysis;
-  final List<AppliedChange> appliedChanges;
-  final String? backupPath;
-  final bool dryRun;
-  final DateTime timestamp;
-
   MigrationResult({
     required this.analysis,
     required this.appliedChanges,
@@ -46,6 +39,11 @@ class MigrationResult {
     this.dryRun = false,
     required this.timestamp,
   });
+  final MigrationAnalysisResult analysis;
+  final List<AppliedChange> appliedChanges;
+  final String? backupPath;
+  final bool dryRun;
+  final DateTime timestamp;
 
   int get successfulChanges => appliedChanges.where((c) => c.success).length;
   int get failedChanges => appliedChanges.where((c) => !c.success).length;
@@ -67,14 +65,13 @@ class MigrationResult {
 }
 
 class MigrationMigrator {
-  final MigrationAnalyzer _analyzer;
-  final bool _verbose;
-
   MigrationMigrator({
     MigrationAnalyzer? analyzer,
     bool verbose = false,
   })  : _analyzer = analyzer ?? MigrationAnalyzer(),
         _verbose = verbose;
+  final MigrationAnalyzer _analyzer;
+  final bool _verbose;
 
   Future<MigrationResult> migrate({
     required Directory projectDir,
@@ -86,8 +83,8 @@ class MigrationMigrator {
     final timestamp = DateTime.now();
 
     if (_verbose) {
-      print('[INFO] Starting migration of ${projectDir.path}');
-      print('[INFO] Dry run: $dryRun, Create backup: $createBackup');
+      stdout.writeln('[INFO] Starting migration of ${projectDir.path}');
+      stdout.writeln('[INFO] Dry run: $dryRun, Create backup: $createBackup');
     }
 
     final analysis = await _analyzer.analyze(
@@ -98,7 +95,7 @@ class MigrationMigrator {
 
     if (dryRun) {
       if (_verbose) {
-        print('[INFO] Dry run - no files will be modified');
+        stdout.writeln('[INFO] Dry run - no files will be modified');
       }
       return MigrationResult(
         analysis: analysis,
@@ -116,12 +113,13 @@ class MigrationMigrator {
     final appliedChanges = await _applyMigrations(analysis, projectDir);
 
     if (_verbose) {
-      print('[INFO] Migration complete');
-      print(
+      stdout.writeln('[INFO] Migration complete');
+      stdout.writeln(
           '[INFO] Applied ${appliedChanges.where((c) => c.success).length} changes');
-      print('[INFO] Failed: ${appliedChanges.where((c) => !c.success).length}');
+      stdout.writeln(
+          '[INFO] Failed: ${appliedChanges.where((c) => !c.success).length}');
       if (backupPath != null) {
-        print('[INFO] Backup created at: $backupPath');
+        stdout.writeln('[INFO] Backup created at: $backupPath');
       }
     }
 
@@ -162,7 +160,8 @@ class MigrationMigrator {
       }
 
       if (_verbose) {
-        print('[INFO] Backup created at ${backupDir.path}/backup.tar.gz');
+        stdout.writeln(
+            '[INFO] Backup created at ${backupDir.path}/backup.tar.gz');
       }
 
       return backupDir.path;
@@ -235,8 +234,6 @@ class MigrationMigrator {
               replacement,
             );
 
-            totalOffsetAdjustment += replacement.length - match.original.length;
-
             appliedChanges.add(AppliedChange(
               filePath: filePath,
               line: match.line,
@@ -247,8 +244,8 @@ class MigrationMigrator {
             ));
 
             if (_verbose) {
-              print('[MIGRATED] $filePath:${match.line}');
-              print('    ${match.original} → $replacement');
+              stdout.writeln('[MIGRATED] $filePath:${match.line}');
+              stdout.writeln('    ${match.original} → $replacement');
             }
           } else {
             appliedChanges.add(AppliedChange(
@@ -268,7 +265,8 @@ class MigrationMigrator {
         await file.writeAsString(content);
 
         if (_verbose) {
-          print('[INFO] Updated $filePath (${matches.length} changes)');
+          stdout
+              .writeln('[INFO] Updated $filePath (${matches.length} changes)');
         }
       } catch (e, stack) {
         appliedChanges.add(AppliedChange(
@@ -321,7 +319,7 @@ class MigrationMigrator {
   Future<bool> rollback(String backupPath) async {
     final backupFile = File('$backupPath/backup.tar.gz');
 
-    if (!await backupFile.exists()) {
+    if (!backupFile.existsSync()) {
       stderr.write('[ERROR] Backup file not found: $backupPath\n');
       return false;
     }
@@ -338,7 +336,7 @@ class MigrationMigrator {
       }
 
       if (_verbose) {
-        print('[INFO] Successfully restored from $backupPath');
+        stdout.writeln('[INFO] Successfully restored from $backupPath');
       }
 
       return true;
@@ -359,8 +357,8 @@ class MigrationMigrator {
     final timestamp = DateTime.now();
 
     if (_verbose) {
-      print('[INFO] Starting monorepo migration of ${rootDir.path}');
-      print('[INFO] Dry run: $dryRun, Create backup: $createBackup');
+      stdout.writeln('[INFO] Starting monorepo migration of ${rootDir.path}');
+      stdout.writeln('[INFO] Dry run: $dryRun, Create backup: $createBackup');
     }
 
     final analysis = await _analyzer.analyzeMonorepo(
@@ -371,7 +369,7 @@ class MigrationMigrator {
 
     if (dryRun) {
       if (_verbose) {
-        print('[INFO] Dry run - no files will be modified');
+        stdout.writeln('[INFO] Dry run - no files will be modified');
       }
       return MonorepoMigrationResult(
         analysis: analysis,
@@ -394,12 +392,12 @@ class MigrationMigrator {
 
       // Find the package directory
       final packageDir = Directory(packageAnalysis.projectPath);
-      if (!await packageDir.exists()) {
+      if (!packageDir.existsSync()) {
         continue;
       }
 
       if (_verbose) {
-        print('[INFO] Migrating package: $packageName');
+        stdout.writeln('[INFO] Migrating package: $packageName');
       }
 
       final appliedChanges =
@@ -415,15 +413,15 @@ class MigrationMigrator {
     }
 
     if (_verbose) {
-      print('[INFO] Monorepo migration complete');
+      stdout.writeln('[INFO] Monorepo migration complete');
       final totalSuccessful =
           packageResults.values.fold(0, (sum, r) => sum + r.successfulChanges);
       final totalFailed =
           packageResults.values.fold(0, (sum, r) => sum + r.failedChanges);
-      print('[INFO] Applied $totalSuccessful changes');
-      print('[INFO] Failed: $totalFailed');
+      stdout.writeln('[INFO] Applied $totalSuccessful changes');
+      stdout.writeln('[INFO] Failed: $totalFailed');
       if (backupPath != null) {
-        print('[INFO] Backup created at: $backupPath');
+        stdout.writeln('[INFO] Backup created at: $backupPath');
       }
     }
 
@@ -438,17 +436,16 @@ class MigrationMigrator {
 
 /// Result of migrating a monorepo
 class MonorepoMigrationResult {
-  final MonorepoMigrationAnalysisResult analysis;
-  final Map<String, MigrationResult> packageResults;
-  final bool dryRun;
-  final DateTime timestamp;
-
   MonorepoMigrationResult({
     required this.analysis,
     required this.packageResults,
     required this.dryRun,
     required this.timestamp,
   });
+  final MonorepoMigrationAnalysisResult analysis;
+  final Map<String, MigrationResult> packageResults;
+  final bool dryRun;
+  final DateTime timestamp;
 
   int get successfulChanges =>
       packageResults.values.fold(0, (sum, r) => sum + r.successfulChanges);

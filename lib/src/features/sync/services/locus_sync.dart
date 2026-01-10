@@ -250,9 +250,9 @@ class LocusSync {
 
     final result = await LocusChannels.methods
         .invokeMethod('registerHeadlessSyncBodyBuilder', {
-          'dispatcher': dispatcherHandle.toRawHandle(),
-          'callback': callbackHandle.toRawHandle(),
-        });
+      'dispatcher': dispatcherHandle.toRawHandle(),
+      'callback': callbackHandle.toRawHandle(),
+    });
 
     _hasHeadlessBuilder = result == true;
     return _hasHeadlessBuilder;
@@ -338,9 +338,8 @@ class LocusSync {
       }
 
       final handle = CallbackHandle.fromRawHandle(rawHandle);
-      final callback =
-          PluginUtilities.getCallbackFromHandle(handle)
-              as Future<JsonMap> Function(SyncBodyContext)?;
+      final callback = PluginUtilities.getCallbackFromHandle(handle)
+          as Future<JsonMap> Function(SyncBodyContext)?;
 
       if (callback == null) {
         debugPrint('Locus: Could not resolve headless sync body callback');

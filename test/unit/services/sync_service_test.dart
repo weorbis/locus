@@ -1,5 +1,6 @@
 /// Comprehensive tests for SyncService API.
 library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:locus/locus.dart';
 
@@ -221,7 +222,8 @@ void main() {
 
     group('callbacks', () {
       test('should set sync body builder', () async {
-        Future<Map<String, dynamic>> builder(List<Location> locations, Map<String, dynamic> extras) async {
+        Future<Map<String, dynamic>> builder(
+            List<Location> locations, Map<String, dynamic> extras) async {
           return {'custom': 'data', 'count': locations.length};
         }
 

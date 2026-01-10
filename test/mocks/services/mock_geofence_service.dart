@@ -11,7 +11,7 @@ import 'package:locus/locus.dart';
 /// Example:
 /// ```dart
 /// final mock = MockGeofenceService();
-/// 
+///
 /// // Add geofences
 /// await mock.add(Geofence(
 ///   identifier: 'home',
@@ -19,10 +19,10 @@ import 'package:locus/locus.dart';
 ///   longitude: -122.084,
 ///   radius: 100,
 /// ));
-/// 
+///
 /// // Simulate entering a geofence
 /// mock.triggerEntry('home');
-/// 
+///
 /// // Listen to events
 /// mock.events.listen((event) {
 ///   print('Geofence ${event.identifier}: ${event.action}');
@@ -33,13 +33,13 @@ class MockGeofenceService implements GeofenceService {
   final List<PolygonGeofence> _polygonGeofences = [];
   final List<GeofenceWorkflow> _workflows = [];
   final Map<String, GeofenceWorkflowState> _workflowStates = {};
-  
+
   final _eventsController = StreamController<GeofenceEvent>.broadcast();
   final _polygonEventsController =
       StreamController<PolygonGeofenceEvent>.broadcast();
   final _workflowEventsController =
       StreamController<GeofenceWorkflowEvent>.broadcast();
-  
+
   bool _monitoring = false;
 
   @override
@@ -297,7 +297,7 @@ class MockGeofenceService implements GeofenceService {
           (g) => g?.identifier == identifier,
           orElse: () => null,
         );
-    
+
     if (geofence != null && geofence.notifyOnEntry) {
       _eventsController.add(GeofenceEvent(
         geofence: geofence,
@@ -313,7 +313,7 @@ class MockGeofenceService implements GeofenceService {
           (g) => g?.identifier == identifier,
           orElse: () => null,
         );
-    
+
     if (geofence != null && geofence.notifyOnExit) {
       _eventsController.add(GeofenceEvent(
         geofence: geofence,
@@ -329,7 +329,7 @@ class MockGeofenceService implements GeofenceService {
           (g) => g?.identifier == identifier,
           orElse: () => null,
         );
-    
+
     if (geofence != null && geofence.notifyOnDwell) {
       _eventsController.add(GeofenceEvent(
         geofence: geofence,
@@ -349,7 +349,7 @@ class MockGeofenceService implements GeofenceService {
           (p) => p?.identifier == identifier,
           orElse: () => null,
         );
-    
+
     if (polygon != null) {
       // Convert GeofenceAction to PolygonGeofenceEventType
       final eventType = action == GeofenceAction.enter
@@ -357,7 +357,7 @@ class MockGeofenceService implements GeofenceService {
           : action == GeofenceAction.exit
               ? PolygonGeofenceEventType.exit
               : PolygonGeofenceEventType.dwell;
-      
+
       final loc = location ?? _createDefaultLocationForPolygon(polygon);
       _polygonEventsController.add(PolygonGeofenceEvent(
         geofence: polygon,
@@ -377,16 +377,16 @@ class MockGeofenceService implements GeofenceService {
           (g) => g?.identifier == identifier,
           orElse: () => null,
         );
-    
+
     if (geofence == null) return false;
-    
+
     final distance = _calculateDistance(
       geofence.latitude,
       geofence.longitude,
       location.coords.latitude,
       location.coords.longitude,
     );
-    
+
     return distance <= geofence.radius;
   }
 
@@ -433,13 +433,13 @@ class MockGeofenceService implements GeofenceService {
     const earthRadius = 6371000.0; // meters
     final dLat = _toRadians(lat2 - lat1);
     final dLon = _toRadians(lon2 - lon1);
-    
+
     final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(_toRadians(lat1)) *
             math.cos(_toRadians(lat2)) *
             math.sin(dLon / 2) *
             math.sin(dLon / 2);
-    
+
     final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
     return earthRadius * c;
   }

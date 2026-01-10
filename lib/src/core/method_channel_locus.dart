@@ -803,15 +803,17 @@ class MethodChannelLocus implements LocusInterface {
   SpoofDetectionEvent? analyzeForSpoofing(
     Location location, {
     bool? isMockProvider,
-  }) => LocusFeatures.analyzeForSpoofing(
-    location,
-    isMockProvider: isMockProvider,
-  );
+  }) =>
+      LocusFeatures.analyzeForSpoofing(
+        location,
+        isMockProvider: isMockProvider,
+      );
 
   @override
   Future<void> startSignificantChangeMonitoring([
     SignificantChangeConfig config = const SignificantChangeConfig(),
-  ]) => LocusFeatures.startSignificantChangeMonitoring(config);
+  ]) =>
+      LocusFeatures.startSignificantChangeMonitoring(config);
 
   @override
   Future<void> stopSignificantChangeMonitoring() =>

@@ -1,5 +1,6 @@
 /// Comprehensive tests for LocationService API.
 library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:locus/locus.dart';
 import '../../helpers/helpers.dart';
@@ -44,7 +45,8 @@ void main() {
         final changes = <Location>[];
         final sub = service.motionChanges.listen(changes.add);
 
-        final stationaryLoc = LocationFactory().at(37.0, -122.0).stationary().build();
+        final stationaryLoc =
+            LocationFactory().at(37.0, -122.0).stationary().build();
         final movingLoc = LocationFactory().at(37.1, -122.1).moving().build();
 
         mockLocus.emitMotionChange(stationaryLoc);
@@ -65,11 +67,8 @@ void main() {
         final heartbeats = <Location>[];
         final sub = service.heartbeats.listen(heartbeats.add);
 
-        final loc = LocationFactory()
-            .at(37.0, -122.0)
-            .stationary()
-            .heartbeat()
-            .build();
+        final loc =
+            LocationFactory().at(37.0, -122.0).stationary().heartbeat().build();
 
         mockLocus.emitHeartbeat(loc);
 
@@ -93,7 +92,8 @@ void main() {
       });
 
       test('should accept custom samples parameter', () async {
-        final location = LocationFactory().at(40.7580, -73.9855).withAccuracy(5.0).build();
+        final location =
+            LocationFactory().at(40.7580, -73.9855).withAccuracy(5.0).build();
         mockLocus.emitLocation(location);
 
         final result = await service.getCurrentPosition(samples: 3);
@@ -163,14 +163,10 @@ void main() {
         final now = DateTime.now();
         final hourAgo = now.subtract(const Duration(hours: 1));
 
-        final loc1 = LocationFactory()
-            .at(37.0, -122.0)
-            .withTimestamp(hourAgo)
-            .build();
-        final loc2 = LocationFactory()
-            .at(37.1, -122.1)
-            .withTimestamp(now)
-            .build();
+        final loc1 =
+            LocationFactory().at(37.0, -122.0).withTimestamp(hourAgo).build();
+        final loc2 =
+            LocationFactory().at(37.1, -122.1).withTimestamp(now).build();
 
         mockLocus.emitLocation(loc1);
         mockLocus.emitLocation(loc2);
@@ -186,8 +182,10 @@ void main() {
       });
 
       test('should filter by accuracy', () async {
-        final loc1 = LocationFactory().at(37.0, -122.0).withAccuracy(5.0).build();
-        final loc2 = LocationFactory().at(37.1, -122.1).withAccuracy(25.0).build();
+        final loc1 =
+            LocationFactory().at(37.0, -122.0).withAccuracy(5.0).build();
+        final loc2 =
+            LocationFactory().at(37.1, -122.1).withAccuracy(25.0).build();
 
         mockLocus.emitLocation(loc1);
         mockLocus.emitLocation(loc2);
@@ -216,7 +214,8 @@ void main() {
     group('getSummary', () {
       test('should return location summary', () async {
         final loc1 = LocationFactory().at(37.0, -122.0).stationary().build();
-        final loc2 = LocationFactory().at(37.1, -122.1).moving().withSpeed(5.0).build();
+        final loc2 =
+            LocationFactory().at(37.1, -122.1).moving().withSpeed(5.0).build();
 
         mockLocus.emitLocation(loc1);
         mockLocus.emitLocation(loc2);
@@ -329,10 +328,7 @@ void main() {
           received = location;
         });
 
-        final location = LocationFactory()
-            .at(37.0, -122.0)
-            .heartbeat()
-            .build();
+        final location = LocationFactory().at(37.0, -122.0).heartbeat().build();
         mockLocus.emitHeartbeat(location);
 
         await Future.delayed(Duration.zero);

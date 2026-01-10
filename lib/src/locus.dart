@@ -113,6 +113,17 @@ class Locus {
   /// ```
   static final BatteryService battery = BatteryServiceImpl(() => _instance);
 
+  /// Diagnostics service for debugging and monitoring SDK health.
+  ///
+  /// Example:
+  /// ```dart
+  /// final snapshot = await Locus.diagnostics.getDiagnostics();
+  /// final logs = await Locus.diagnostics.getLog();
+  /// Locus.diagnostics.locationAnomalies().listen((a) => print(a));
+  /// ```
+  static final DiagnosticsService diagnostics =
+      DiagnosticsServiceImpl(() => _instance);
+
   // ============================================================
   // Event Stream
   // ============================================================

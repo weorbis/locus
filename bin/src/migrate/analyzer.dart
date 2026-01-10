@@ -3,14 +3,6 @@ import 'patterns.dart';
 import 'monorepo.dart';
 
 class MigrationAnalysisResult {
-  final String projectPath;
-  final DateTime timestamp;
-  final List<AnalyzedFile> analyzedFiles;
-  final List<PatternMatch> matches;
-  final List<MigrationWarning> warnings;
-  final List<MigrationError> errors;
-  final Set<String> importedPackages;
-
   MigrationAnalysisResult({
     required this.projectPath,
     required this.timestamp,
@@ -20,6 +12,13 @@ class MigrationAnalysisResult {
     required this.errors,
     required this.importedPackages,
   });
+  final String projectPath;
+  final DateTime timestamp;
+  final List<AnalyzedFile> analyzedFiles;
+  final List<PatternMatch> matches;
+  final List<MigrationWarning> warnings;
+  final List<MigrationError> errors;
+  final Set<String> importedPackages;
 
   int get totalFiles => analyzedFiles.length;
   int get filesWithLocus => analyzedFiles.where((f) => f.hasLocusUsage).length;
@@ -82,14 +81,6 @@ class MigrationAnalysisResult {
 }
 
 class AnalyzedFile {
-  final String path;
-  final String content;
-  final int lineCount;
-  final bool hasLocusUsage;
-  final Set<String> locusMethods;
-  final Set<String> imports;
-  final int locusMatchCount;
-
   AnalyzedFile({
     required this.path,
     required this.content,
@@ -99,6 +90,13 @@ class AnalyzedFile {
     required this.imports,
     required this.locusMatchCount,
   });
+  final String path;
+  final String content;
+  final int lineCount;
+  final bool hasLocusUsage;
+  final Set<String> locusMethods;
+  final Set<String> imports;
+  final int locusMatchCount;
 
   Map<String, dynamic> toJson() => {
         'path': path,
@@ -111,12 +109,6 @@ class AnalyzedFile {
 }
 
 class MigrationWarning {
-  final String filePath;
-  final int line;
-  final String message;
-  final String code;
-  final String? suggestion;
-
   MigrationWarning({
     required this.filePath,
     required this.line,
@@ -124,6 +116,11 @@ class MigrationWarning {
     required this.code,
     this.suggestion,
   });
+  final String filePath;
+  final int line;
+  final String message;
+  final String code;
+  final String? suggestion;
 
   Map<String, dynamic> toJson() => {
         'filePath': filePath,
@@ -135,17 +132,16 @@ class MigrationWarning {
 }
 
 class MigrationError {
-  final String filePath;
-  final int line;
-  final String message;
-  final String code;
-
   MigrationError({
     required this.filePath,
     required this.line,
     required this.message,
     required this.code,
   });
+  final String filePath;
+  final int line;
+  final String message;
+  final String code;
 
   Map<String, dynamic> toJson() => {
         'filePath': filePath,
@@ -156,11 +152,6 @@ class MigrationError {
 }
 
 class MigrationAnalyzer {
-  final List<MigrationPattern> _patterns;
-  final Set<String> _ignoredPatterns;
-  final Set<MigrationCategory> _onlyCategories;
-  final bool _verbose;
-
   MigrationAnalyzer({
     List<MigrationPattern>? patterns,
     Set<String>? ignoredPatterns,
@@ -173,6 +164,10 @@ class MigrationAnalyzer {
         _ignoredPatterns = ignoredPatterns ?? {},
         _onlyCategories = _parseCategories(onlyCategories),
         _verbose = verbose;
+  final List<MigrationPattern> _patterns;
+  final Set<String> _ignoredPatterns;
+  final Set<MigrationCategory> _onlyCategories;
+  final bool _verbose;
 
   static List<MigrationPattern> _filterPatternsByCategory(
     List<MigrationPattern> patterns,
@@ -208,7 +203,7 @@ class MigrationAnalyzer {
     final stopwatch = Stopwatch()..start();
 
     if (_verbose) {
-      print('[INFO] Starting analysis of ${projectDir.path}');
+      stdout.writeln('[INFO] Starting analysis of ${projectDir.path}');
     }
 
     final analyzedFiles = <AnalyzedFile>[];
@@ -227,7 +222,7 @@ class MigrationAnalyzer {
     );
 
     if (_verbose) {
-      print('[INFO] Found ${files.length} Dart files to analyze');
+      stdout.writeln('[INFO] Found ${files.length} Dart files to analyze');
     }
 
     for (final file in files) {
@@ -254,7 +249,7 @@ class MigrationAnalyzer {
         }
 
         if (_verbose) {
-          print(
+          stdout.writeln(
               '[INFO] Analyzed ${file.path} - ${fileResult.locusMatchCount} Locus matches');
         }
       } catch (e, stack) {
@@ -266,8 +261,8 @@ class MigrationAnalyzer {
         ));
 
         if (_verbose) {
-          print('[ERROR] Failed to analyze ${file.path}: $e');
-          print(stack);
+          stdout.writeln('[ERROR] Failed to analyze ${file.path}: $e');
+          stdout.writeln(stack);
         }
       }
     }
@@ -302,8 +297,9 @@ class MigrationAnalyzer {
     stopwatch.stop();
 
     if (_verbose) {
-      print('[INFO] Analysis completed in ${stopwatch.elapsedMilliseconds}ms');
-      print(
+      stdout.writeln(
+          '[INFO] Analysis completed in ${stopwatch.elapsedMilliseconds}ms');
+      stdout.writeln(
           '[INFO] Found $allMatches matches across ${analyzedFiles.where((f) => f.hasLocusUsage).length} files');
     }
 
@@ -359,7 +355,7 @@ class MigrationAnalyzer {
 
   Future<Set<String>> _parseGitignore(Directory dir) async {
     final gitignoreFile = File('${dir.path}/.gitignore');
-    if (!await gitignoreFile.exists()) {
+    if (!gitignoreFile.existsSync()) {
       return {};
     }
 
@@ -462,13 +458,13 @@ class MigrationAnalyzer {
     final stopwatch = Stopwatch()..start();
 
     if (_verbose) {
-      print('[INFO] Detecting monorepo structure...');
+      stdout.writeln('[INFO] Detecting monorepo structure...');
     }
 
     final packages = await MonorepoDetector.findPackages(rootDir);
 
     if (_verbose) {
-      print(
+      stdout.writeln(
           '[INFO] Found ${packages.length} package(s): ${packages.map((p) => p.displayName).join(', ')}');
     }
 
@@ -494,8 +490,9 @@ class MigrationAnalyzer {
         ));
 
         if (_verbose) {
-          print('[ERROR] Failed to analyze package ${package.displayName}: $e');
-          print(stack);
+          stdout.writeln(
+              '[ERROR] Failed to analyze package ${package.displayName}: $e');
+          stdout.writeln(stack);
         }
       }
     }
@@ -503,7 +500,7 @@ class MigrationAnalyzer {
     stopwatch.stop();
 
     if (_verbose) {
-      print(
+      stdout.writeln(
           '[INFO] Monorepo analysis completed in ${stopwatch.elapsedMilliseconds}ms');
     }
 
@@ -521,14 +518,6 @@ class MigrationAnalyzer {
 
 /// Result of analyzing a monorepo with multiple packages
 class MonorepoMigrationAnalysisResult {
-  final String rootPath;
-  final DateTime timestamp;
-  final bool isMonorepo;
-  final List<PackageInMonorepo> packages;
-  final Map<String, MigrationAnalysisResult> packageResults;
-  final List<MigrationWarning> warnings;
-  final List<MigrationError> errors;
-
   MonorepoMigrationAnalysisResult({
     required this.rootPath,
     required this.timestamp,
@@ -538,6 +527,13 @@ class MonorepoMigrationAnalysisResult {
     required this.warnings,
     required this.errors,
   });
+  final String rootPath;
+  final DateTime timestamp;
+  final bool isMonorepo;
+  final List<PackageInMonorepo> packages;
+  final Map<String, MigrationAnalysisResult> packageResults;
+  final List<MigrationWarning> warnings;
+  final List<MigrationError> errors;
 
   /// Get aggregated analysis across all packages
   MigrationAnalysisResult get aggregated {

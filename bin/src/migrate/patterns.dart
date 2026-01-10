@@ -16,13 +16,6 @@ enum MigrationCategory {
 }
 
 class PatternMatch {
-  final String filePath;
-  final int line;
-  final int column;
-  final String original;
-  final String replacement;
-  final String patternId;
-
   PatternMatch({
     required this.filePath,
     required this.line,
@@ -31,6 +24,12 @@ class PatternMatch {
     required this.replacement,
     required this.patternId,
   });
+  final String filePath;
+  final int line;
+  final int column;
+  final String original;
+  final String replacement;
+  final String patternId;
 
   Map<String, dynamic> toJson() => {
         'filePath': filePath,
@@ -55,14 +54,6 @@ class PatternMatch {
 }
 
 class MigrationPattern {
-  final String id;
-  final String name;
-  final String description;
-  final MigrationConfidence confidence;
-  final MigrationCategory category;
-  final String fromPattern;
-  final String toPatternTemplate;
-
   const MigrationPattern({
     required this.id,
     required this.name,
@@ -72,6 +63,13 @@ class MigrationPattern {
     required this.fromPattern,
     required this.toPatternTemplate,
   });
+  final String id;
+  final String name;
+  final String description;
+  final MigrationConfidence confidence;
+  final MigrationCategory category;
+  final String fromPattern;
+  final String toPatternTemplate;
 
   List<PatternMatch> findMatches(String content, String filePath) {
     final matches = <PatternMatch>[];

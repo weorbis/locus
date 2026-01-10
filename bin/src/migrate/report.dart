@@ -5,9 +5,8 @@ import 'analyzer.dart';
 import 'migrator.dart';
 
 class MigrationReportGenerator {
-  final bool _verbose;
-
   MigrationReportGenerator({bool verbose = false}) : _verbose = verbose;
+  final bool _verbose;
 
   Future<void> generateReport(
     MigrationAnalysisResult analysis,
@@ -21,7 +20,7 @@ class MigrationReportGenerator {
     await file.writeAsString(content);
 
     if (_verbose) {
-      print('[INFO] Report written to $outputPath');
+      stdout.writeln('[INFO] Report written to $outputPath');
     }
   }
 
@@ -61,7 +60,7 @@ class MigrationReportGenerator {
 
         if (fileMatches.isNotEmpty) {
           buffer.writeln();
-          buffer.writeln('${file.path}');
+          buffer.writeln(file.path);
           buffer.writeln('  Line | Pattern | Change');
 
           for (final match in fileMatches) {

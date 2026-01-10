@@ -70,9 +70,9 @@ class LocationFactory {
   LocationFactory moving() {
     _isMoving = true;
     _activity ??= const Activity(
-        type: ActivityType.walking,
-        confidence: 80,
-      );
+      type: ActivityType.walking,
+      confidence: 80,
+    );
     return this;
   }
 
@@ -81,9 +81,9 @@ class LocationFactory {
     _isMoving = false;
     _speed = 0.0;
     _activity ??= const Activity(
-        type: ActivityType.still,
-        confidence: 100,
-      );
+      type: ActivityType.still,
+      confidence: 100,
+    );
     return this;
   }
 
@@ -200,7 +200,7 @@ class LocationFactory {
   }) {
     final locations = <Location>[];
     var timestamp = startTime ?? DateTime.now();
-    
+
     for (final (lat, lng) in waypoints) {
       locations.add(
         LocationFactory()
@@ -213,7 +213,7 @@ class LocationFactory {
       );
       timestamp = timestamp.add(interval);
     }
-    
+
     return locations;
   }
 
@@ -228,7 +228,7 @@ class LocationFactory {
   }) {
     final locations = <Location>[];
     var timestamp = startTime ?? DateTime.now();
-    
+
     for (var i = 0; i < count; i++) {
       locations.add(
         LocationFactory()
@@ -241,7 +241,7 @@ class LocationFactory {
       );
       timestamp = timestamp.add(interval);
     }
-    
+
     return locations;
   }
 }
