@@ -107,44 +107,64 @@ class LocusStreams {
     });
   }
 
-  /// Ensures the native stream is started.
-  static Future<void> _ensureNativeStreamStarted() async {
-    // Wait for any in-progress operation
+  /// Acquires the stream operation lock, waiting if necessary.
+  /// Returns a function to release the lock when done.
+  static Future<void Function()> _acquireLock() async {
+    // Wait for any in-progress operation to complete
     while (_streamOperationLock != null) {
       await _streamOperationLock!.future;
     }
 
-    // Check if already running or no listeners
-    if (_nativeSubscription != null || _isStarting || _listenerCount <= 0) {
-      return;
-    }
+    // Create new lock
+    final lock = Completer<void>();
+    _streamOperationLock = lock;
 
-    _streamOperationLock = Completer<void>();
-    _isStarting = true;
+    // Return release function
+    return () {
+      if (_streamOperationLock == lock) {
+        lock.complete();
+        _streamOperationLock = null;
+      }
+    };
+  }
+
+  /// Ensures the native stream is started.
+  static Future<void> _ensureNativeStreamStarted() async {
+    // Acquire lock to prevent concurrent initialization
+    final releaseLock = await _acquireLock();
 
     try {
-      _nativeSubscription =
-          LocusChannels.events.receiveBroadcastStream().listen(
-        (event) async {
-          try {
-            final mapped = EventMapper.mapToEvent(event);
-            _processEvent(mapped);
-          } catch (e, stack) {
-            debugPrint('[Locus] Event mapping error: $e');
-            await _handleStreamError(e, stack, 'event_mapping');
-          }
-        },
-        onError: (Object error, StackTrace stackTrace) async {
-          debugPrint('[Locus] Stream error: $error');
-          await _handleStreamError(error, stackTrace, 'stream');
-        },
-      );
-    } catch (e) {
-      debugPrint('[Locus] Failed to start native stream: $e');
+      // Double-check inside lock: already running or no listeners
+      if (_nativeSubscription != null || _isStarting || _listenerCount <= 0) {
+        return;
+      }
+
+      _isStarting = true;
+
+      try {
+        _nativeSubscription =
+            LocusChannels.events.receiveBroadcastStream().listen(
+          (event) async {
+            try {
+              final mapped = EventMapper.mapToEvent(event);
+              _processEvent(mapped);
+            } catch (e, stack) {
+              debugPrint('[Locus] Event mapping error: $e');
+              await _handleStreamError(e, stack, 'event_mapping');
+            }
+          },
+          onError: (Object error, StackTrace stackTrace) async {
+            debugPrint('[Locus] Stream error: $error');
+            await _handleStreamError(error, stackTrace, 'stream');
+          },
+        );
+      } catch (e) {
+        debugPrint('[Locus] Failed to start native stream: $e');
+      } finally {
+        _isStarting = false;
+      }
     } finally {
-      _isStarting = false;
-      _streamOperationLock?.complete();
-      _streamOperationLock = null;
+      releaseLock();
     }
   }
 
@@ -280,29 +300,54 @@ class LocusStreams {
     _errorRecoveryManager = manager;
   }
 
+  /// Resets all static state. Called by Locus.destroy() to ensure
+  /// clean state for re-initialization.
+  static void reset() {
+    // Reset listener count and operation flags
+    _listenerCount = 0;
+    _isStarting = false;
+    _isStopping = false;
+    _streamOperationLock = null;
+
+    // Clear subscription reference (already cancelled by stopNativeStream)
+    _nativeSubscription = null;
+
+    // Clear controllers (already closed by stopNativeStream)
+    _eventController = null;
+    _blockedEventsController = null;
+
+    // Reset spoof detection state
+    _spoofDetector = null;
+    _spoofDetectionEnabled = false;
+
+    // Clear service references
+    _polygonGeofenceService = null;
+    _privacyZoneService = null;
+    _errorRecoveryManager = null;
+  }
+
   /// Maybe stops the native stream if no listeners remain.
   static Future<void> _maybeStopNativeStream() async {
-    // Wait for any in-progress operation
-    while (_streamOperationLock != null) {
-      await _streamOperationLock!.future;
-    }
-
-    // Check if we should stop
-    if (_listenerCount > 0 || _nativeSubscription == null || _isStopping) {
-      return;
-    }
-
-    _streamOperationLock = Completer<void>();
-    _isStopping = true;
+    // Acquire lock to prevent concurrent stop operations
+    final releaseLock = await _acquireLock();
 
     try {
-      final subscription = _nativeSubscription;
-      _nativeSubscription = null;
-      await subscription?.cancel();
+      // Double-check inside lock: should we stop?
+      if (_listenerCount > 0 || _nativeSubscription == null || _isStopping) {
+        return;
+      }
+
+      _isStopping = true;
+
+      try {
+        final subscription = _nativeSubscription;
+        _nativeSubscription = null;
+        await subscription?.cancel();
+      } finally {
+        _isStopping = false;
+      }
     } finally {
-      _isStopping = false;
-      _streamOperationLock?.complete();
-      _streamOperationLock = null;
+      releaseLock();
     }
   }
 
@@ -315,11 +360,6 @@ class LocusStreams {
 
   /// Stops the native event stream.
   static Future<void> stopNativeStream({bool force = false}) async {
-    // Wait for any in-progress operation
-    while (_streamOperationLock != null) {
-      await _streamOperationLock!.future;
-    }
-
     // Non-forced stop should use the standard mechanism
     if (!force) {
       _listenerCount -= 1;
@@ -328,8 +368,8 @@ class LocusStreams {
       return;
     }
 
-    // Forced stop - clean up everything
-    _streamOperationLock = Completer<void>();
+    // Forced stop - acquire lock and clean up everything
+    final releaseLock = await _acquireLock();
 
     try {
       // Cancel subscription
@@ -350,8 +390,7 @@ class LocusStreams {
       // Reset spoof detection
       disableSpoofDetection();
     } finally {
-      _streamOperationLock?.complete();
-      _streamOperationLock = null;
+      releaseLock();
     }
   }
 }

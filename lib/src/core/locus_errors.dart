@@ -340,6 +340,49 @@ class InvalidGeofenceWorkflowException extends LocusException {
         );
 }
 
+/// Thrown when geofence data is invalid.
+///
+/// This exception indicates that a geofence could not be created due to
+/// invalid or missing required data. This typically occurs when parsing
+/// geofence data from maps or JSON with malformed values.
+///
+/// Example scenarios:
+/// - Missing or empty identifier
+/// - Latitude outside valid range (-90 to 90)
+/// - Longitude outside valid range (-180 to 180)
+/// - Radius is zero, negative, or unreasonably large
+class GeofenceValidationException extends LocusException {
+  /// Creates a [GeofenceValidationException] with validation details.
+  ///
+  /// The [field] parameter identifies which field failed validation, and
+  /// [reason] provides context about why validation failed.
+  ///
+  /// Example:
+  /// ```dart
+  /// // This might throw GeofenceValidationException
+  /// final geofence = Geofence.fromMap({
+  ///   'identifier': '', // Invalid: empty identifier
+  ///   'latitude': 91.0, // Invalid: out of range
+  ///   'longitude': -122.4,
+  ///   'radius': 100,
+  /// });
+  ///
+  /// // ✅ Correct usage
+  /// final geofence = Geofence.fromMap({
+  ///   'identifier': 'home',
+  ///   'latitude': 37.7749,
+  ///   'longitude': -122.4194,
+  ///   'radius': 100,
+  /// });
+  /// ```
+  const GeofenceValidationException({required String field, required String reason})
+      : super(
+          'Invalid geofence: $field - $reason',
+          suggestion:
+              'Ensure geofence has a non-empty identifier, valid coordinates (lat: -90 to 90, lng: -180 to 180), and positive radius (< 100000m).',
+        );
+}
+
 /// Thrown when native plugin is not available.
 ///
 /// This exception indicates that the Locus native plugin cannot be accessed.

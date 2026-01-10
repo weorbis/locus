@@ -181,6 +181,8 @@ void main() {
 
   group('HTTP Sync', () {
     test('sync triggers server sync', () async {
+      // Sync is paused by default, must resume first
+      await Locus.dataSync.resume();
       await Locus.dataSync.now();
 
       expect(methodCalls.any((c) => c.method == 'sync'), true);

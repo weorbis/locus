@@ -35,10 +35,15 @@ class PrivacyZoneService {
   ///
   /// [onPersist] - Optional callback for persisting zones to storage.
   /// [seed] - Optional random seed for deterministic testing.
+  /// [includePrivacyMetadata] - Whether to include privacy metadata in
+  ///   obfuscated locations. Defaults to false for security. When true,
+  ///   adds `_privacyObfuscated` and `_privacyObfuscationRadius` to extras.
   PrivacyZoneService({
     Future<void> Function(List<PrivacyZone>)? onPersist,
     int? seed,
+    bool includePrivacyMetadata = false,
   })  : _onPersist = onPersist,
+        _includePrivacyMetadata = includePrivacyMetadata,
         _random = seed != null ? math.Random(seed) : math.Random();
 
   /// In-memory storage of privacy zones.
@@ -52,6 +57,11 @@ class PrivacyZoneService {
 
   /// Optional persistence callback - called when zones change.
   final Future<void> Function(List<PrivacyZone>)? _onPersist;
+
+  /// Whether to include privacy metadata in obfuscated locations.
+  /// When false (default), no metadata is added to prevent leaking
+  /// that the location is within a privacy zone.
+  final bool _includePrivacyMetadata;
 
   /// Stream of privacy zone change events.
   Stream<PrivacyZoneEvent> get zoneChanges => _zoneChangesController.stream;
@@ -298,11 +308,13 @@ class PrivacyZoneService {
       battery: location.battery,
       geofence: location.geofence,
       odometer: location.odometer,
-      extras: {
-        ...?location.extras,
-        '_privacyObfuscated': true,
-        '_privacyObfuscationRadius': radius,
-      },
+      extras: _includePrivacyMetadata
+          ? {
+              ...?location.extras,
+              '_privacyObfuscated': true,
+              '_privacyObfuscationRadius': radius,
+            }
+          : location.extras,
     );
   }
 

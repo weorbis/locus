@@ -127,6 +127,13 @@ class LocusLifecycle {
     await LocusFeatures.disposeSignificantChangeManager();
     await LocusFeatures.disposeErrorRecoveryManager();
     LocusFeatures.resetSpoofDetector();
+
+    // Reset LocusStreams static state
+    LocusStreams.reset();
+
+    // Reset lifecycle static state
+    stopLifecycleObserving();
+    _isForeground = true;
   }
 
   /// Whether the app is currently in the foreground.

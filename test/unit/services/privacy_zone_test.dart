@@ -406,7 +406,13 @@ void main() {
       });
 
       test('processLocation obfuscates location in obfuscate zone', () async {
-        await service.addZone(PrivacyZone.create(
+        // Use a service with includePrivacyMetadata to verify metadata is added
+        final metadataService = PrivacyZoneService(
+          seed: 42,
+          includePrivacyMetadata: true,
+        );
+
+        await metadataService.addZone(PrivacyZone.create(
           identifier: 'home',
           latitude: 37.7749,
           longitude: -122.4194,
@@ -419,13 +425,15 @@ void main() {
           latitude: 37.7749,
           longitude: -122.4194,
         );
-        final result = service.processLocation(location);
+        final result = metadataService.processLocation(location);
 
         expect(result.wasObfuscated, true);
         expect(result.processedLocation, isNotNull);
         expect(result.processedLocation!.coords.latitude,
             isNot(equals(location.coords.latitude)));
         expect(result.processedLocation!.extras?['_privacyObfuscated'], true);
+
+        await metadataService.dispose();
       });
 
       test('exclude action takes precedence over obfuscate', () async {

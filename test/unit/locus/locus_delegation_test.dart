@@ -60,8 +60,8 @@ void main() {
     await Locus.startSchedule();
     await Locus.stopSchedule();
 
+    await Locus.dataSync.resume();  // Must resume before now() since sync is paused by default
     await Locus.dataSync.now();
-    await Locus.dataSync.resume();
     await Locus.location.destroyLocations();
 
     await Locus.registerHeadlessTask((event) async {});

@@ -472,8 +472,24 @@ class MethodChannelLocus implements LocusInterface {
   Stream<HttpEvent> get httpStream {
     return events
         .where((event) => event.type == EventType.http)
-        .cast<GeolocationEvent<HttpEvent>>()
-        .map((event) => event.data);
+        .map((event) {
+          final data = event.data;
+          if (data is HttpEvent) return data;
+          if (data is Map<String, dynamic>) {
+            return HttpEvent.fromMap(data);
+          }
+          // Handle Map without proper type - attempt safe conversion
+          if (data is Map) {
+            try {
+              return HttpEvent.fromMap(Map<String, dynamic>.from(data));
+            } catch (_) {
+              return null;
+            }
+          }
+          return null;
+        })
+        .where((event) => event != null)
+        .cast<HttpEvent>();
   }
 
   @override

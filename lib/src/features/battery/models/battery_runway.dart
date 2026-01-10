@@ -217,26 +217,42 @@ class BatteryRunwayCalculator {
     double? drainRatePerHour;
     double confidence = 0.0;
 
-    if (drainPercent != null && trackingMinutes >= minTrackingMinutes) {
+    // Ensure trackingMinutes is positive to avoid division by zero
+    if (drainPercent != null &&
+        drainPercent > 0 &&
+        trackingMinutes >= minTrackingMinutes) {
+      // Safe: trackingMinutes >= minTrackingMinutes (5), so division is safe
       drainRatePerHour = drainPercent / (trackingMinutes / 60);
       // Confidence increases with more tracking time, capped at 1.0
       confidence = (trackingMinutes / 60).clamp(0.0, 1.0);
     }
 
     // Use calculated rate or fall back to default
-    final effectiveDrainRate = drainRatePerHour ?? defaultDrainRate;
+    // Ensure drain rate is positive to avoid division issues
+    final effectiveDrainRate =
+        (drainRatePerHour != null && drainRatePerHour > 0)
+            ? drainRatePerHour
+            : defaultDrainRate;
     final lowPowerDrainRate = effectiveDrainRate * lowPowerMultiplier;
 
     // Calculate available battery (above reserve)
     final availableLevel = (currentLevel - reserveLevel).clamp(0, 100);
 
-    // Calculate durations
-    final durationMinutes = effectiveDrainRate > 0
-        ? (availableLevel / effectiveDrainRate * 60).round()
-        : 0;
-    final lowPowerMinutes = lowPowerDrainRate > 0
-        ? (availableLevel / lowPowerDrainRate * 60).round()
-        : 0;
+    // Calculate durations - handle zero/negative drain rates safely
+    // If drain rate is zero or negative, return max duration (infinity representation)
+    int durationMinutes;
+    int lowPowerMinutes;
+
+    if (effectiveDrainRate <= 0) {
+      // Zero drain rate means infinite runway (use a large value)
+      durationMinutes = 999 * 60; // 999 hours in minutes
+      lowPowerMinutes = 999 * 60;
+    } else {
+      durationMinutes = (availableLevel / effectiveDrainRate * 60).round();
+      lowPowerMinutes = lowPowerDrainRate > 0
+          ? (availableLevel / lowPowerDrainRate * 60).round()
+          : 999 * 60;
+    }
 
     // Generate recommendation
     final recommendation = _generateRecommendation(
