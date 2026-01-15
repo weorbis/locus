@@ -4,17 +4,29 @@ Last updated: January 7, 2026
 
 Configure reliable HTTP sync with batching, retries, headers, and offline queueing.
 
+> **Note:** The `url` parameter is optional. If omitted, Locus reads from native GPS but doesn't upload anywhere. This is useful for local-only testing.
+
 ## Baseline configuration
 
 ```dart
 await Locus.ready(ConfigPresets.balanced.copyWith(
-  url: 'https://api.example.com/locations',
+  url: 'https://your-server.com/locations',
   headers: {'Authorization': 'Bearer <token>'},
   maxBatchSize: 50,
   autoSyncThreshold: 10,
   retryDelay: const Duration(seconds: 10),
   retryDelayMultiplier: 2.0,
   maxRetry: 5,
+));
+```
+
+## Quick testing
+
+For testing without a backend, use [webhook.site](https://webhook.site) to get a test endpoint:
+
+```dart
+await Locus.ready(ConfigPresets.balanced.copyWith(
+  url: 'https://webhook.site/your-unique-id',
 ));
 ```
 

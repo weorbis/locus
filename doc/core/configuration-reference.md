@@ -726,7 +726,7 @@ Config(maxMonitoredGeofences: 50)
 
 **Example**:
 ```dart
-Config(url: 'https://api.example.com/locations')
+Config(url: 'https://your-server.com/locations')
 ```
 
 ---
@@ -780,12 +780,12 @@ Config(
 **Example**:
 ```dart
 Config(
-  url: 'https://api.example.com/locations',
+  url: 'https://your-server.com/locations',
   params: {
     'api_key': 'YOUR_KEY',
     'version': '2',
   },
-  // Results in: https://api.example.com/locations?api_key=YOUR_KEY&version=2
+  // Results in: https://your-server.com/locations?api_key=YOUR_KEY&version=2
 )
 ```
 
@@ -1477,7 +1477,7 @@ await Locus.ready(
     maxMonitoredGeofences: 50,
     
     // HTTP Sync
-    url: 'https://api.example.com/locations',
+    url: 'https://your-server.com/locations',
     method: 'POST',
     headers: {
       'Authorization': 'Bearer YOUR_TOKEN',

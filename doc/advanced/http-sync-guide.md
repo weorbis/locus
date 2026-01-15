@@ -2,6 +2,8 @@
 
 Complete guide to configuring, customizing, and debugging HTTP synchronization in the Locus SDK.
 
+> **Note:** The `url` parameter is optional. If omitted, Locus reads from native GPS but doesn't upload. This is useful for local-only testing.
+
 ## Table of Contents
 
 1. [Overview](#overview)
@@ -38,22 +40,25 @@ Locus includes built-in HTTP synchronization for sending location data to your b
 
 ```dart
 await Locus.ready(ConfigPresets.balanced.copyWith(
-  url: 'https://api.example.com/locations',
+  url: 'https://your-server.com/locations',
 ));
 ```
 
-This enables automatic sync with default settings:
+### Quick Testing
 
-- POST requests
-- Batch sync enabled
-- Max 100 locations per batch
-- Automatic retry on failure
+For testing without a backend, use [webhook.site](https://webhook.site):
+
+```dart
+await Locus.ready(ConfigPresets.balanced.copyWith(
+  url: 'https://webhook.site/your-unique-id',
+));
+```
 
 ### Complete Configuration
 
 ```dart
 await Locus.ready(ConfigPresets.balanced.copyWith(
-  url: 'https://api.example.com/locations',
+  url: 'https://your-server.com/locations',
   method: 'POST',
   headers: {
     'Authorization': 'Bearer YOUR_TOKEN',
@@ -121,7 +126,7 @@ Locations are synced automatically based on thresholds:
 
 ```dart
 await Locus.ready(ConfigPresets.balanced.copyWith(
-  url: 'https://api.example.com/locations',
+  url: 'https://your-server.com/locations',
   autoSync: true,
   batchSync: true,
   maxBatchSize: 100,
@@ -142,7 +147,7 @@ Full control over when to sync:
 
 ```dart
 await Locus.ready(ConfigPresets.balanced.copyWith(
-  url: 'https://api.example.com/locations',
+  url: 'https://your-server.com/locations',
   autoSync: false,
 ));
 
@@ -163,7 +168,7 @@ Sync each location immediately:
 
 ```dart
 await Locus.ready(ConfigPresets.balanced.copyWith(
-  url: 'https://api.example.com/locations',
+  url: 'https://your-server.com/locations',
   autoSync: true,
   batchSync: false, // Sync each location
 ));
@@ -365,7 +370,7 @@ void main() async {
   await Locus.registerHeadlessSyncBodyBuilder(headlessSyncBuilder);
   await Locus.ready(ConfigPresets.balanced.copyWith(
     enableHeadless: true,
-    url: 'https://api.example.com/locations',
+    url: 'https://your-server.com/locations',
   ));
 }
 ```
@@ -451,7 +456,7 @@ await Locus.ready(ConfigPresets.balanced.copyWith(
   params: {
     'api_key': 'YOUR_API_KEY',
   },
-  // Results in: POST https://api.example.com/locations?api_key=YOUR_API_KEY
+  // Results in: POST https://your-server.com/locations?api_key=YOUR_API_KEY
 ));
 ```
 
@@ -475,7 +480,7 @@ String? _accessToken;
 
 Future<void> _refreshToken() async {
   final response = await http.post(
-    Uri.parse('https://api.example.com/auth/refresh'),
+    Uri.parse('https://your-server.com/auth/refresh'),
     body: {'refresh_token': refreshToken},
   );
 
@@ -828,7 +833,7 @@ Future<void> syncLocationAndAppData() async {
 
   // Send custom payload
   await http.post(
-    Uri.parse('https://api.example.com/batch-sync'),
+    Uri.parse('https://your-server.com/batch-sync'),
     body: jsonEncode(payload),
   );
 

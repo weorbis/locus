@@ -574,7 +574,7 @@ Locations not syncing to server, or sync errors in logs.
 
 ```dart
 await Locus.ready(ConfigPresets.balanced.copyWith(
-  url: 'https://api.example.com/locations',
+  url: 'https://your-server.com/locations',
   method: 'POST',
 ));
 ```

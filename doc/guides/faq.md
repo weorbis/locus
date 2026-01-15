@@ -219,7 +219,7 @@ Customize any preset:
 ```dart
 await Locus.ready(ConfigPresets.balanced.copyWith(
   distanceFilter: 25,
-  url: 'https://api.example.com/locations',
+  url: 'https://your-server.com/locations',
 ));
 ```
 
@@ -262,7 +262,7 @@ See [Headless Execution Guide](../advanced/headless-execution.md).
 
 ```dart
 await Locus.ready(ConfigPresets.balanced.copyWith(
-  url: 'https://api.example.com/locations',
+  url: 'https://your-server.com/locations',
   method: 'POST',
   headers: {
     'Authorization': 'Bearer YOUR_TOKEN',
@@ -275,6 +275,8 @@ await Locus.ready(ConfigPresets.balanced.copyWith(
 ```
 
 Locations are automatically synced in batches when queue reaches threshold.
+
+For testing without a backend, use [webhook.site](https://webhook.site) to get a test endpoint.
 
 ---
 

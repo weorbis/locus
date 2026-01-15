@@ -34,26 +34,26 @@
 
 ## Documentation
 
-For full documentation, visit [locus.dev](https://pub.dev/documentation/locus/latest/) or check the local [docs](doc/intro.md) folder:
+For full documentation, visit the [Locus GitHub repository](https://github.com/weorbis/locus):
 
-- **[Quick Start](doc/guides/quickstart.md)** - Get running in 5 minutes.
-- **[Migration (v1.x to v2.0)](doc/guides/migration.md)** - Move to the service-based API.
-- **[Architecture](doc/core/architecture.md)** - Project structure and design.
-- **[Configuration](doc/core/configuration.md)** - Configuration options and presets.
-- **[Geofencing](doc/advanced/geofencing.md)** - Circular and polygon geofences.
-- **[Privacy Zones](doc/advanced/privacy-zones.md)** - Location privacy features.
-- **[Trip Tracking](doc/advanced/trips.md)** - Trip detection and recording.
-- **[Battery Optimization](doc/advanced/battery-optimization.md)** - Adaptive tracking.
-- **[Platform Setup](doc/setup/platform-configuration.md)** - iOS & Android permissions.
-- **[Troubleshooting](doc/guides/troubleshooting.md)** - Common issues and fixes.
-- **[FAQ](doc/guides/faq.md)** - Frequently asked questions.
-- **[Headless Execution](doc/guides/headless-execution.md)** - Running logic when the app is terminated.
-- **[Platform Behaviors](doc/guides/platform-specific-behaviors.md)** - Android/iOS runtime differences.
-- **[HTTP Synchronization](doc/guides/http-synchronization.md)** - Request formats, retry, and batching.
-- **[Performance Optimization](doc/guides/performance-optimization.md)** - Tuning for battery and accuracy.
-- **[Activity Recognition](doc/guides/activity-recognition.md)** - Activity types and best practices.
-- **[Event Streams Reference](doc/reference/event-streams.md)** - When streams emit and how to subscribe safely.
-- **[Error Codes](doc/reference/error-codes.md)** - Exception types and recovery guidance.
+- **[Quick Start](https://github.com/weorbis/locus/blob/main/doc/guides/quickstart.md)** - Get running in 5 minutes.
+- **[Migration (v1.x to v2.0)](https://github.com/weorbis/locus/blob/main/doc/guides/migration.md)** - Move to the service-based API.
+- **[Architecture](https://github.com/weorbis/locus/blob/main/doc/core/architecture.md)** - Project structure and design.
+- **[Configuration](https://github.com/weorbis/locus/blob/main/doc/core/configuration.md)** - Configuration options and presets.
+- **[Geofencing](https://github.com/weorbis/locus/blob/main/doc/advanced/geofencing.md)** - Circular and polygon geofences.
+- **[Privacy Zones](https://github.com/weorbis/locus/blob/main/doc/advanced/privacy-zones.md)** - Location privacy features.
+- **[Trip Tracking](https://github.com/weorbis/locus/blob/main/doc/advanced/trips.md)** - Trip detection and recording.
+- **[Battery Optimization](https://github.com/weorbis/locus/blob/main/doc/advanced/battery-optimization.md)** - Adaptive tracking.
+- **[Platform Setup](https://github.com/weorbis/locus/blob/main/doc/setup/platform-configuration.md)** - iOS & Android permissions.
+- **[Troubleshooting](https://github.com/weorbis/locus/blob/main/doc/guides/troubleshooting.md)** - Common issues and fixes.
+- **[FAQ](https://github.com/weorbis/locus/blob/main/doc/guides/faq.md)** - Frequently asked questions.
+- **[Headless Execution](https://github.com/weorbis/locus/blob/main/doc/guides/headless-execution.md)** - Running logic when the app is terminated.
+- **[Platform Behaviors](https://github.com/weorbis/locus/blob/main/doc/guides/platform-specific-behaviors.md)** - Android/iOS runtime differences.
+- **[HTTP Synchronization](https://github.com/weorbis/locus/blob/main/doc/guides/http-synchronization.md)** - Request formats, retry, and batching.
+- **[Performance Optimization](https://github.com/weorbis/locus/blob/main/doc/guides/performance-optimization.md)** - Tuning for battery and accuracy.
+- **[Activity Recognition](https://github.com/weorbis/locus/blob/main/doc/guides/activity-recognition.md)** - Activity types and best practices.
+- **[Event Streams Reference](https://github.com/weorbis/locus/blob/main/doc/reference/event-streams.md)** - When streams emit and how to subscribe safely.
+- **[Error Codes](https://github.com/weorbis/locus/blob/main/doc/reference/error-codes.md)** - Exception types and recovery guidance.
 
 ## Quick Start
 
@@ -70,10 +70,8 @@ dependencies:
 import 'package:locus/locus.dart';
 
 void main() async {
-  // 1. Initialize
-  await Locus.ready(ConfigPresets.balanced.copyWith(
-    url: 'https://api.yourservice.com/locations',
-  ));
+  // 1. Initialize (url is optional - omit for local-only testing)
+  await Locus.ready(ConfigPresets.balanced);
 
   // 2. Start tracking
   await Locus.start();
@@ -83,6 +81,26 @@ void main() async {
     print('Location: ${location.coords.latitude}, ${location.coords.longitude}');
   });
 }
+```
+
+> **Note:** The `url` parameter is optional. It's only needed for Locus' HTTP sync layer (batching + retrying location data to your backend). For local-only testing, omit it entirely.
+
+### 3. Add HTTP Sync
+
+To upload locations to your backend, add the `url` parameter:
+
+```dart
+await Locus.ready(ConfigPresets.balanced.copyWith(
+  url: 'https://your-server.com/locations',
+));
+```
+
+For quick testing without a backend, use [webhook.site](https://webhook.site) to get a test endpoint:
+
+```dart
+await Locus.ready(ConfigPresets.balanced.copyWith(
+  url: 'https://webhook.site/your-unique-id',
+));
 ```
 
 ### 3. Add Geofences

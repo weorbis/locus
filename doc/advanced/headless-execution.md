@@ -335,7 +335,7 @@ void main() async {
   
   await Locus.ready(ConfigPresets.balanced.copyWith(
     enableHeadless: true,
-    url: 'https://api.example.com/locations',
+    url: 'https://your-server.com/locations',
     autoSync: true,
     batchSync: true,
   ));
@@ -546,7 +546,7 @@ void headlessCallback(HeadlessEvent event) async {
 Future<void> _sendToServer(Location location) async {
   try {
     await http.post(
-      Uri.parse('https://api.example.com/headless-event'),
+      Uri.parse('https://your-server.com/headless-event'),
       body: jsonEncode(location.toJson()),
     );
   } catch (e) {

@@ -716,7 +716,7 @@ Timer.periodic(Duration(minutes: 5), (timer) async {
 ```dart
 // ✅ Start with preset, customize incrementally
 await Locus.ready(ConfigPresets.balanced.copyWith(
-  url: 'https://api.example.com/locations',
+  url: 'https://your-server.com/locations',
 ));
 
 // ❌ Don't start from scratch

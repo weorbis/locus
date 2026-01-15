@@ -37,16 +37,28 @@ await Locus.ready(config);
 
 ## HTTP Synchronization
 
-Locus can automatically sync data to your backend.
+Locus can automatically sync location data to your backend with batching and retry logic.
+
+> **Note:** The `url` parameter is optional. Omit it for local-only testing.
 
 ```dart
 await Locus.ready(ConfigPresets.balanced.copyWith(
-  url: 'https://api.example.com/ingest',
+  url: 'https://your-server.com/locations',
   headers: {
     'Authorization': 'Bearer YOUR_TOKEN',
   },
   batchSync: true,
   maxBatchSize: 50,
+));
+```
+
+### Testing without a backend
+
+Use [webhook.site](https://webhook.site) to get a test endpoint:
+
+```dart
+await Locus.ready(ConfigPresets.balanced.copyWith(
+  url: 'https://webhook.site/your-unique-id',
 ));
 ```
 

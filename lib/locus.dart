@@ -20,6 +20,28 @@
 /// });
 /// ```
 ///
+/// ## Documentation
+///
+/// For full documentation, visit the [Locus GitHub repository](https://github.com/weorbis/locus):
+/// - [Quick Start](https://github.com/weorbis/locus/blob/main/doc/guides/quickstart.md)
+/// - [Migration from v1](https://github.com/weorbis/locus/blob/main/doc/guides/migration.md)
+/// - [Architecture](https://github.com/weorbis/locus/blob/main/doc/core/architecture.md)
+/// - [Configuration](https://github.com/weorbis/locus/blob/main/doc/core/configuration.md)
+/// - [Geofencing](https://github.com/weorbis/locus/blob/main/doc/advanced/geofencing.md)
+/// - [Privacy Zones](https://github.com/weorbis/locus/blob/main/doc/advanced/privacy-zones.md)
+/// - [Trips](https://github.com/weorbis/locus/blob/main/doc/advanced/trips.md)
+/// - [Battery Optimization](https://github.com/weorbis/locus/blob/main/doc/advanced/battery-optimization.md)
+/// - [Platform Setup](https://github.com/weorbis/locus/blob/main/doc/setup/platform-configuration.md)
+/// - [Troubleshooting](https://github.com/weorbis/locus/blob/main/doc/guides/troubleshooting.md)
+/// - [FAQ](https://github.com/weorbis/locus/blob/main/doc/guides/faq.md)
+/// - [Headless Execution](https://github.com/weorbis/locus/blob/main/doc/guides/headless-execution.md)
+/// - [Platform Behaviors](https://github.com/weorbis/locus/blob/main/doc/guides/platform-specific-behaviors.md)
+/// - [HTTP Sync](https://github.com/weorbis/locus/blob/main/doc/guides/http-synchronization.md)
+/// - [Performance](https://github.com/weorbis/locus/blob/main/doc/guides/performance-optimization.md)
+/// - [Activity Recognition](https://github.com/weorbis/locus/blob/main/doc/guides/activity-recognition.md)
+/// - [Event Streams](https://github.com/weorbis/locus/blob/main/doc/reference/event-streams.md)
+/// - [Error Codes](https://github.com/weorbis/locus/blob/main/doc/reference/error-codes.md)
+///
 /// ## Philosophy
 ///
 /// Locus provides building blocks, not business logic. Your app composes
