@@ -83,7 +83,7 @@ class LocationQuery {
 
   /// Filters a list of locations according to this query.
   List<Location> apply(List<Location> locations) {
-    var filtered = locations.where((loc) {
+    final filtered = locations.where((loc) {
       // Time range filter
       if (from != null && loc.timestamp.isBefore(from!)) return false;
       if (to != null && loc.timestamp.isAfter(to!)) return false;
@@ -116,16 +116,22 @@ class LocationQuery {
       }
     });
 
-    // Pagination
-    if (offset > 0 && offset < filtered.length) {
-      filtered = filtered.sublist(offset);
-    } else if (offset >= filtered.length) {
-      filtered = [];
+    // Apply pagination (offset + limit) in a single sublist call to avoid
+    // redundant allocations. Previously this used two separate sublist() calls.
+    final length = filtered.length;
+    if (offset >= length) {
+      return const [];
     }
 
-    // Limit
-    if (limit != null && limit! < filtered.length) {
-      filtered = filtered.sublist(0, limit);
+    // Calculate the final range for a single sublist operation
+    final startIndex = offset;
+    final endIndex = limit != null
+        ? (startIndex + limit!).clamp(startIndex, length)
+        : length;
+
+    // Only create a sublist if we're actually trimming the list
+    if (startIndex > 0 || endIndex < length) {
+      return filtered.sublist(startIndex, endIndex);
     }
 
     return filtered;
