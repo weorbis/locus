@@ -133,8 +133,8 @@ extension SwiftLocusPlugin {
   func dispatchHeadlessEvent(_ event: [String: Any]) {
     guard configManager.enableHeadless else { return }
     
-    let dispatcher = UserDefaults.standard.object(forKey: SwiftLocusPlugin.headlessDispatcherKey) as? Int64 ?? 0
-    let callback = UserDefaults.standard.object(forKey: SwiftLocusPlugin.headlessCallbackKey) as? Int64 ?? 0
+    let dispatcher = SecureStorage.shared.getInt64(forKey: SecureStorage.headlessDispatcherKey) ?? 0
+    let callback = SecureStorage.shared.getInt64(forKey: SecureStorage.headlessCallbackKey) ?? 0
     guard dispatcher != 0, callback != 0 else { return }
     
     if headlessEngine == nil {

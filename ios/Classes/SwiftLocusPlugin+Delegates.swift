@@ -61,8 +61,14 @@ extension SwiftLocusPlugin {
 
   public func onPreSyncValidation(locations: [[String: Any]], extras: [String: Any], completion: @escaping (Bool) -> Void) {
     guard let channel = methodChannel else {
-      // If channel is missing (e.g. app terminated), proceed by default
-      completion(true)
+      // No method channel available (app terminated).
+      // Use headless validation if a callback is registered, otherwise proceed with sync.
+      if headlessValidationDispatcher.isAvailable {
+        headlessValidationDispatcher.validate(locations: locations, extras: extras, completion: completion)
+      } else {
+        // No headless validation available, proceed with sync
+        completion(true)
+      }
       return
     }
     

@@ -61,4 +61,5 @@ tasks.withType<KotlinCompile>().configureEach {
 dependencies {
     add("implementation", "com.google.android.gms:play-services-location:21.3.0")
     add("implementation", "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    add("implementation", "androidx.security:security-crypto:1.1.0-alpha06")
 }

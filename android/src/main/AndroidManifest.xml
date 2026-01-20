@@ -52,6 +52,11 @@
             android:name="dev.locus.service.HeadlessService"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <service
+            android:name="dev.locus.service.HeadlessValidationService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>
 </manifest>
 
