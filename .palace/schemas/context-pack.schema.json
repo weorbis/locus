@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://palace/schemas/context-pack.schema.json",
+  "title": "ContextPack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "kind",
+    "goal",
+    "roomsVisited",
+    "filesReferenced",
+    "findings",
+    "plan",
+    "scanTime",
+    "provenance"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "kind": {
+      "type": "string",
+      "const": "palace/context-pack"
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "roomsVisited": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "filesReferenced": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "symbolsReferenced": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "summary",
+          "severity"
+        ],
+        "properties": {
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "detail": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warn",
+              "error"
+            ]
+          },
+          "file": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "plan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "step",
+          "status"
+        ],
+        "properties": {
+          "step": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_progress",
+              "done"
+            ]
+          }
+        }
+      }
+    },
+    "verification": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "status"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "unknown"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "source",
+        "fileCount"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "full",
+            "diff"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "full-scan",
+            "git-diff",
+            "change-signal"
+          ]
+        },
+        "fileCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diffRange": {
+          "type": "string"
+        }
+      }
+    },
+    "corridors": {
+      "type": "array",
+      "description": "Context imported from neighbor palaces via Corridors",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "files",
+          "fromCache",
+          "fetchedAt"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Neighbor name"
+          },
+          "source": {
+            "type": "string",
+            "description": "URL or local path"
+          },
+          "goal": {
+            "type": "string",
+            "description": "Remote context pack's goal"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Namespaced file paths (corridor://{name}/{path})"
+          },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Remote room names"
+          },
+          "fromCache": {
+            "type": "boolean"
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "type": "string",
+            "description": "Any fetch errors (non-fatal)"
+          }
+        }
+      }
+    },
+    "scanId": {
+      "type": "string"
+    },
+    "scanHash": {
+      "type": "string"
+    },
+    "scanTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    }
+  },
+  "$defs": {
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "createdBy",
+        "createdAt"
+      ],
+      "properties": {
+        "createdBy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedBy": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "generator": {
+          "type": "string"
+        },
+        "generatorVersion": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

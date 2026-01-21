@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "palace/project-profile",
+  "projectRoot": ".",
+  "languages": [
+    "dart"
+  ],
+  "capabilities": {
+    "graph.deps": {
+      "command": "dart pub deps",
+      "description": "List project dependencies"
+    },
+    "lint.run": {
+      "command": "flutter analyze || dart analyze",
+      "description": "Run project lint"
+    },
+    "read.file": {
+      "command": "cat {{path}}",
+      "description": "Read a single file"
+    },
+    "search.text": {
+      "command": "rg --no-heading --line-number --color never \"{{query}}\" {{paths}}",
+      "description": "Text search via ripgrep"
+    },
+    "symbols.lookup": {
+      "command": "echo symbols lookup not configured",
+      "description": "Symbol lookup is not configured"
+    },
+    "tests.run": {
+      "command": "flutter test || dart test",
+      "description": "Run project tests"
+    }
+  },
+  "guardrails": {
+    "doNotTouchGlobs": [
+      ".git/**",
+      ".palace/**",
+      ".idea/**",
+      "**/.idea/**",
+      ".vscode/**",
+      "**/.DS_Store",
+      "node_modules/**",
+      "vendor/**",
+      "**/Pods/**",
+      "**/.symlinks/**",
+      "**/DerivedData/**",
+      "dist/**",
+      "build/**",
+      "**/build/**",
+      "coverage/**",
+      "target/**",
+      "out/**",
+      ".dart_tool/**",
+      "**/.dart_tool/**",
+      "**/*.dill",
+      "**/*.dill.track.dill",
+      "**/test_cache/**",
+      ".next/**",
+      ".turbo/**",
+      ".nx/**",
+      ".nuxt/**",
+      ".output/**",
+      ".gradle/**",
+      "**/.gradle/**",
+      "**/android/.gradle/**",
+      "**/android/build/**",
+      "**/ios/build/**",
+      "**/*.apk",
+      "**/*.aab",
+      "**/*.ipa",
+      "**/*.min.*",
+      "**/*.lock",
+      "**/*.generated.*",
+      "**/*.g.dart",
+      "**/*.freezed.dart",
+      "**/*.gr.dart",
+      "**/*.mocks.dart"
+    ]
+  },
+  "provenance": {
+    "createdAt": "2026-01-17T20:30:26Z",
+    "createdBy": "palace detect"
+  }
+}

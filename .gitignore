@@ -96,7 +96,6 @@ Thumbs.db
 
 # IDE
 *.suo
-.palace/
 *.ntvs*
 *.njsproj
 *.sln

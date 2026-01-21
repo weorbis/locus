@@ -1,0 +1,26 @@
+{
+  // Palace core configuration
+  "schemaVersion": "1.0.0",
+  "kind": "palace/config",
+  "project": {
+    "name": "locus",
+    "language": "dart"
+  },
+  "defaultRoom": "project-overview",
+  "guardrails": {
+    "doNotTouchGlobs": [".git/**", ".palace/**", "node_modules/**", "vendor/**"]
+  },
+  // Dashboard configuration (optional)
+  // Uncomment and configure for production deployments
+  // "dashboard": {
+  //   "cors": {
+  //     "allowedOrigins": [
+  //       "https://your-dashboard.example.com"
+  //     ]
+  //   }
+  // },
+  "provenance": {
+    "createdBy": "palace init",
+    "createdAt": "2026-01-17T20:30:26Z"
+  }
+}
