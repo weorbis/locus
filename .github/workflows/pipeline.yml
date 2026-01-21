@@ -3,7 +3,7 @@ name: Pipeline
 on:
   push:
     branches: [main, master]
-    paths-ignore: ['**.md', '.gitignore']
+    paths-ignore: ["**.md", ".gitignore"]
   pull_request:
     branches: [main, master]
 
@@ -12,8 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: 'stable'
-  JAVA_VERSION: '17'
+  FLUTTER_VERSION: "stable"
+  JAVA_VERSION: "17"
 
 defaults:
   run:
@@ -28,26 +28,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: subosito/flutter-action@v2
         with:
           channel: ${{ env.FLUTTER_VERSION }}
           cache: true
       - uses: actions/setup-java@v5
         with:
-          distribution: 'temurin'
+          distribution: "temurin"
           java-version: ${{ env.JAVA_VERSION }}
-      
+
       - run: flutter pub get
-      
+
       - name: Format
-        run: dart format --set-exit-if-changed .
-        
+        run: dart format .
+
+      - name: Commit formatting changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: auto-format code [skip ci]"
+          file_pattern: "*.dart"
+
       - name: Analyze
         run: flutter analyze --fatal-infos --fatal-warnings
-        
+
       - name: Unit Tests
         run: flutter test --coverage
-        
+
       - name: Upload codecov
         uses: codecov/codecov-action@v5
         with:
@@ -61,7 +70,6 @@ jobs:
       - name: Pana Score
         run: pana --no-warning --exit-code-threshold 130
 
-
   android-check:
     name: Android Check
     runs-on: ubuntu-latest
@@ -72,10 +80,10 @@ jobs:
           channel: ${{ env.FLUTTER_VERSION }}
       - uses: actions/setup-java@v5
         with:
-          distribution: 'temurin'
+          distribution: "temurin"
           java-version: ${{ env.JAVA_VERSION }}
       - run: flutter pub get
-      
+
       - name: Build Example APK
         run: cd example && flutter build apk --debug
 
@@ -88,7 +96,7 @@ jobs:
         with:
           channel: ${{ env.FLUTTER_VERSION }}
       - run: flutter pub get
-      
+
       - name: Build Example iOS
         run: cd example && flutter build ios --no-codesign --debug
 
@@ -139,7 +147,7 @@ jobs:
         run: |
           VERSION=$(cat VERSION | tr -d '[:space:]')
           PUBSPEC_VERSION=$(grep 'version:' pubspec.yaml | sed 's/version: //' | tr -d '[:space:]')
-          
+
           if [ "$PUBSPEC_VERSION" != "$VERSION" ]; then
             echo "::error::pubspec.yaml version ($PUBSPEC_VERSION) does not match VERSION file ($VERSION)"
             exit 1
@@ -170,6 +178,6 @@ jobs:
           generate_release_notes: true
           body: |
             Release v${{ steps.check_version.outputs.VERSION }}
-            
+
             Note: pub.dev publishing must be performed manually.
             See CHANGELOG.md for details.
