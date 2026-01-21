@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "palace/playbook",
+  "name": "default-onboarding",
+  "summary": "Basic onboarding flow through the project overview room.",
+  "rooms": [
+    "project-overview"
+  ],
+  "requiredEvidence": [
+    {
+      "id": "project-profile",
+      "description": "Generated project profile",
+      "room": "project-overview"
+    }
+  ],
+  "verification": [
+    {
+      "name": "lint",
+      "expectation": "palace lint passes",
+      "capability": "lint.run"
+    }
+  ],
+  "provenance": {
+    "createdBy": "palace init",
+    "createdAt": "2026-01-17T20:30:26Z"
+  }
+}

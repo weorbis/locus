@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "palace/scan",
+  "scanId": "b2393d6e-7c50-4c36-93c7-d474b10b9236",
+  "dbScanId": 1,
+  "startedAt": "2026-01-17T20:30:26Z",
+  "completedAt": "2026-01-17T20:30:35Z",
+  "fileCount": 2385,
+  "chunkCount": 3627,
+  "symbolCount": 170099,
+  "relationshipCount": 32492,
+  "scanHash": "4a78aa17f260bd95b8c9ca0c1b0c68aa45f0f8c59c22d0db433f84f03be925b0",
+  "provenance": {
+    "createdBy": "palace scan",
+    "createdAt": "2026-01-17T20:30:37Z"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://palace/schemas/project-profile.schema.json",
+  "title": "ProjectProfile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "projectRoot", "capabilities", "provenance"],
+  "properties": {
+    "schemaVersion": {"type": "string", "const": "1.0.0"},
+    "kind": {"type": "string", "const": "palace/project-profile"},
+    "projectRoot": {"type": "string", "minLength": 1},
+    "languages": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command"],
+        "properties": {
+          "command": {"type": "string", "minLength": 1},
+          "description": {"type": "string"},
+          "workingDirectory": {"type": "string"},
+          "env": {
+            "type": "object",
+            "additionalProperties": {"type": "string"}
+          }
+        }
+      }
+    },
+    "guardrails": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "doNotTouchGlobs": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "readOnlyGlobs": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "provenance": {"$ref": "#/$defs/provenance"}
+  },
+  "$defs": {
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["createdBy", "createdAt"],
+      "properties": {
+        "createdBy": {"type": "string", "minLength": 1},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedBy": {"type": "string"},
+        "updatedAt": {"type": "string", "format": "date-time"},
+        "generator": {"type": "string"},
+        "generatorVersion": {"type": "string"}
+      }
+    }
+  }
+}
