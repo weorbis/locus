@@ -3,6 +3,7 @@
 /// These tests verify end-to-end functionality with mocked platform channels.
 @TestOn('vm')
 library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:locus/locus.dart';
 

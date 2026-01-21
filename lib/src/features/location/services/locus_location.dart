@@ -44,8 +44,8 @@ class LocusLocation {
     );
     if (result is List) {
       return result
-          .map((item) =>
-              Location.fromMap((item as Map).cast<String, dynamic>()))
+          .map(
+              (item) => Location.fromMap((item as Map).cast<String, dynamic>()))
           .toList();
     }
     return [];

@@ -6,7 +6,10 @@ class Coords {
   final double latitude;
   final double longitude;
   final double accuracy;
-  const Coords({required this.latitude, required this.longitude, required this.accuracy});
+  const Coords(
+      {required this.latitude,
+      required this.longitude,
+      required this.accuracy});
 }
 
 class RoutePoint {
@@ -19,9 +22,12 @@ class LocationUtils {
   static double calculateDistance(Coords a, Coords b) {
     const p = 0.017453292519943295;
     final c = cos;
-    final aVal = 0.5 - c((b.latitude - a.latitude) * p)/2 +
-          c(a.latitude * p) * c(b.latitude * p) *
-          (1 - c((b.longitude - a.longitude) * p))/2;
+    final aVal = 0.5 -
+        c((b.latitude - a.latitude) * p) / 2 +
+        c(a.latitude * p) *
+            c(b.latitude * p) *
+            (1 - c((b.longitude - a.longitude) * p)) /
+            2;
     return 12742 * asin(sqrt(aVal)) * 1000;
   }
 }
@@ -137,7 +143,8 @@ class OptimizedVectorMath {
     if (lengthSquared == 0) {
       return LocationUtils.calculateDistance(
         point,
-        Coords(latitude: start.latitude, longitude: start.longitude, accuracy: 0),
+        Coords(
+            latitude: start.latitude, longitude: start.longitude, accuracy: 0),
       );
     }
 
@@ -147,8 +154,9 @@ class OptimizedVectorMath {
     final pointMinusStartZ = pz - sz;
 
     final t = (pointMinusStartX * segX +
-               pointMinusStartY * segY +
-               pointMinusStartZ * segZ) / lengthSquared;
+            pointMinusStartY * segY +
+            pointMinusStartZ * segZ) /
+        lengthSquared;
 
     final clampedT = t.clamp(0.0, 1.0);
 
@@ -204,7 +212,9 @@ void main() {
   stopwatch2.stop();
   print("Optimized: ${stopwatch2.elapsedMilliseconds}ms");
 
-  final improvement = stopwatch1.elapsedMilliseconds - stopwatch2.elapsedMilliseconds;
-  final percent = (improvement / stopwatch1.elapsedMilliseconds * 100).toStringAsFixed(1);
+  final improvement =
+      stopwatch1.elapsedMilliseconds - stopwatch2.elapsedMilliseconds;
+  final percent =
+      (improvement / stopwatch1.elapsedMilliseconds * 100).toStringAsFixed(1);
   print("Improvement: ${improvement}ms ($percent%)");
 }
