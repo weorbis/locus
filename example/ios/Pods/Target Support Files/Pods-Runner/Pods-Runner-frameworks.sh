@@ -176,16 +176,19 @@ code_sign_if_enabled() {
 }
 
 if [[ "$CONFIGURATION" == "Debug" ]]; then
+  install_framework "${BUILT_PRODUCTS_DIR}/device_info_plus/device_info_plus.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/integration_test/integration_test.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/locus/locus.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/path_provider_foundation/path_provider_foundation.framework"
 fi
 if [[ "$CONFIGURATION" == "Profile" ]]; then
+  install_framework "${BUILT_PRODUCTS_DIR}/device_info_plus/device_info_plus.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/integration_test/integration_test.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/locus/locus.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/path_provider_foundation/path_provider_foundation.framework"
 fi
 if [[ "$CONFIGURATION" == "Release" ]]; then
+  install_framework "${BUILT_PRODUCTS_DIR}/device_info_plus/device_info_plus.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/integration_test/integration_test.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/locus/locus.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/path_provider_foundation/path_provider_foundation.framework"

@@ -45,13 +45,13 @@ void main() {
     late PolygonGeofence validPolygon;
 
     setUp(() {
-      validPolygon = const PolygonGeofence(
+      validPolygon = PolygonGeofence(
         identifier: 'test-polygon',
         vertices: [
-          GeoPoint(latitude: 37.0, longitude: -122.0),
-          GeoPoint(latitude: 37.1, longitude: -122.0),
-          GeoPoint(latitude: 37.1, longitude: -121.9),
-          GeoPoint(latitude: 37.0, longitude: -121.9),
+          const GeoPoint(latitude: 37.0, longitude: -122.0),
+          const GeoPoint(latitude: 37.1, longitude: -122.0),
+          const GeoPoint(latitude: 37.1, longitude: -121.9),
+          const GeoPoint(latitude: 37.0, longitude: -121.9),
         ],
       );
     });
@@ -77,23 +77,23 @@ void main() {
     });
 
     test('isValid returns false for less than 3 vertices', () {
-      const polygon = PolygonGeofence(
+      final polygon = PolygonGeofence(
         identifier: 'invalid',
         vertices: [
-          GeoPoint(latitude: 37.0, longitude: -122.0),
-          GeoPoint(latitude: 37.1, longitude: -122.0),
+          const GeoPoint(latitude: 37.0, longitude: -122.0),
+          const GeoPoint(latitude: 37.1, longitude: -122.0),
         ],
       );
       expect(polygon.isValid, false);
     });
 
     test('isValid returns false for invalid vertex coordinates', () {
-      const polygon = PolygonGeofence(
+      final polygon = PolygonGeofence(
         identifier: 'invalid',
         vertices: [
-          GeoPoint(latitude: 91.0, longitude: -122.0), // Invalid latitude
-          GeoPoint(latitude: 37.1, longitude: -122.0),
-          GeoPoint(latitude: 37.1, longitude: -121.9),
+          const GeoPoint(latitude: 91.0, longitude: -122.0), // Invalid latitude
+          const GeoPoint(latitude: 37.1, longitude: -122.0),
+          const GeoPoint(latitude: 37.1, longitude: -121.9),
         ],
       );
       expect(polygon.isValid, false);
@@ -187,12 +187,12 @@ void main() {
         vertices: validPolygon.vertices,
       );
 
-      const polygon2 = PolygonGeofence(
+      final polygon2 = PolygonGeofence(
         identifier: 'same-id',
         vertices: [
-          GeoPoint(latitude: 0, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 1),
+          const GeoPoint(latitude: 0, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 1),
         ],
       );
 
@@ -202,12 +202,12 @@ void main() {
 
   group('PolygonGeofence complex shapes', () {
     test('triangular polygon contains center point', () {
-      const triangle = PolygonGeofence(
+      final triangle = PolygonGeofence(
         identifier: 'triangle',
         vertices: [
-          GeoPoint(latitude: 0.0, longitude: 0.0),
-          GeoPoint(latitude: 1.0, longitude: 0.5),
-          GeoPoint(latitude: 0.0, longitude: 1.0),
+          const GeoPoint(latitude: 0.0, longitude: 0.0),
+          const GeoPoint(latitude: 1.0, longitude: 0.5),
+          const GeoPoint(latitude: 0.0, longitude: 1.0),
         ],
       );
 
@@ -219,15 +219,15 @@ void main() {
 
     test('L-shaped polygon works correctly', () {
       // L-shape: bottom-left corner of a square + bottom extension
-      const lShape = PolygonGeofence(
+      final lShape = PolygonGeofence(
         identifier: 'l-shape',
         vertices: [
-          GeoPoint(latitude: 0.0, longitude: 0.0),
-          GeoPoint(latitude: 0.0, longitude: 1.0),
-          GeoPoint(latitude: 0.5, longitude: 1.0),
-          GeoPoint(latitude: 0.5, longitude: 0.5),
-          GeoPoint(latitude: 1.0, longitude: 0.5),
-          GeoPoint(latitude: 1.0, longitude: 0.0),
+          const GeoPoint(latitude: 0.0, longitude: 0.0),
+          const GeoPoint(latitude: 0.0, longitude: 1.0),
+          const GeoPoint(latitude: 0.5, longitude: 1.0),
+          const GeoPoint(latitude: 0.5, longitude: 0.5),
+          const GeoPoint(latitude: 1.0, longitude: 0.5),
+          const GeoPoint(latitude: 1.0, longitude: 0.0),
         ],
       );
 
@@ -242,12 +242,12 @@ void main() {
 
   group('PolygonGeofenceEvent', () {
     test('creates with required parameters', () {
-      const polygon = PolygonGeofence(
+      final polygon = PolygonGeofence(
         identifier: 'test',
         vertices: [
-          GeoPoint(latitude: 0, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 1),
+          const GeoPoint(latitude: 0, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 1),
         ],
       );
 
@@ -263,12 +263,12 @@ void main() {
     });
 
     test('serializes to and from map', () {
-      const polygon = PolygonGeofence(
+      final polygon = PolygonGeofence(
         identifier: 'test',
         vertices: [
-          GeoPoint(latitude: 0, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 1),
+          const GeoPoint(latitude: 0, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 1),
         ],
       );
 
@@ -294,13 +294,13 @@ void main() {
 
     setUp(() {
       service = PolygonGeofenceService();
-      testPolygon = const PolygonGeofence(
+      testPolygon = PolygonGeofence(
         identifier: 'test-polygon',
         vertices: [
-          GeoPoint(latitude: 37.0, longitude: -122.0),
-          GeoPoint(latitude: 37.1, longitude: -122.0),
-          GeoPoint(latitude: 37.1, longitude: -121.9),
-          GeoPoint(latitude: 37.0, longitude: -121.9),
+          const GeoPoint(latitude: 37.0, longitude: -122.0),
+          const GeoPoint(latitude: 37.1, longitude: -122.0),
+          const GeoPoint(latitude: 37.1, longitude: -121.9),
+          const GeoPoint(latitude: 37.0, longitude: -121.9),
         ],
       );
     });
@@ -324,7 +324,7 @@ void main() {
     });
 
     test('addPolygonGeofence throws for invalid polygon', () async {
-      const invalidPolygon = PolygonGeofence(
+      final invalidPolygon = PolygonGeofence(
         identifier: '',
         vertices: [],
       );
@@ -512,12 +512,12 @@ void main() {
     });
 
     test('addPolygonGeofence adds a polygon', () async {
-      const polygon = PolygonGeofence(
+      final polygon = PolygonGeofence(
         identifier: 'test',
         vertices: [
-          GeoPoint(latitude: 0, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 1),
+          const GeoPoint(latitude: 0, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 1),
         ],
       );
 
@@ -527,12 +527,12 @@ void main() {
     });
 
     test('removePolygonGeofence removes a polygon', () async {
-      const polygon = PolygonGeofence(
+      final polygon = PolygonGeofence(
         identifier: 'to-remove',
         vertices: [
-          GeoPoint(latitude: 0, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 1),
+          const GeoPoint(latitude: 0, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 1),
         ],
       );
 
@@ -545,12 +545,12 @@ void main() {
     });
 
     test('getPolygonGeofences returns all polygons', () async {
-      const polygon = PolygonGeofence(
+      final polygon = PolygonGeofence(
         identifier: 'test',
         vertices: [
-          GeoPoint(latitude: 0, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 1),
+          const GeoPoint(latitude: 0, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 1),
         ],
       );
 
@@ -562,12 +562,12 @@ void main() {
     });
 
     test('polygonGeofenceExists checks existence', () async {
-      const polygon = PolygonGeofence(
+      final polygon = PolygonGeofence(
         identifier: 'exists-test',
         vertices: [
-          GeoPoint(latitude: 0, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 0),
-          GeoPoint(latitude: 1, longitude: 1),
+          const GeoPoint(latitude: 0, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 0),
+          const GeoPoint(latitude: 1, longitude: 1),
         ],
       );
 

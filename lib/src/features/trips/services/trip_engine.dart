@@ -404,66 +404,74 @@ class TripEngine {
     RoutePoint start,
     RoutePoint end,
   ) {
-    final startCoords = Coords(
-      latitude: start.latitude,
-      longitude: start.longitude,
-      accuracy: 0,
-    );
-    final endCoords = Coords(
-      latitude: end.latitude,
-      longitude: end.longitude,
-      accuracy: 0,
-    );
-    final pointCoords = point;
+    // 1. Convert start to vector
+    final startLat = start.latitude * pi / 180.0;
+    final startLng = start.longitude * pi / 180.0;
+    final sx = cos(startLat) * cos(startLng);
+    final sy = cos(startLat) * sin(startLng);
+    final sz = sin(startLat);
 
-    final startVec = _toVector(startCoords);
-    final endVec = _toVector(endCoords);
-    final pointVec = _toVector(pointCoords);
+    // 2. Convert end to vector
+    final endLat = end.latitude * pi / 180.0;
+    final endLng = end.longitude * pi / 180.0;
+    final ex = cos(endLat) * cos(endLng);
+    final ey = cos(endLat) * sin(endLng);
+    final ez = sin(endLat);
 
-    final segment = _vectorSubtract(endVec, startVec);
-    final lengthSquared = _dot(segment, segment);
+    // 3. Convert point to vector
+    final pointLat = point.latitude * pi / 180.0;
+    final pointLng = point.longitude * pi / 180.0;
+    final px = cos(pointLat) * cos(pointLng);
+    final py = cos(pointLat) * sin(pointLng);
+    final pz = sin(pointLat);
+
+    // 4. segment = endVec - startVec
+    final segX = ex - sx;
+    final segY = ey - sy;
+    final segZ = ez - sz;
+
+    // 5. lengthSquared = dot(segment, segment)
+    final lengthSquared = segX * segX + segY * segY + segZ * segZ;
+
     if (lengthSquared == 0) {
-      return LocationUtils.calculateDistance(pointCoords, startCoords);
+      return LocationUtils.calculateDistance(
+        point,
+        Coords(
+          latitude: start.latitude,
+          longitude: start.longitude,
+          accuracy: 0,
+        ),
+      );
     }
-    final t =
-        _dot(_vectorSubtract(pointVec, startVec), segment) / lengthSquared;
+
+    // 6. t = dot(pointVec - startVec, segment) / lengthSquared
+    final pointMinusStartX = px - sx;
+    final pointMinusStartY = py - sy;
+    final pointMinusStartZ = pz - sz;
+
+    final t = (pointMinusStartX * segX +
+            pointMinusStartY * segY +
+            pointMinusStartZ * segZ) /
+        lengthSquared;
+
     final clampedT = t.clamp(0.0, 1.0);
-    final projection = _vectorAdd(startVec, _vectorScale(segment, clampedT));
-    final projectedCoords = _fromVector(projection);
-    return LocationUtils.calculateDistance(pointCoords, projectedCoords);
-  }
 
-  List<double> _toVector(Coords coords) {
-    final lat = coords.latitude * pi / 180.0;
-    final lng = coords.longitude * pi / 180.0;
-    return [cos(lat) * cos(lng), cos(lat) * sin(lng), sin(lat)];
-  }
+    // 7. projection = startVec + segment * clampedT
+    final projX = sx + segX * clampedT;
+    final projY = sy + segY * clampedT;
+    final projZ = sz + segZ * clampedT;
 
-  Coords _fromVector(List<double> vector) {
-    final lat =
-        atan2(vector[2], sqrt(vector[0] * vector[0] + vector[1] * vector[1]));
-    final lng = atan2(vector[1], vector[0]);
-    return Coords(
-      latitude: lat * 180.0 / pi,
-      longitude: lng * 180.0 / pi,
+    // 8. projectedCoords = _fromVector(projection)
+    final projLatRad = atan2(projZ, sqrt(projX * projX + projY * projY));
+    final projLngRad = atan2(projY, projX);
+
+    final projectedCoords = Coords(
+      latitude: projLatRad * 180.0 / pi,
+      longitude: projLngRad * 180.0 / pi,
       accuracy: 0,
     );
-  }
 
-  List<double> _vectorAdd(List<double> a, List<double> b) {
-    return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-  }
-
-  List<double> _vectorSubtract(List<double> a, List<double> b) {
-    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-  }
-
-  List<double> _vectorScale(List<double> a, double scale) {
-    return [a[0] * scale, a[1] * scale, a[2] * scale];
-  }
-
-  double _dot(List<double> a, List<double> b) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    return LocationUtils.calculateDistance(point, projectedCoords);
   }
 
   String _generateTripId() {

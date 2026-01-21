@@ -24,6 +24,7 @@ import dev.locus.core.EventDispatcher
 import dev.locus.core.ForegroundServiceController
 import dev.locus.core.GeofenceEventProcessor
 import dev.locus.core.HeadlessDispatcher
+import dev.locus.core.HeadlessValidationDispatcher
 import dev.locus.core.LocationEventProcessor
 import dev.locus.core.LocationPayloadBuilder
 import dev.locus.core.LocationTracker
@@ -35,6 +36,7 @@ import dev.locus.core.TrackingEventEmitter
 import dev.locus.core.TrackingConfigApplier
 import dev.locus.core.PreferenceEventHandler
 import dev.locus.core.Scheduler
+import dev.locus.core.SecurePreferencesFactory
 import dev.locus.core.StateManager
 import dev.locus.core.SyncManager
 import dev.locus.core.SystemMonitor
@@ -80,6 +82,7 @@ class LocusPlugin : FlutterPlugin,
     private var stateManager: StateManager? = null
     private var logManager: LogManager? = null
     private var headlessDispatcher: HeadlessDispatcher? = null
+    private var headlessValidationDispatcher: HeadlessValidationDispatcher? = null
     private var eventDispatcher: EventDispatcher? = null
     private var systemMonitor: SystemMonitor? = null
     private var backgroundTaskManager: BackgroundTaskManager? = null
@@ -96,9 +99,9 @@ class LocusPlugin : FlutterPlugin,
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         androidContext = binding.applicationContext
-        // TODO: Consider using EncryptedSharedPreferences for sensitive data (requires androidx.security:security-crypto dependency)
-        // For now, using standard SharedPreferences with MODE_PRIVATE for basic protection
-        prefs = androidContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        // Use EncryptedSharedPreferences for secure storage of sensitive data (headless handles, etc.)
+        // Falls back to standard SharedPreferences if encryption fails
+        prefs = androidContext?.let { SecurePreferencesFactory.create(it) }
 
         // IMPORTANT: Always start with privacy mode disabled on fresh plugin attach.
         // This prevents stale persisted values from blocking location sync before Locus.ready() is called.
@@ -136,6 +139,9 @@ class LocusPlugin : FlutterPlugin,
         
         val headless = HeadlessDispatcher(context, config, preferences)
         headlessDispatcher = headless
+        
+        val headlessValidation = HeadlessValidationDispatcher(context, config, preferences)
+        headlessValidationDispatcher = headlessValidation
         
         val events = EventDispatcher(headless)
         eventDispatcher = events
@@ -228,9 +234,16 @@ class LocusPlugin : FlutterPlugin,
                 ) {
                     val channel = methodChannel
                     if (channel == null) {
-                        // If no method channel (e.g. app terminated), proceed with sync
-                        // TODO: Implement headless validation if needed
-                        callback(true)
+                        // No method channel available (app terminated).
+                        // Use headless validation if a callback is registered, otherwise proceed with sync.
+                        val headlessValidator = headlessValidationDispatcher
+                        if (headlessValidator != null && headlessValidator.isAvailable()) {
+                            Log.d(TAG, "Using headless validation for pre-sync check")
+                            headlessValidator.validate(locations, extras, callback)
+                        } else {
+                            // No headless validation available, proceed with sync
+                            callback(true)
+                        }
                         return
                     }
                     mainHandler.post {
@@ -669,6 +682,27 @@ class LocusPlugin : FlutterPlugin,
                             prefs?.edit()
                                 ?.putLong("bg_headless_sync_body_dispatcher", dispatcher.toLong())
                                 ?.putLong("bg_headless_sync_body_callback", callback.toLong())
+                                ?.apply()
+                            result.success(true)
+                        } else {
+                            result.error("INVALID_ARGUMENT", "Expected dispatcher and callback handles", null)
+                        }
+                    }
+                    else -> {
+                        result.error("INVALID_ARGUMENT", "Expected map argument", null)
+                    }
+                }
+            }
+            "registerHeadlessValidationCallback" -> {
+                when (val args = call.arguments) {
+                    is Map<*, *> -> {
+                        val map = args.asMap()
+                        val dispatcher = map?.get("dispatcher") as? Number
+                        val callback = map?.get("callback") as? Number
+                        if (dispatcher != null && callback != null) {
+                            prefs?.edit()
+                                ?.putLong(HeadlessValidationDispatcher.KEY_VALIDATION_DISPATCHER, dispatcher.toLong())
+                                ?.putLong(HeadlessValidationDispatcher.KEY_VALIDATION_CALLBACK, callback.toLong())
                                 ?.apply()
                             result.success(true)
                         } else {

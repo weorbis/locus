@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://palace/schemas/palace.config.schema.json",
+  "title": "PalaceConfig",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "project", "provenance"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "kind": {
+      "type": "string",
+      "const": "palace/config"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "repository": {
+          "type": "string"
+        }
+      }
+    },
+    "defaultRoom": {
+      "type": "string"
+    },
+    "guardrails": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "doNotTouchGlobs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "readOnlyGlobs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "neighbors": {
+      "type": "object",
+      "description": "Remote palaces (neighbors) whose context can be imported via Corridors",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to fetch the remote context-pack.json"
+          },
+          "localPath": {
+            "type": "string",
+            "description": "Local path for monorepo neighbors (relative or absolute)"
+          },
+          "auth": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["none", "bearer", "basic", "header"]
+              },
+              "token": {
+                "type": "string",
+                "description": "Bearer token or $ENV_VAR"
+              },
+              "user": {
+                "type": "string"
+              },
+              "pass": {
+                "type": "string"
+              },
+              "header": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "ttl": {
+            "type": "string",
+            "description": "Cache TTL duration (e.g., '24h', '1h')"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "dashboard": {
+      "type": "object",
+      "description": "Dashboard server configuration",
+      "additionalProperties": false,
+      "properties": {
+        "cors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allowedOrigins": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "List of allowed origins for CORS. Defaults to localhost in development.",
+              "default": []
+            }
+          }
+        }
+      }
+    },
+    "vscode": {
+      "type": "object",
+      "description": "VS Code extension (Observer) settings. These override VS Code workspace settings when present.",
+      "additionalProperties": false,
+      "properties": {
+        "autoSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically heal (scan & collect) after file changes"
+        },
+        "autoSyncDelay": {
+          "type": "number",
+          "default": 3000,
+          "minimum": 500,
+          "maximum": 30000,
+          "description": "Milliseconds to wait after the last save before scanning (debounce)"
+        },
+        "waitForCleanWorkspace": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true, auto-sync waits until all files are saved"
+        },
+        "decorations": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Show inline decorations for context pack entries"
+            },
+            "style": {
+              "type": "string",
+              "enum": ["gutter", "inline", "both"],
+              "default": "gutter",
+              "description": "Decoration style: gutter icons, inline highlights, or both"
+            }
+          }
+        },
+        "statusBar": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "position": {
+              "type": "string",
+              "enum": ["left", "right"],
+              "default": "left",
+              "description": "Status bar item position"
+            },
+            "priority": {
+              "type": "number",
+              "default": 100,
+              "description": "Status bar item priority (higher = more left)"
+            }
+          }
+        },
+        "sidebar": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "defaultView": {
+              "type": "string",
+              "enum": ["tree", "graph"],
+              "default": "tree",
+              "description": "Default sidebar view mode"
+            },
+            "graphLayout": {
+              "type": "string",
+              "enum": ["cose", "circle", "grid", "breadthfirst"],
+              "default": "cose",
+              "description": "Cytoscape graph layout algorithm"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["createdBy", "createdAt"],
+      "properties": {
+        "createdBy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedBy": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "generator": {
+          "type": "string"
+        },
+        "generatorVersion": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -22,7 +22,6 @@ import 'package:locus/src/shared/models/json_map.dart';
 /// final locations = await Locus.location.queryLocations(query);
 /// ```
 class LocationQuery {
-  /// Creates a location query.
   const LocationQuery({
     this.from,
     this.to,
@@ -83,7 +82,7 @@ class LocationQuery {
 
   /// Filters a list of locations according to this query.
   List<Location> apply(List<Location> locations) {
-    var filtered = locations.where((loc) {
+    final filtered = locations.where((loc) {
       // Time range filter
       if (from != null && loc.timestamp.isBefore(from!)) return false;
       if (to != null && loc.timestamp.isAfter(to!)) return false;
@@ -116,16 +115,22 @@ class LocationQuery {
       }
     });
 
-    // Pagination
-    if (offset > 0 && offset < filtered.length) {
-      filtered = filtered.sublist(offset);
-    } else if (offset >= filtered.length) {
-      filtered = [];
+    // Apply pagination (offset + limit) in a single sublist call to avoid
+    // redundant allocations. Previously this used two separate sublist() calls.
+    final length = filtered.length;
+    if (offset >= length) {
+      return const [];
     }
 
-    // Limit
-    if (limit != null && limit! < filtered.length) {
-      filtered = filtered.sublist(0, limit);
+    // Calculate the final range for a single sublist operation
+    final startIndex = offset;
+    final endIndex = limit != null
+        ? (startIndex + limit!).clamp(startIndex, length)
+        : length;
+
+    // Only create a sublist if we're actually trimming the list
+    if (startIndex > 0 || endIndex < length) {
+      return filtered.sublist(startIndex, endIndex);
     }
 
     return filtered;
@@ -430,7 +435,11 @@ class LocationHistoryCalculator {
 
   static double _toRadians(double degrees) => degrees * math.pi / 180;
 
-  /// Simple clustering to find frequently visited locations.
+  /// Optimized clustering to find frequently visited locations.
+  ///
+  /// Uses a spatial grid (hash) to achieve O(N) complexity instead of O(N²).
+  /// The grid divides space into cells of approximately clusterRadiusMeters,
+  /// allowing O(1) lookup of nearby clusters instead of linear search.
   static List<FrequentLocation> _calculateFrequentLocations(
     List<Location> locations, {
     double clusterRadiusMeters = 100,
@@ -444,32 +453,30 @@ class LocationHistoryCalculator {
         locations.where((l) => l.isMoving != true).toList();
     if (stationaryPoints.length < minVisits) return [];
 
-    final clusters = <_Cluster>[];
+    // Create spatial grid for O(1) cluster lookups
+    final grid = _SpatialGrid(cellSizeMeters: clusterRadiusMeters);
 
     for (final loc in stationaryPoints) {
-      // Find nearest existing cluster
-      _Cluster? nearestCluster;
-      double nearestDistance = double.infinity;
-
-      for (final cluster in clusters) {
-        final dist = _haversineDistance(
-          loc.coords.latitude,
-          loc.coords.longitude,
-          cluster.centerLat,
-          cluster.centerLng,
-        );
-        if (dist < clusterRadiusMeters && dist < nearestDistance) {
-          nearestCluster = cluster;
-          nearestDistance = dist;
-        }
-      }
+      // Find nearest existing cluster using spatial grid (O(1) amortized)
+      final nearestCluster = grid.findNearestCluster(
+        loc.coords.latitude,
+        loc.coords.longitude,
+        clusterRadiusMeters,
+        _haversineDistance,
+      );
 
       if (nearestCluster != null) {
         nearestCluster.addLocation(loc);
+        // Update cluster position in grid after center moves
+        grid.updateClusterPosition(nearestCluster);
       } else {
-        clusters.add(_Cluster(loc));
+        final newCluster = _Cluster(loc);
+        grid.addCluster(newCluster);
       }
     }
+
+    // Collect all clusters from grid
+    final clusters = grid.allClusters;
 
     // Filter and sort clusters
     final validClusters = clusters.where((c) => c.count >= minVisits).toList()
@@ -513,5 +520,118 @@ class _Cluster {
       totalDuration += loc.timestamp.difference(_lastTimestamp!);
     }
     _lastTimestamp = loc.timestamp;
+  }
+}
+
+/// Spatial hash grid for O(1) cluster lookups.
+///
+/// Divides the world into a grid of cells sized to match the clustering radius.
+/// Each cell contains a list of clusters whose centers fall within it.
+/// When searching for nearby clusters, only the 9 adjacent cells need to be
+/// checked (the cell containing the query point plus its 8 neighbors).
+class _SpatialGrid {
+  _SpatialGrid({required double cellSizeMeters})
+      : _cellSizeDegrees = _metersToDegreesApprox(cellSizeMeters);
+
+  /// The cell size in degrees (approximate).
+  /// At equator: 1 degree ≈ 111km, so 100m ≈ 0.0009 degrees.
+  final double _cellSizeDegrees;
+
+  /// Map from cell key to list of clusters in that cell.
+  final Map<String, List<_Cluster>> _cells = {};
+
+  /// Track which cell each cluster is in for efficient updates.
+  final Map<_Cluster, String> _clusterCells = {};
+
+  /// Convert meters to degrees (approximate, good enough for grid sizing).
+  static double _metersToDegreesApprox(double meters) {
+    // ~111km per degree at equator, this is approximate but sufficient
+    // for grid-based spatial hashing where precision isn't critical
+    return meters / 111000;
+  }
+
+  /// Get the cell key for a coordinate.
+  String _getCellKey(double lat, double lng) {
+    final cellLat = (lat / _cellSizeDegrees).floor();
+    final cellLng = (lng / _cellSizeDegrees).floor();
+    return '$cellLat,$cellLng';
+  }
+
+  /// Add a cluster to the grid.
+  void addCluster(_Cluster cluster) {
+    final key = _getCellKey(cluster.centerLat, cluster.centerLng);
+    _cells.putIfAbsent(key, () => []).add(cluster);
+    _clusterCells[cluster] = key;
+  }
+
+  /// Update cluster position after its center has moved.
+  /// Only moves the cluster to a new cell if needed.
+  void updateClusterPosition(_Cluster cluster) {
+    final oldKey = _clusterCells[cluster];
+    final newKey = _getCellKey(cluster.centerLat, cluster.centerLng);
+
+    if (oldKey != newKey) {
+      // Remove from old cell
+      if (oldKey != null) {
+        _cells[oldKey]?.remove(cluster);
+        if (_cells[oldKey]?.isEmpty ?? false) {
+          _cells.remove(oldKey);
+        }
+      }
+      // Add to new cell
+      _cells.putIfAbsent(newKey, () => []).add(cluster);
+      _clusterCells[cluster] = newKey;
+    }
+  }
+
+  /// Find the nearest cluster within maxDistance meters.
+  /// Returns null if no cluster is within range.
+  ///
+  /// Only checks the 9 cells around the query point (current + 8 neighbors)
+  /// which gives O(1) amortized lookup instead of O(M) where M is total clusters.
+  _Cluster? findNearestCluster(
+    double lat,
+    double lng,
+    double maxDistance,
+    double Function(double, double, double, double) distanceFunc,
+  ) {
+    _Cluster? nearest;
+    double nearestDistance = double.infinity;
+
+    // Check the 9 cells around the query point
+    final centerCellLat = (lat / _cellSizeDegrees).floor();
+    final centerCellLng = (lng / _cellSizeDegrees).floor();
+
+    for (var dLat = -1; dLat <= 1; dLat++) {
+      for (var dLng = -1; dLng <= 1; dLng++) {
+        final key = '${centerCellLat + dLat},${centerCellLng + dLng}';
+        final cellClusters = _cells[key];
+        if (cellClusters == null) continue;
+
+        for (final cluster in cellClusters) {
+          final dist = distanceFunc(
+            lat,
+            lng,
+            cluster.centerLat,
+            cluster.centerLng,
+          );
+          if (dist < maxDistance && dist < nearestDistance) {
+            nearest = cluster;
+            nearestDistance = dist;
+          }
+        }
+      }
+    }
+
+    return nearest;
+  }
+
+  /// Get all clusters from the grid.
+  List<_Cluster> get allClusters {
+    final all = <_Cluster>[];
+    for (final cell in _cells.values) {
+      all.addAll(cell);
+    }
+    return all;
   }
 }

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://palace/schemas/scan.schema.json",
+  "title": "ScanSummary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "kind",
+    "scanId",
+    "dbScanId",
+    "startedAt",
+    "completedAt",
+    "fileCount",
+    "chunkCount",
+    "symbolCount",
+    "relationshipCount",
+    "scanHash",
+    "provenance"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0.0" },
+    "kind": { "type": "string", "const": "palace/scan" },
+    "scanId": { "type": "string", "minLength": 1 },
+    "dbScanId": { "type": "integer", "minimum": 1 },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "fileCount": { "type": "integer", "minimum": 0 },
+    "chunkCount": { "type": "integer", "minimum": 0 },
+    "symbolCount": { "type": "integer", "minimum": 0 },
+    "relationshipCount": { "type": "integer", "minimum": 0 },
+    "scanHash": { "type": "string", "minLength": 1 },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["createdBy", "createdAt"],
+      "properties": {
+        "createdBy": { "type": "string", "minLength": 1 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "generator": { "type": "string" },
+        "generatorVersion": { "type": "string" }
+      }
+    }
+  }
+}

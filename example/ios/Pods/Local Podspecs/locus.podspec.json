@@ -1,6 +1,6 @@
 {
   "name": "locus",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "summary": "Background geolocation SDK for Flutter.",
   "description": "Background geolocation SDK for Flutter. Native tracking, geofencing, \nactivity recognition, and HTTP sync for Android and iOS.",
   "homepage": "https://github.com/weorbis/locus",
@@ -22,14 +22,16 @@
     "Classes/Storage/**/*"
   ],
   "dependencies": {
-    "Flutter": [
-
-    ]
+    "Flutter": []
   },
   "platforms": {
     "ios": "14.0"
   },
-  "frameworks": "CoreMotion",
+  "frameworks": [
+    "CoreLocation",
+    "CoreMotion"
+  ],
+  "libraries": "sqlite3",
   "pod_target_xcconfig": {
     "DEFINES_MODULE": "YES",
     "EXCLUDED_ARCHS[sdk=iphonesimulator*]": "i386"

@@ -60,7 +60,7 @@ class GeoPoint {
 /// Vertices should be defined in order (clockwise or counter-clockwise).
 /// The polygon is automatically closed (last vertex connects to first).
 class PolygonGeofence {
-  const PolygonGeofence({
+  PolygonGeofence({
     required this.identifier,
     required this.vertices,
     this.notifyOnEntry = true,
@@ -178,10 +178,14 @@ class PolygonGeofence {
     return [minLat, minLng, maxLat, maxLng];
   }
 
+  double? _areaSquareMeters;
+
   /// Calculates the approximate area of the polygon in square meters.
   ///
   /// Uses the Shoelace formula with geodesic corrections.
+  /// The result is cached after the first calculation.
   double get areaSquareMeters {
+    if (_areaSquareMeters != null) return _areaSquareMeters!;
     if (vertices.length < 3) return 0;
 
     // Earth's radius in meters
@@ -202,6 +206,7 @@ class PolygonGeofence {
     }
 
     area = (area * earthRadius * earthRadius / 2).abs();
+    _areaSquareMeters = area;
     return area;
   }
 

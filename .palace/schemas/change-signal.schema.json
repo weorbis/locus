@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://palace/schemas/change-signal.schema.json",
+  "title": "ChangeSignal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "diffRange", "changes", "generatedAt", "provenance"],
+  "properties": {
+    "schemaVersion": {"type": "string", "const": "1.0.0"},
+    "kind": {"type": "string", "const": "palace/change-signal"},
+    "diffRange": {"type": "string", "minLength": 1},
+    "generatedAt": {"type": "string", "format": "date-time"},
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "status"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "status": {"type": "string", "enum": ["added", "modified", "deleted"]},
+          "hash": {"type": "string"}
+        }
+      }
+    },
+    "requiredArtifacts": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "provenance": {"$ref": "#/$defs/provenance"}
+  },
+  "$defs": {
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["createdBy", "createdAt"],
+      "properties": {
+        "createdBy": {"type": "string", "minLength": 1},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedBy": {"type": "string"},
+        "updatedAt": {"type": "string", "format": "date-time"},
+        "generator": {"type": "string"},
+        "generatorVersion": {"type": "string"}
+      }
+    }
+  }
+}

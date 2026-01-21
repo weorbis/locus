@@ -23,6 +23,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
   let scheduler: Scheduler
   let geofenceManager: GeofenceManager
   let trackingStats = TrackingStats()
+  let headlessValidationDispatcher: HeadlessValidationDispatcher
 
   // State
   let locationClient: LocationClient
@@ -58,7 +59,11 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
     scheduler = Scheduler(config: configManager)
     geofenceManager = GeofenceManager(config: configManager, storage: storage)
     locationClient = LocationClient(config: configManager)
+    headlessValidationDispatcher = HeadlessValidationDispatcher(config: configManager)
     super.init()
+
+    // Migrate existing UserDefaults data to Keychain for security
+    SecureStorage.shared.migrateFromUserDefaults()
 
     // Wire delegates
     locationClient.delegate = self
@@ -263,11 +268,12 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
         if let args = call.arguments as? [String: Any],
            let dispatcher = args["dispatcher"] as? Int64,
            let callback = args["callback"] as? Int64 {
-          UserDefaults.standard.setValue(dispatcher, forKey: SwiftLocusPlugin.headlessDispatcherKey)
-          UserDefaults.standard.setValue(callback, forKey: SwiftLocusPlugin.headlessCallbackKey)
+          // Use SecureStorage for sensitive callback handles
+          _ = SecureStorage.shared.setInt64(dispatcher, forKey: SecureStorage.headlessDispatcherKey)
+          _ = SecureStorage.shared.setInt64(callback, forKey: SecureStorage.headlessCallbackKey)
           result(true)
         } else if let handle = call.arguments as? Int64 {
-          UserDefaults.standard.setValue(handle, forKey: SwiftLocusPlugin.headlessCallbackKey)
+          _ = SecureStorage.shared.setInt64(handle, forKey: SecureStorage.headlessCallbackKey)
           result(true)
         } else {
           result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected headless callback handle", details: nil))
@@ -281,8 +287,18 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       if let args = call.arguments as? [String: Any],
          let dispatcher = args["dispatcher"] as? Int64,
          let callback = args["callback"] as? Int64 {
-        UserDefaults.standard.setValue(dispatcher, forKey: SwiftLocusPlugin.headlessSyncBodyDispatcherKey)
-        UserDefaults.standard.setValue(callback, forKey: SwiftLocusPlugin.headlessSyncBodyCallbackKey)
+        // Use SecureStorage for sensitive callback handles
+        _ = SecureStorage.shared.setInt64(dispatcher, forKey: SecureStorage.headlessSyncBodyDispatcherKey)
+        _ = SecureStorage.shared.setInt64(callback, forKey: SecureStorage.headlessSyncBodyCallbackKey)
+        result(true)
+      } else {
+        result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected dispatcher and callback handles", details: nil))
+      }
+    case "registerHeadlessValidationCallback":
+      if let args = call.arguments as? [String: Any],
+         let dispatcher = args["dispatcher"] as? Int64,
+         let callback = args["callback"] as? Int64 {
+        HeadlessValidationDispatcher.registerCallback(dispatcher: dispatcher, callback: callback)
         result(true)
       } else {
         result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected dispatcher and callback handles", details: nil))
