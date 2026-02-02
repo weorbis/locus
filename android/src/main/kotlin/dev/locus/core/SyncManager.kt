@@ -620,5 +620,15 @@ class SyncManager(
 
     companion object {
         private const val TAG = "locus"
+
+        private val headerInjectionPattern = Regex("[\r\n]")
+
+        private fun sanitizeHeaderKey(key: String): String {
+            return key.replace(headerInjectionPattern, "").trim()
+        }
+
+        private fun sanitizeHeaderValue(value: String): String {
+            return value.replace(headerInjectionPattern, "").trim()
+        }
     }
 }

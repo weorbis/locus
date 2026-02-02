@@ -58,6 +58,23 @@ class LocusSync {
     return result == true;
   }
 
+  /// Returns whether sync is ready to proceed (not paused and URL configured).
+  ///
+  /// Use this to check if sync can proceed without calling [resume] first.
+  static Future<bool> isSyncReady() async {
+    if (_isPaused) return false;
+    try {
+      final result = await LocusChannels.methods.invokeMethod('getSyncState');
+      if (result is Map) {
+        final state = Map<String, dynamic>.from(result);
+        return state['urlConfigured'] == true;
+      }
+    } catch (_) {
+      return false;
+    }
+    return false;
+  }
+
   /// Resumes syncing after app initialization or token refresh.
   ///
   /// **IMPORTANT**: Sync is paused by default on app startup. You MUST call

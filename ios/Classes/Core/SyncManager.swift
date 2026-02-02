@@ -215,18 +215,30 @@ class SyncManager {
         request.httpMethod = config.httpMethod
         request.timeoutInterval = config.httpTimeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
+
         for (k, v) in config.httpHeaders {
-            request.setValue(v, forHTTPHeaderField: k)
+            let sanitizedKey = sanitizeHeaderKey(k)
+            let sanitizedValue = sanitizeHeaderValue(v)
+            request.setValue(sanitizedValue, forHTTPHeaderField: sanitizedKey)
         }
-        
+
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         } catch {
             return nil
         }
-        
+
         return request
+    }
+
+    private func sanitizeHeaderKey(_ key: String) -> String {
+        let invalidCharacters = CharacterSet(charactersIn: "\r\n")
+        return key.components(separatedBy: invalidCharacters).joined(separator: "").trimmingCharacters(in: .whitespaces)
+    }
+
+    private func sanitizeHeaderValue(_ value: String) -> String {
+        let invalidCharacters = CharacterSet(charactersIn: "\r\n")
+        return value.components(separatedBy: invalidCharacters).joined(separator: "").trimmingCharacters(in: .whitespaces)
     }
     
     private func enqueueHttp(locationPayload: [String: Any], idsToDelete: [String]?, attempt: Int) {

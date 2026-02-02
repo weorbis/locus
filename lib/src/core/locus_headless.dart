@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show CallbackHandle, PluginUtilities;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:locus/src/models.dart';
 import 'package:locus/src/core/locus_channels.dart';
@@ -26,14 +27,16 @@ class LocusHeadless {
     final callbackHandle = PluginUtilities.getCallbackHandle(callback);
 
     if (dispatcherHandle == null || callbackHandle == null) {
-      debugPrint('[Locus] ERROR: Failed to register headless task.');
-      debugPrint('[Locus]   Could not obtain callback handles.');
-      debugPrint(
-          '[Locus]   Ensure your callback is a top-level or static function, not a closure.');
-      debugPrint('[Locus]   Example:');
-      debugPrint('[Locus]     @pragma("vm:entry-point")');
-      debugPrint(
-          '[Locus]     Future<void> myHeadlessTask(HeadlessEvent event) async { ... }');
+      if (kDebugMode) {
+        debugPrint('[Locus] ERROR: Failed to register headless task.');
+        debugPrint('[Locus]   Could not obtain callback handles.');
+        debugPrint(
+            '[Locus]   Ensure your callback is a top-level or static function, not a closure.');
+        debugPrint('[Locus]   Example:');
+        debugPrint('[Locus]     @pragma("vm:entry-point")');
+        debugPrint(
+            '[Locus]     Future<void> myHeadlessTask(HeadlessEvent event) async { ... }');
+      }
       return false;
     }
 
@@ -46,10 +49,12 @@ class LocusHeadless {
     );
 
     if (result != true) {
-      debugPrint(
-          '[Locus] WARNING: Native headless registration returned false.');
-      debugPrint(
-          '[Locus]   The native plugin may not support headless mode on this platform.');
+      if (kDebugMode) {
+        debugPrint(
+            '[Locus] WARNING: Native headless registration returned false.');
+        debugPrint(
+            '[Locus]   The native plugin may not support headless mode on this platform.');
+      }
     }
 
     return result == true;
@@ -98,7 +103,9 @@ class LocusHeadless {
               HeadlessEvent.fromMap(Map<String, dynamic>.from(rawEvent)));
         }
       } catch (error) {
-        debugPrint('Locus headless error: $error');
+        if (kDebugMode) {
+          debugPrint('Locus headless error: $error');
+        }
       }
     });
   }
