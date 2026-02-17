@@ -34,14 +34,14 @@ class HeadlessValidationService : JobIntentService() {
         private const val JOB_ID = 197812513
         private const val ENGINE_IDLE_TIMEOUT_MS = 30_000L
         private const val DEFAULT_TIMEOUT_MS = 10_000L
-        private const val PREFS_NAME = "locus_plugin"
-        private const val KEY_ENABLE_HEADLESS = "enableHeadless"
+        private const val PREFS_NAME = "dev.locus.preferences"
+        private const val KEY_ENABLE_HEADLESS = "bg_enable_headless"
 
-        private val pendingCallbacks = mutableMapOf<String, (Boolean) -> Unit>()
-        private var callbackCounter = 0
+        private val pendingCallbacks = java.util.concurrent.ConcurrentHashMap<String, (Boolean) -> Unit>()
+        private var callbackCounter = java.util.concurrent.atomic.AtomicInteger(0)
 
         fun enqueueWork(context: Context, intent: Intent, callback: (Boolean) -> Unit) {
-            val callbackId = "validation_${++callbackCounter}"
+            val callbackId = "validation_${callbackCounter.incrementAndGet()}"
             pendingCallbacks[callbackId] = callback
             intent.putExtra("callbackId", callbackId)
             enqueueWork(context, HeadlessValidationService::class.java, JOB_ID, intent)

@@ -79,34 +79,82 @@ class LocusHeadless {
   static void headlessDispatcher() {
     WidgetsFlutterBinding.ensureInitialized();
     LocusChannels.headless.setMethodCallHandler((call) async {
-      if (call.method != 'headlessEvent') {
-        return;
-      }
-      final args = Map<String, dynamic>.from(call.arguments as Map);
-      final rawHandle = args['callbackHandle'] as int?;
-      if (rawHandle == null) {
-        return;
-      }
-      final handle = CallbackHandle.fromRawHandle(rawHandle);
-      final callback = PluginUtilities.getCallbackFromHandle(handle)
-          as Future<void> Function(HeadlessEvent)?;
-      if (callback == null) {
-        return;
-      }
-      try {
-        final rawEvent = args['event'];
-        if (rawEvent is String) {
-          final decoded = json.decode(rawEvent) as Map<String, dynamic>;
-          await callback(HeadlessEvent.fromMap(decoded));
-        } else if (rawEvent is Map) {
-          await callback(
-              HeadlessEvent.fromMap(Map<String, dynamic>.from(rawEvent)));
-        }
-      } catch (error) {
-        if (kDebugMode) {
-          debugPrint('Locus headless error: $error');
-        }
+      switch (call.method) {
+        case 'headlessEvent':
+          await _handleHeadlessEvent(call);
+          return;
+        case 'headlessBuildSyncBody':
+          return _handleHeadlessBuildSyncBody(call);
+        default:
+          return;
       }
     });
+  }
+
+  static Future<void> _handleHeadlessEvent(dynamic call) async {
+    final args = Map<String, dynamic>.from(call.arguments as Map);
+    final rawHandle = args['callbackHandle'] as int?;
+    if (rawHandle == null) {
+      return;
+    }
+    final handle = CallbackHandle.fromRawHandle(rawHandle);
+    final callback = PluginUtilities.getCallbackFromHandle(handle)
+        as Future<void> Function(HeadlessEvent)?;
+    if (callback == null) {
+      return;
+    }
+    try {
+      final rawEvent = args['event'];
+      if (rawEvent is String) {
+        final decoded = json.decode(rawEvent) as Map<String, dynamic>;
+        await callback(HeadlessEvent.fromMap(decoded));
+      } else if (rawEvent is Map) {
+        await callback(
+            HeadlessEvent.fromMap(Map<String, dynamic>.from(rawEvent)));
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Locus headless error: $error');
+      }
+    }
+  }
+
+  static Future<dynamic> _handleHeadlessBuildSyncBody(dynamic call) async {
+    final args = Map<String, dynamic>.from(call.arguments as Map);
+    final rawHandle = args['callbackHandle'] as int?;
+
+    if (rawHandle == null) {
+      return null;
+    }
+
+    final handle = CallbackHandle.fromRawHandle(rawHandle);
+    final callback = PluginUtilities.getCallbackFromHandle(handle);
+
+    if (callback == null) {
+      if (kDebugMode) {
+        debugPrint('Locus: Could not resolve headless sync body callback');
+      }
+      return null;
+    }
+
+    try {
+      // Import SyncBodyContext dynamically to avoid circular deps
+      final locationsRaw = args['locations'] as List?;
+      final extras = args['extras'] as Map? ?? {};
+      final locations = locationsRaw
+              ?.map((item) =>
+                  (item as Map).cast<String, dynamic>())
+              .toList() ??
+          [];
+      final result = await Function.apply(callback, [
+        {'locations': locations, 'extras': Map<String, dynamic>.from(extras)}
+      ]);
+      return result;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Locus: Error in headless sync body builder: $e');
+      }
+      return null;
+    }
   }
 }

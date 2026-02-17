@@ -20,6 +20,7 @@ extension SwiftLocusPlugin {
   }
 
   private func shouldLog(level: String) -> Bool {
+    if configManager.logLevel == "off" { return false }
     return logLevelRank(level) <= logLevelRank(configManager.logLevel)
   }
 

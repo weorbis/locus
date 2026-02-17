@@ -209,7 +209,11 @@ class _LifecycleObserver extends WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final isForeground = state == AppLifecycleState.resumed;
+    // Treat both resumed and inactive as foreground.
+    // inactive fires during permission dialogs, phone calls, etc.
+    // and should NOT trigger background behavior.
+    final isForeground = state == AppLifecycleState.resumed ||
+        state == AppLifecycleState.inactive;
     onStateChange(isForeground);
   }
 }

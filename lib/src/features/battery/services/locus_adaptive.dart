@@ -13,6 +13,7 @@ class LocusAdaptive {
   static AdaptiveTrackingConfig? _adaptiveConfig;
   static AdaptiveSettings? _currentAdaptiveSettings;
   static bool _isEvaluatingAdaptiveSettings = false;
+  static bool _stopped = false;
   static StreamSubscription? _adaptiveSubscription;
   static DateTime? _stationarySince;
   static bool _lastKnownMovingState = true;
@@ -40,6 +41,7 @@ class LocusAdaptive {
   static bool get isEnabled => _adaptiveConfig?.enabled == true;
 
   static Future<void> startAdaptiveTracking() async {
+    _stopped = false;
     await _adaptiveSubscription?.cancel();
     _adaptiveSubscription = LocusStreams.events.listen((event) async {
       if (event.type == EventType.location ||
@@ -53,9 +55,11 @@ class LocusAdaptive {
   }
 
   static Future<void> stopAdaptiveTracking() async {
+    _stopped = true;
     await _adaptiveSubscription?.cancel();
     _adaptiveSubscription = null;
     _currentAdaptiveSettings = null;
+    _isEvaluatingAdaptiveSettings = false;
     _stationarySince = null;
     _lastKnownMovingState = true;
   }
@@ -80,6 +84,7 @@ class LocusAdaptive {
     _isEvaluatingAdaptiveSettings = true;
     try {
       final settings = await calculateAdaptiveSettings();
+      if (_stopped) return;
 
       // Debounce: only update if settings changed significantly
       if (_currentAdaptiveSettings?.distanceFilter == settings.distanceFilter &&
@@ -94,6 +99,7 @@ class LocusAdaptive {
       _currentAdaptiveSettings = settings;
 
       // Update config
+      if (_stopped) return;
       debugPrint('[Locus] Applying adaptive settings: $settings');
       await LocusConfig.setConfig(Config(
         desiredAccuracy: settings.desiredAccuracy,

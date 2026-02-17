@@ -26,8 +26,10 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS queue")
-        onCreate(db)
+        // Preserve data across schema upgrades.
+        // Add migration steps for each version increment here.
+        // Example: if (oldVersion < 2) { db.execSQL("ALTER TABLE queue ADD COLUMN new_col TEXT") }
+        // Only drop and recreate as last resort.
     }
 
     fun insertPayload(
@@ -42,17 +44,24 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
         val payloadJson = JSONObject(payload).toString()
 
         try {
-            writableDatabase.execSQL(
-                """
-                INSERT OR REPLACE INTO queue 
-                (id, created_at, payload, retry_count, next_retry_at, idempotency_key, type) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent(),
-                arrayOf(id, createdAt, payloadJson, 0, null, idempotencyKey, type)
-            )
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                db.execSQL(
+                    """
+                    INSERT OR REPLACE INTO queue
+                    (id, created_at, payload, retry_count, next_retry_at, idempotency_key, type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """.trimIndent(),
+                    arrayOf(id, createdAt, payloadJson, 0, null, idempotencyKey, type)
+                )
 
-            if (maxDays > 0) pruneByAge(maxDays)
-            if (maxRecords > 0) pruneByCount(maxRecords)
+                if (maxDays > 0) pruneByAge(maxDays)
+                if (maxRecords > 0) pruneByCount(maxRecords)
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
         } catch (e: Exception) {
             android.util.Log.e("QueueStore", "Failed to insert queue payload: ${e.message}", e)
         }

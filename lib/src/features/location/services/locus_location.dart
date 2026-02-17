@@ -59,11 +59,11 @@ class LocusLocation {
     final fetchLimit = limit != null ? limit + offset : null;
 
     final fetched = await getLocations(limit: fetchLimit);
-    final sliced = offset >= fetched.length
-        ? <Location>[]
-        : (fetchLimit == null
-            ? fetched.sublist(offset)
-            : fetched.sublist(offset, offset + (limit ?? 0)));
+    final clampedOffset = offset.clamp(0, fetched.length);
+    final end = limit != null
+        ? (clampedOffset + limit).clamp(0, fetched.length)
+        : fetched.length;
+    final sliced = fetched.sublist(clampedOffset, end);
 
     final adjustedQuery = LocationQuery(
       from: query.from,

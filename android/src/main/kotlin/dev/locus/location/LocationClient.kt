@@ -26,6 +26,7 @@ class LocationClient(
     private var locationCallback: LocationCallback? = null
     private var locationRequest: LocationRequest? = null
     private var listener: LocationClientListener? = null
+    private var currentPositionCts: CancellationTokenSource? = null
 
     // State
     private var currentPriority: Int = Priority.PRIORITY_HIGH_ACCURACY
@@ -71,6 +72,8 @@ class LocationClient(
     }
 
     fun stop() {
+        currentPositionCts?.cancel()
+        currentPositionCts = null
         locationCallback?.let { callback ->
             fusedLocationClient.removeLocationUpdates(callback)
             locationCallback = null
@@ -102,9 +105,13 @@ class LocationClient(
             return
         }
 
-        val cancellationToken = CancellationTokenSource()
-        fusedLocationClient.getCurrentLocation(currentPriority, cancellationToken.token)
+        // Cancel any in-flight single-location request
+        currentPositionCts?.cancel()
+        val cts = CancellationTokenSource()
+        currentPositionCts = cts
+        fusedLocationClient.getCurrentLocation(currentPriority, cts.token)
             .addOnSuccessListener { location ->
+                currentPositionCts = null
                 if (location == null) {
                     callback.onError("LOCATION_ERROR", "No location available")
                 } else {
@@ -112,6 +119,7 @@ class LocationClient(
                 }
             }
             .addOnFailureListener { e ->
+                currentPositionCts = null
                 callback.onError("LOCATION_ERROR", e.message ?: "Unknown error")
             }
     }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:locus/src/shared/models/activity.dart';
 import 'package:locus/src/shared/models/battery.dart';
 import 'package:locus/src/shared/models/coords.dart';
@@ -35,7 +36,8 @@ class Location {
         coordsMap is Map ? Map<String, dynamic>.from(coordsMap) : const {},
         strict: false, // Don't throw on missing data for backward compat
       );
-    } on InvalidCoordsException {
+    } on InvalidCoordsException catch (e) {
+      assert(() { debugPrint('[Locus] Invalid coords in location: $e'); return true; }());
       // If range validation fails, use default invalid coords
       coords = const Coords(
         latitude: 0.0,

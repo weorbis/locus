@@ -4,7 +4,11 @@ import SQLite3
 /// SQLite-based storage for locations, geofences, and queue items.
 /// Replaces UserDefaults to support larger datasets and better performance.
 class SQLiteStorage {
-    
+
+    /// SQLITE_TRANSIENT equivalent: tells SQLite to copy the string data immediately.
+    /// Prevents use-after-free when Swift ARC deallocates the string before sqlite3_step.
+    private static let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
     private var db: OpaquePointer?
     private let dbName = "locus_storage.sqlite"
     private let queue = DispatchQueue(label: "dev.locus.sqlite", qos: .utility)
@@ -42,78 +46,84 @@ class SQLiteStorage {
     private func createTables() {
         queue.sync {
             guard let _ = self.db else { return }
-        }
-        
-        let createStatements = [
-            """
-            CREATE TABLE IF NOT EXISTS locations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                uuid TEXT UNIQUE NOT NULL,
-                payload TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
-                created_at REAL DEFAULT (strftime('%s', 'now'))
-            );
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS geofences (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                identifier TEXT UNIQUE NOT NULL,
-                payload TEXT NOT NULL,
-                created_at REAL DEFAULT (strftime('%s', 'now'))
-            );
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS queue (
-                id TEXT PRIMARY KEY,
-                payload TEXT NOT NULL,
-                type TEXT,
-                idempotency_key TEXT,
-                retry_count INTEGER DEFAULT 0,
-                next_retry_at TEXT,
-                created_at TEXT NOT NULL,
-                failed_at TEXT
-            );
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS dead_letter (
-                id TEXT PRIMARY KEY,
-                payload TEXT NOT NULL,
-                type TEXT,
-                idempotency_key TEXT,
-                retry_count INTEGER DEFAULT 0,
-                failed_at TEXT NOT NULL
-            );
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp INTEGER NOT NULL,
-                level TEXT NOT NULL,
-                message TEXT NOT NULL,
-                tag TEXT
-            );
-            """,
-            "CREATE INDEX IF NOT EXISTS idx_locations_timestamp ON locations(timestamp);",
-            "CREATE INDEX IF NOT EXISTS idx_queue_retry ON queue(next_retry_at);",
-            "CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);"
-        ]
-        
-        for sql in createStatements {
-            executeStatement(sql)
+
+            let createStatements = [
+                """
+                CREATE TABLE IF NOT EXISTS locations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    uuid TEXT UNIQUE NOT NULL,
+                    payload TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    created_at REAL DEFAULT (strftime('%s', 'now'))
+                );
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS geofences (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    identifier TEXT UNIQUE NOT NULL,
+                    payload TEXT NOT NULL,
+                    created_at REAL DEFAULT (strftime('%s', 'now'))
+                );
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS queue (
+                    id TEXT PRIMARY KEY,
+                    payload TEXT NOT NULL,
+                    type TEXT,
+                    idempotency_key TEXT,
+                    retry_count INTEGER DEFAULT 0,
+                    next_retry_at TEXT,
+                    created_at TEXT NOT NULL,
+                    failed_at TEXT
+                );
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS dead_letter (
+                    id TEXT PRIMARY KEY,
+                    payload TEXT NOT NULL,
+                    type TEXT,
+                    idempotency_key TEXT,
+                    retry_count INTEGER DEFAULT 0,
+                    failed_at TEXT NOT NULL
+                );
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp INTEGER NOT NULL,
+                    level TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    tag TEXT
+                );
+                """,
+                "CREATE INDEX IF NOT EXISTS idx_locations_timestamp ON locations(timestamp);",
+                "CREATE INDEX IF NOT EXISTS idx_queue_retry ON queue(next_retry_at);",
+                "CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);"
+            ]
+
+            for sql in createStatements {
+                _executeStatementOnQueue(sql)
+            }
         }
     }
     
     private func executeStatement(_ sql: String) {
         queue.sync {
-            guard let db = self.db else { return }
-            var statement: OpaquePointer?
-            if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
-                if sqlite3_step(statement) != SQLITE_DONE {
-                    // Statement failed
-                }
-            }
-            sqlite3_finalize(statement)
+            _executeStatementOnQueue(sql)
         }
+    }
+
+    /// Executes a SQL statement assuming we are already on the serial queue.
+    /// Use this from methods that already dispatch to queue.async.
+    private func _executeStatementOnQueue(_ sql: String) {
+        guard let db = self.db else { return }
+        var statement: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
+            if sqlite3_step(statement) != SQLITE_DONE {
+                // Statement failed
+            }
+        }
+        sqlite3_finalize(statement)
     }
     
     // MARK: - Migration from UserDefaults
@@ -186,9 +196,9 @@ class SQLiteStorage {
             var statement: OpaquePointer?
             
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
-                sqlite3_bind_text(statement, 1, uuid, -1, nil)
-                sqlite3_bind_text(statement, 2, jsonString, -1, nil)
-                sqlite3_bind_text(statement, 3, timestamp, -1, nil)
+                sqlite3_bind_text(statement, 1, uuid, -1, SQLiteStorage.SQLITE_TRANSIENT)
+                sqlite3_bind_text(statement, 2, jsonString, -1, SQLiteStorage.SQLITE_TRANSIENT)
+                sqlite3_bind_text(statement, 3, timestamp, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_step(statement)
             }
             sqlite3_finalize(statement)
@@ -234,7 +244,7 @@ class SQLiteStorage {
             var statement: OpaquePointer?
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                 for (index, uuid) in uuids.enumerated() {
-                    sqlite3_bind_text(statement, Int32(index + 1), uuid, -1, nil)
+                    sqlite3_bind_text(statement, Int32(index + 1), uuid, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 }
                 sqlite3_step(statement)
             }
@@ -244,7 +254,7 @@ class SQLiteStorage {
     
     func clearLocations() {
         queue.async { [weak self] in
-            self?.executeStatement("DELETE FROM locations")
+            self?._executeStatementOnQueue("DELETE FROM locations")
         }
     }
     
@@ -260,7 +270,7 @@ class SQLiteStorage {
                 let sql = "DELETE FROM locations WHERE timestamp < ?"
                 var statement: OpaquePointer?
                 if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
-                    sqlite3_bind_text(statement, 1, cutoffString, -1, nil)
+                    sqlite3_bind_text(statement, 1, cutoffString, -1, SQLiteStorage.SQLITE_TRANSIENT)
                     sqlite3_step(statement)
                 }
                 sqlite3_finalize(statement)
@@ -314,8 +324,8 @@ class SQLiteStorage {
             var statement: OpaquePointer?
             
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
-                sqlite3_bind_text(statement, 1, identifier, -1, nil)
-                sqlite3_bind_text(statement, 2, jsonString, -1, nil)
+                sqlite3_bind_text(statement, 1, identifier, -1, SQLiteStorage.SQLITE_TRANSIENT)
+                sqlite3_bind_text(statement, 2, jsonString, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_step(statement)
             }
             sqlite3_finalize(statement)
@@ -354,7 +364,7 @@ class SQLiteStorage {
             var statement: OpaquePointer?
             
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
-                sqlite3_bind_text(statement, 1, identifier, -1, nil)
+                sqlite3_bind_text(statement, 1, identifier, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_step(statement)
             }
             sqlite3_finalize(statement)
@@ -363,7 +373,7 @@ class SQLiteStorage {
     
     func clearGeofences() {
         queue.async { [weak self] in
-            self?.executeStatement("DELETE FROM geofences")
+            self?._executeStatementOnQueue("DELETE FROM geofences")
         }
     }
     
@@ -392,25 +402,25 @@ class SQLiteStorage {
             var statement: OpaquePointer?
             
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
-                sqlite3_bind_text(statement, 1, id, -1, nil)
-                sqlite3_bind_text(statement, 2, jsonString, -1, nil)
+                sqlite3_bind_text(statement, 1, id, -1, SQLiteStorage.SQLITE_TRANSIENT)
+                sqlite3_bind_text(statement, 2, jsonString, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 if let type = type {
-                    sqlite3_bind_text(statement, 3, type, -1, nil)
+                    sqlite3_bind_text(statement, 3, type, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 } else {
                     sqlite3_bind_null(statement, 3)
                 }
                 if let key = idempotencyKey {
-                    sqlite3_bind_text(statement, 4, key, -1, nil)
+                    sqlite3_bind_text(statement, 4, key, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 } else {
                     sqlite3_bind_null(statement, 4)
                 }
                 sqlite3_bind_int(statement, 5, Int32(retryCount))
                 if let retry = nextRetryAt {
-                    sqlite3_bind_text(statement, 6, retry, -1, nil)
+                    sqlite3_bind_text(statement, 6, retry, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 } else {
                     sqlite3_bind_null(statement, 6)
                 }
-                sqlite3_bind_text(statement, 7, createdAt, -1, nil)
+                sqlite3_bind_text(statement, 7, createdAt, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_step(statement)
             }
             sqlite3_finalize(statement)
@@ -473,7 +483,7 @@ class SQLiteStorage {
             var statement: OpaquePointer?
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                 for (index, id) in ids.enumerated() {
-                    sqlite3_bind_text(statement, Int32(index + 1), id, -1, nil)
+                    sqlite3_bind_text(statement, Int32(index + 1), id, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 }
                 sqlite3_step(statement)
             }
@@ -490,8 +500,8 @@ class SQLiteStorage {
             
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                 sqlite3_bind_int(statement, 1, Int32(retryCount))
-                sqlite3_bind_text(statement, 2, nextRetryAt, -1, nil)
-                sqlite3_bind_text(statement, 3, id, -1, nil)
+                sqlite3_bind_text(statement, 2, nextRetryAt, -1, SQLiteStorage.SQLITE_TRANSIENT)
+                sqlite3_bind_text(statement, 3, id, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_step(statement)
             }
             sqlite3_finalize(statement)
@@ -500,7 +510,7 @@ class SQLiteStorage {
     
     func clearQueue() {
         queue.async { [weak self] in
-            self?.executeStatement("DELETE FROM queue")
+            self?._executeStatementOnQueue("DELETE FROM queue")
         }
     }
     
@@ -520,7 +530,7 @@ class SQLiteStorage {
             var retryCount: Int = 0
             
             if sqlite3_prepare_v2(db, selectSql, -1, &selectStatement, nil) == SQLITE_OK {
-                sqlite3_bind_text(selectStatement, 1, id, -1, nil)
+                sqlite3_bind_text(selectStatement, 1, id, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 if sqlite3_step(selectStatement) == SQLITE_ROW {
                     if let ptr = sqlite3_column_text(selectStatement, 0) {
                         payload = String(cString: ptr)
@@ -547,29 +557,35 @@ class SQLiteStorage {
             let failedAt = ISO8601DateFormatter().string(from: Date())
             
             if sqlite3_prepare_v2(db, insertSql, -1, &insertStatement, nil) == SQLITE_OK {
-                sqlite3_bind_text(insertStatement, 1, id, -1, nil)
-                sqlite3_bind_text(insertStatement, 2, payload, -1, nil)
+                sqlite3_bind_text(insertStatement, 1, id, -1, SQLiteStorage.SQLITE_TRANSIENT)
+                sqlite3_bind_text(insertStatement, 2, payload, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 if let type = type {
-                    sqlite3_bind_text(insertStatement, 3, type, -1, nil)
+                    sqlite3_bind_text(insertStatement, 3, type, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 } else {
                     sqlite3_bind_null(insertStatement, 3)
                 }
                 if let key = idempotencyKey {
-                    sqlite3_bind_text(insertStatement, 4, key, -1, nil)
+                    sqlite3_bind_text(insertStatement, 4, key, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 } else {
                     sqlite3_bind_null(insertStatement, 4)
                 }
                 sqlite3_bind_int(insertStatement, 5, Int32(retryCount))
-                sqlite3_bind_text(insertStatement, 6, failedAt, -1, nil)
+                sqlite3_bind_text(insertStatement, 6, failedAt, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_step(insertStatement)
             }
             sqlite3_finalize(insertStatement)
             
-            // Remove from queue
-            self.executeStatement("DELETE FROM queue WHERE id = '\(id)'")
+            // Remove from queue (parameterized to prevent SQL injection - F-004)
+            let deleteSql = "DELETE FROM queue WHERE id = ?"
+            var deleteStatement: OpaquePointer?
+            if sqlite3_prepare_v2(db, deleteSql, -1, &deleteStatement, nil) == SQLITE_OK {
+                sqlite3_bind_text(deleteStatement, 1, id, -1, SQLiteStorage.SQLITE_TRANSIENT)
+                sqlite3_step(deleteStatement)
+            }
+            sqlite3_finalize(deleteStatement)
             
             // Keep dead letter bounded
-            self.executeStatement("""
+            self._executeStatementOnQueue("""
                 DELETE FROM dead_letter WHERE id NOT IN (
                     SELECT id FROM dead_letter ORDER BY failed_at DESC LIMIT 100
                 )
@@ -620,7 +636,7 @@ class SQLiteStorage {
     
     func clearDeadLetter() {
         queue.async { [weak self] in
-            self?.executeStatement("DELETE FROM dead_letter")
+            self?._executeStatementOnQueue("DELETE FROM dead_letter")
         }
     }
 
@@ -635,10 +651,10 @@ class SQLiteStorage {
 
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                 sqlite3_bind_int64(statement, 1, timestampMs)
-                sqlite3_bind_text(statement, 2, level, -1, nil)
-                sqlite3_bind_text(statement, 3, message, -1, nil)
+                sqlite3_bind_text(statement, 2, level, -1, SQLiteStorage.SQLITE_TRANSIENT)
+                sqlite3_bind_text(statement, 3, message, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 if let tag = tag {
-                    sqlite3_bind_text(statement, 4, tag, -1, nil)
+                    sqlite3_bind_text(statement, 4, tag, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 } else {
                     sqlite3_bind_null(statement, 4)
                 }
@@ -699,7 +715,7 @@ class SQLiteStorage {
 
     func clearLogs() {
         queue.async { [weak self] in
-            self?.executeStatement("DELETE FROM logs")
+            self?._executeStatementOnQueue("DELETE FROM logs")
         }
     }
 }

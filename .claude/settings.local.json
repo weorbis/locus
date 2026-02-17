@@ -6,7 +6,8 @@
       "Bash(flutter run:*)",
       "Bash(cat:*)",
       "Bash(flutter pub get:*)",
-      "Bash(adb logcat:*)"
+      "Bash(adb logcat:*)",
+      "Bash(flutter analyze:*)"
     ]
   }
 }

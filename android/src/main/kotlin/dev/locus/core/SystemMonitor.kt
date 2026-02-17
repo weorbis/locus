@@ -85,7 +85,7 @@ class SystemMonitor(
         var networkType = "unknown"
         
         connectivityManager?.let { cm ->
-            val network = cm.activeNetwork
+            val network = cm.activeNetwork ?: return@let
             val capabilities = cm.getNetworkCapabilities(network)
             
             capabilities?.let { caps ->

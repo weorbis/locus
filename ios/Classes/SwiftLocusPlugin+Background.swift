@@ -132,11 +132,11 @@ extension SwiftLocusPlugin {
 
   func dispatchHeadlessEvent(_ event: [String: Any]) {
     guard configManager.enableHeadless else { return }
-    
+
     let dispatcher = SecureStorage.shared.getInt64(forKey: SecureStorage.headlessDispatcherKey) ?? 0
     let callback = SecureStorage.shared.getInt64(forKey: SecureStorage.headlessCallbackKey) ?? 0
     guard dispatcher != 0, callback != 0 else { return }
-    
+
     if headlessEngine == nil {
       guard let callbackInfo = FlutterCallbackCache.lookupCallbackInformation(dispatcher) else {
         return
@@ -146,25 +146,43 @@ extension SwiftLocusPlugin {
         return
       }
       headlessEngine = engine
-      
-      // Schedule cleanup after idle timeout
-      DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in
-        self?.cleanupHeadlessEngineIfIdle()
-      }
     }
-    
+
+    // Track last activity time for idle cleanup
+    headlessLastActivityTime = Date()
+
     guard let engine = headlessEngine else { return }
     let channel = FlutterMethodChannel(name: SwiftLocusPlugin.headlessChannelName, binaryMessenger: engine.binaryMessenger)
     channel.invokeMethod("headlessEvent", arguments: [
       "callbackHandle": callback,
       "event": event
     ])
+
+    // Schedule idle cleanup check (restarts on each dispatch)
+    scheduleHeadlessCleanup()
   }
-  
+
+  private func scheduleHeadlessCleanup() {
+    headlessCleanupTimer?.invalidate()
+    headlessCleanupTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: false) { [weak self] _ in
+      self?.cleanupHeadlessEngineIfIdle()
+    }
+  }
+
   private func cleanupHeadlessEngineIfIdle() {
+    headlessCleanupTimer?.invalidate()
+    headlessCleanupTimer = nil
     guard let engine = headlessEngine else { return }
+    // Only clean up if idle for at least 60 seconds since last dispatch
+    if let lastActivity = headlessLastActivityTime,
+       Date().timeIntervalSince(lastActivity) < 55 {
+      // Still active, reschedule
+      scheduleHeadlessCleanup()
+      return
+    }
     engine.destroyContext()
     headlessEngine = nil
+    headlessLastActivityTime = nil
   }
 
   func startBackgroundTask() -> Int {

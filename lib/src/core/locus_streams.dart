@@ -190,8 +190,12 @@ class LocusStreams {
   /// Processes a mapped event, applying spoof detection, privacy zones,
   /// and polygon geofence detection if enabled.
   static void _processEvent(GeolocationEvent<dynamic> event) {
-    // Only apply location processing to location-type events
-    if (event.type == EventType.location && event.data is Location) {
+    // Apply location processing to all events that carry Location data
+    final isLocationEvent = event.type == EventType.location ||
+        event.type == EventType.motionChange ||
+        event.type == EventType.heartbeat ||
+        event.type == EventType.schedule;
+    if (isLocationEvent && event.data is Location) {
       var location = event.data as Location;
 
       // 1. Spoof detection (may block the event entirely)

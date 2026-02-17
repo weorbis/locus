@@ -8,8 +8,8 @@ class RoutePoint {
 
   factory RoutePoint.fromMap(JsonMap map) {
     return RoutePoint(
-      latitude: (map['latitude'] as num).toDouble(),
-      longitude: (map['longitude'] as num).toDouble(),
+      latitude: (map['latitude'] as num?)?.toDouble() ?? 0.0,
+      longitude: (map['longitude'] as num?)?.toDouble() ?? 0.0,
     );
   }
   final double latitude;

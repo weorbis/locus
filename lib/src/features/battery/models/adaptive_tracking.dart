@@ -204,7 +204,9 @@ class AdaptiveTrackingConfig {
 
       if (hasExceededDelay) {
         final heartbeat = smartHeartbeat
-            ? maxHeartbeatInterval.inSeconds
+            ? (batteryLevel == BatteryLevel.low
+                ? maxHeartbeatInterval.inSeconds
+                : ((maxHeartbeatInterval.inSeconds + minHeartbeatInterval.inSeconds) ~/ 2))
             : minHeartbeatInterval.inSeconds;
         return AdaptiveSettings(
           distanceFilter: 50,

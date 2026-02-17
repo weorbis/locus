@@ -99,7 +99,7 @@ class MotionManager(
             if (!isMoving) {
                 if (config.motionTriggerDelay > 0) {
                     motionTriggerRunnable = Runnable { setMovingState(true) }
-                    mainHandler.postDelayed(motionTriggerRunnable!!, config.motionTriggerDelay)
+                    motionTriggerRunnable?.let { mainHandler.postDelayed(it, config.motionTriggerDelay) }
                 } else {
                     setMovingState(true)
                 }
@@ -132,7 +132,7 @@ class MotionManager(
     private fun scheduleStopTimeout(delayMs: Long) {
         cancelStopTimeout()
         stopTimeoutRunnable = Runnable { setMovingState(false) }
-        mainHandler.postDelayed(stopTimeoutRunnable!!, delayMs)
+        stopTimeoutRunnable?.let { mainHandler.postDelayed(it, delayMs) }
     }
 
     private fun cancelStopTimeout() {

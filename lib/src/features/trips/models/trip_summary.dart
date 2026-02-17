@@ -15,8 +15,8 @@ class TripSummary {
   factory TripSummary.fromMap(JsonMap map) {
     return TripSummary(
       tripId: map['tripId'] as String? ?? '',
-      startedAt: DateTime.parse(map['startedAt'] as String),
-      endedAt: DateTime.parse(map['endedAt'] as String),
+      startedAt: DateTime.tryParse(map['startedAt'] as String? ?? '') ?? DateTime.now(),
+      endedAt: DateTime.tryParse(map['endedAt'] as String? ?? '') ?? DateTime.now(),
       distanceMeters: (map['distanceMeters'] as num?)?.toDouble() ?? 0,
       durationSeconds: (map['durationSeconds'] as num?)?.toInt() ?? 0,
       idleSeconds: (map['idleSeconds'] as num?)?.toInt() ?? 0,
