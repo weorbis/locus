@@ -426,7 +426,8 @@ class ConfigValidator {
       warnings.add(const ConfigValidationWarning(
         field: 'maxMonitoredGeofences',
         message: 'iOS limits geofences to 20 maximum',
-        suggestion: 'Set maxMonitoredGeofences to 20 or fewer for iOS compatibility',
+        suggestion:
+            'Set maxMonitoredGeofences to 20 or fewer for iOS compatibility',
       ));
     }
 

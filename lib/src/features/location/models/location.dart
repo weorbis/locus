@@ -37,7 +37,10 @@ class Location {
         strict: false, // Don't throw on missing data for backward compat
       );
     } on InvalidCoordsException catch (e) {
-      assert(() { debugPrint('[Locus] Invalid coords in location: $e'); return true; }());
+      assert(() {
+        debugPrint('[Locus] Invalid coords in location: $e');
+        return true;
+      }());
       // If range validation fails, use default invalid coords
       coords = const Coords(
         latitude: 0.0,
