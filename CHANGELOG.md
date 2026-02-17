@@ -2,6 +2,47 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] - 2026-02-17
+
+### Fixed
+
+- **Android: ForegroundService crash on Android 14+** — Restructured to two-phase notification strategy, calling `startForeground()` immediately with a minimal notification before building the full one. Eliminates `ForegroundServiceDidNotStartInTimeException`. (#22)
+- **Android: Odometer float precision loss** — Switched from 32-bit float to 64-bit long storage using `Double.toBits()`/`fromBits()` with automatic migration from legacy format.
+- **Android: TrackingStats race condition** — Added `@Synchronized` to `onLocationUpdate()` and `onTrackingStop()` to prevent concurrent session field corruption.
+- **Android: EventDispatcher race on eventSink** — Use captured local reference in `mainHandler.post` block to prevent null dereference if sink is cleared between check and use.
+- **Android: SyncManager log exposure** — Sanitized error messages in `Log.e()` calls to strip URLs that may contain tokens or sensitive path segments.
+- **Android: MotionManager null safety** — Replaced `!!` assertions with safe `?.let` pattern on `motionTriggerRunnable` and `stopTimeoutRunnable`.
+- **Android: SystemMonitor null activeNetwork** — Added null check on `ConnectivityManager.activeNetwork` with early return.
+- **Android: LocationEventProcessor privacy log** — Removed privacy mode config value from log output.
+- **Android: TrackingStats integer overflow** — Explicit `Long` division for tracking minutes calculation.
+- **Android: HeartbeatScheduler first beat** — Fire first heartbeat immediately instead of waiting one full interval.
+- **Android: ForegroundService null actions** — Added `.filterNotNull()` on notification actions array.
+- **Android: SQLite storage integrity** — Wrapped operations in transactions, `onUpgrade` no longer drops tables.
+- **Android: HeadlessService SharedPreferences** — Aligned prefs name and key with ConfigManager.
+- **Dart: RoutePoint unsafe cast** — Safe null-aware cast with fallback for `latitude`/`longitude`.
+- **Dart: TripSummary unsafe DateTime.parse** — Use `DateTime.tryParse()` with fallback instead of throwing on malformed dates.
+- **Dart: Location silent fallback** — Added debug-mode logging when coords fall back to (0,0) due to validation failure.
+- **Dart: Adaptive heartbeat** — Stationary heartbeat now factors battery level instead of always using max interval.
+- **Dart: Headless sync body builder** — Fixed callback to construct proper `SyncBodyContext` matching the typed contract instead of passing a raw Map.
+- **iOS: SyncManager thread safety** — Thread-safe network state and URLSession lifecycle improvements.
+- **iOS: SQLiteStorage memory safety** — All `sqlite3_bind_text` calls now use `SQLITE_TRANSIENT` to prevent use-after-free.
+- **iOS: SQLiteStorage concurrency** — `createTables` moved inside queue.sync block.
+
+### Changed
+
+- **Adaptive tracking** — Stationary heartbeat uses averaged interval for normal battery level (previously always used max).
+- **Event processing** — Spoof detection, privacy zone filtering, and polygon geofence detection now apply to heartbeat, motionChange, and schedule events (previously location-only).
+- **AppLifecycleState.inactive** — Now treated as foreground to avoid unnecessary background transitions during permission dialogs and phone calls.
+- **Config validation** — `maxMonitoredGeofences > 20` now produces a warning instead of an error for iOS compatibility.
+- **Debug overlay tests** — Fixed `ink_sparkle.frag` shader issue in test environment using `NoSplash` theme.
+
+### Added
+
+- SSL pinning configuration options (`sslPinningCertificate`, `sslPinningFingerprints`).
+- `LocusSync.isSyncReady()` method.
+- Config URL format validation warnings.
+- iOS log level `"off"` support.
+
 ## [2.0.1] - 2026-01-12
 
 ### Changed

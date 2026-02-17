@@ -4,7 +4,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 group = "dev.locus"
-version = "2.0.0"
+version = "2.1.0"
 
 buildscript {
     repositories {
