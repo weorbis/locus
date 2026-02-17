@@ -8,6 +8,7 @@ import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingEvent
 import dev.locus.LocusPlugin
 import dev.locus.service.HeadlessService
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -43,7 +44,7 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
         val payload = JSONObject().apply {
             try {
                 put("action", action)
-                put("identifiers", ids)
+                put("identifiers", JSONArray(ids))
                 event.triggeringLocation?.let { loc ->
                     val location = JSONObject().apply {
                         put("latitude", loc.latitude)
