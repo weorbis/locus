@@ -36,7 +36,6 @@ import dev.locus.core.TrackingEventEmitter
 import dev.locus.core.TrackingConfigApplier
 import dev.locus.core.PreferenceEventHandler
 import dev.locus.core.Scheduler
-import dev.locus.core.SecurePreferencesFactory
 import dev.locus.core.StateManager
 import dev.locus.core.SyncManager
 import dev.locus.core.SystemMonitor
@@ -99,9 +98,7 @@ class LocusPlugin : FlutterPlugin,
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         androidContext = binding.applicationContext
-        // Use EncryptedSharedPreferences for secure storage of sensitive data (headless handles, etc.)
-        // Falls back to standard SharedPreferences if encryption fails
-        prefs = androidContext?.let { SecurePreferencesFactory.create(it) }
+        prefs = androidContext?.let { it.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
         // IMPORTANT: Always start with privacy mode disabled on fresh plugin attach.
         // This prevents stale persisted values from blocking location sync before Locus.ready() is called.
