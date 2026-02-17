@@ -423,10 +423,10 @@ class ConfigValidator {
     // Validate iOS-specific geofence limits
     if (config.maxMonitoredGeofences != null &&
         config.maxMonitoredGeofences! > 20) {
-      errors.add(const ConfigValidationError(
+      warnings.add(const ConfigValidationWarning(
         field: 'maxMonitoredGeofences',
         message: 'iOS limits geofences to 20 maximum',
-        suggestion: 'Set maxMonitoredGeofences to 20 or fewer',
+        suggestion: 'Set maxMonitoredGeofences to 20 or fewer for iOS compatibility',
       ));
     }
 

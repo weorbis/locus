@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:locus/src/models.dart';
 import 'package:locus/src/core/locus_channels.dart';
+import 'package:locus/src/core/locus_interface.dart';
 
 /// Callback type for headless background events.
 typedef HeadlessEventCallback = Future<void> Function(HeadlessEvent event);
@@ -138,17 +139,10 @@ class LocusHeadless {
     }
 
     try {
-      // Import SyncBodyContext dynamically to avoid circular deps
-      final locationsRaw = args['locations'] as List?;
-      final extras = args['extras'] as Map? ?? {};
-      final locations = locationsRaw
-              ?.map((item) =>
-                  (item as Map).cast<String, dynamic>())
-              .toList() ??
-          [];
-      final result = await Function.apply(callback, [
-        {'locations': locations, 'extras': Map<String, dynamic>.from(extras)}
-      ]);
+      final context = SyncBodyContext.fromMap(args);
+      final typedCallback =
+          callback as Future<JsonMap> Function(SyncBodyContext);
+      final result = await typedCallback(context);
       return result;
     } catch (e) {
       if (kDebugMode) {
