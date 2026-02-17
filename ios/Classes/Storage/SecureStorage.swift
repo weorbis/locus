@@ -62,10 +62,11 @@ class SecureStorage {
         if status == errSecSuccess {
             return true
         } else {
-            // Fallback to UserDefaults if Keychain fails
-            logError("Failed to store in Keychain (status: \(status)), using UserDefaults fallback")
+            // Fallback to UserDefaults if Keychain fails.
+            // WARNING: Data stored in UserDefaults is not encrypted.
+            logError("Failed to store in Keychain (status: \(status)), using UserDefaults fallback. Data will NOT be encrypted.")
             UserDefaults.standard.set(data, forKey: "secure_\(key)")
-            return true
+            return false
         }
     }
     

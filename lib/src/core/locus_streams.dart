@@ -52,8 +52,10 @@ class LocusStreams {
   static void enableSpoofDetection(SpoofDetectionConfig config) {
     _spoofDetector = SpoofDetector(config);
     _spoofDetectionEnabled = true;
-    debugPrint(
-        '[Locus] Spoof detection enabled, blocking: ${config.blockMockLocations}');
+    if (kDebugMode) {
+      debugPrint(
+          '[Locus] Spoof detection enabled, blocking: ${config.blockMockLocations}');
+    }
   }
 
   /// Disables spoof detection.
@@ -70,23 +72,29 @@ class LocusStreams {
   /// When set, location events will trigger polygon enter/exit detection.
   static void setPolygonGeofenceService(PolygonGeofenceService? service) {
     _polygonGeofenceService = service;
-    debugPrint(
-        '[Locus] Polygon geofence service ${service != null ? 'registered' : 'cleared'}');
+    if (kDebugMode) {
+      debugPrint(
+          '[Locus] Polygon geofence service ${service != null ? 'registered' : 'cleared'}');
+    }
   }
 
   /// Sets the privacy zone service for filtering location events.
   /// When set, locations in privacy zones will be obfuscated or excluded.
   static Future<void> setPrivacyZoneService(PrivacyZoneService? service) async {
     _privacyZoneService = service;
-    debugPrint(
-        '[Locus] Privacy zone service ${service != null ? 'registered' : 'cleared'}');
+    if (kDebugMode) {
+      debugPrint(
+          '[Locus] Privacy zone service ${service != null ? 'registered' : 'cleared'}');
+    }
 
     // Inform native side to avoid persisting raw locations when privacy zones are active.
     try {
       await LocusChannels.methods
           .invokeMethod('setPrivacyMode', service != null);
     } catch (error) {
-      debugPrint('[Locus] Failed to set privacy mode on native side: $error');
+      if (kDebugMode) {
+        debugPrint('[Locus] Failed to set privacy mode on native side: $error');
+      }
       // Non-critical, continue without propagating error
     }
   }
@@ -95,7 +103,9 @@ class LocusStreams {
     _listenerCount += 1;
     // Start asynchronously to avoid blocking, but use proper async handling
     await _ensureNativeStreamStarted().catchError((error) {
-      debugPrint('[Locus] Error starting native stream: $error');
+      if (kDebugMode) {
+        debugPrint('[Locus] Error starting native stream: $error');
+      }
     });
   }
 
@@ -104,7 +114,9 @@ class LocusStreams {
     if (_listenerCount < 0) _listenerCount = 0;
     // Stop asynchronously with proper error handling
     await _maybeStopNativeStream().catchError((error) {
-      debugPrint('[Locus] Error stopping native stream: $error');
+      if (kDebugMode) {
+        debugPrint('[Locus] Error stopping native stream: $error');
+      }
     });
   }
 
@@ -150,17 +162,23 @@ class LocusStreams {
               final mapped = EventMapper.mapToEvent(event);
               _processEvent(mapped);
             } catch (e, stack) {
-              debugPrint('[Locus] Event mapping error: $e');
+              if (kDebugMode) {
+                debugPrint('[Locus] Event mapping error: $e');
+              }
               await _handleStreamError(e, stack, 'event_mapping');
             }
           },
           onError: (Object error, StackTrace stackTrace) async {
-            debugPrint('[Locus] Stream error: $error');
+            if (kDebugMode) {
+              debugPrint('[Locus] Stream error: $error');
+            }
             await _handleStreamError(error, stackTrace, 'stream');
           },
         );
       } catch (e) {
-        debugPrint('[Locus] Failed to start native stream: $e');
+        if (kDebugMode) {
+          debugPrint('[Locus] Failed to start native stream: $e');
+        }
       } finally {
         _isStarting = false;
       }
@@ -172,8 +190,12 @@ class LocusStreams {
   /// Processes a mapped event, applying spoof detection, privacy zones,
   /// and polygon geofence detection if enabled.
   static void _processEvent(GeolocationEvent<dynamic> event) {
-    // Only apply location processing to location-type events
-    if (event.type == EventType.location && event.data is Location) {
+    // Apply location processing to all events that carry Location data
+    final isLocationEvent = event.type == EventType.location ||
+        event.type == EventType.motionChange ||
+        event.type == EventType.heartbeat ||
+        event.type == EventType.schedule;
+    if (isLocationEvent && event.data is Location) {
       var location = event.data as Location;
 
       // 1. Spoof detection (may block the event entirely)
@@ -183,12 +205,16 @@ class LocusStreams {
         if (spoofResult != null) {
           if (spoofResult.wasBlocked) {
             _blockedEventsController?.add(spoofResult);
-            debugPrint(
-                '[Locus] Blocked spoofed location: ${spoofResult.factors}');
+            if (kDebugMode) {
+              debugPrint(
+                  '[Locus] Blocked spoofed location: ${spoofResult.factors}');
+            }
             return; // Don't process further
           }
-          debugPrint(
-              '[Locus] Spoofed location detected (not blocked): ${spoofResult.factors}');
+          if (kDebugMode) {
+            debugPrint(
+                '[Locus] Spoofed location detected (not blocked): ${spoofResult.factors}');
+          }
           location = location.copyWith(isMock: true);
         }
       }
@@ -200,13 +226,17 @@ class LocusStreams {
         final result = _privacyZoneService!.processLocation(location);
 
         if (result.wasExcluded) {
-          debugPrint('[Locus] Location excluded by privacy zone');
+          if (kDebugMode) {
+            debugPrint('[Locus] Location excluded by privacy zone');
+          }
           return; // Don't emit excluded locations
         }
 
         if (result.wasObfuscated && result.processedLocation != null) {
           processedLocation = result.processedLocation!;
-          debugPrint('[Locus] Location obfuscated by privacy zone');
+          if (kDebugMode) {
+            debugPrint('[Locus] Location obfuscated by privacy zone');
+          }
         }
       }
 
@@ -253,14 +283,18 @@ class LocusStreams {
 
       // Handle error with proper async chain for immediate recovery
       await errorManager.handleError(locusError).then((action) {
-        debugPrint('[Locus] Error recovery action: $action');
+        if (kDebugMode) {
+          debugPrint('[Locus] Error recovery action: $action');
+        }
 
         // If action is not 'ignore', propagate to listeners
         if (action != RecoveryAction.ignore) {
           _eventController?.addError(error, stackTrace);
         }
       }).catchError((recoveryError) {
-        debugPrint('[Locus] Error during error recovery: $recoveryError');
+        if (kDebugMode) {
+          debugPrint('[Locus] Error during error recovery: $recoveryError');
+        }
         // Propagate original error if recovery fails
         _eventController?.addError(error, stackTrace);
       });

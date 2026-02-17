@@ -38,6 +38,8 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
   var heartbeatTimer: Timer?
 
   var headlessEngine: FlutterEngine?
+  var headlessLastActivityTime: Date?
+  var headlessCleanupTimer: Timer?
   var backgroundTaskCounter = 1
   var backgroundTasks: [Int: UIBackgroundTaskIdentifier] = [:]
   var registeredBgTaskId: String?
@@ -95,6 +97,8 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
     motionDetector.stop()
     scheduler.stop()
     syncManager.release()
+    headlessCleanupTimer?.invalidate()
+    headlessCleanupTimer = nil
     headlessEngine?.destroyContext()
     headlessEngine = nil
   }

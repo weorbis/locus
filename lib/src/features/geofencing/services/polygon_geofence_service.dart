@@ -38,6 +38,7 @@ typedef PolygonGeofencePersistCallback = Future<void> Function(
 class PolygonGeofenceService {
   final Map<String, PolygonGeofence> _polygons = {};
   final Map<String, bool> _insideState = {};
+  bool _isDisposed = false;
 
   final StreamController<PolygonGeofenceEvent> _eventController =
       StreamController<PolygonGeofenceEvent>.broadcast();
@@ -202,6 +203,7 @@ class PolygonGeofenceService {
   ///
   /// Call this method with each location update to trigger enter/exit events.
   void processLocationUpdate(double latitude, double longitude) {
+    if (_isDisposed) return;
     final now = DateTime.now();
     final triggerPoint = GeoPoint(latitude: latitude, longitude: longitude);
 
@@ -278,6 +280,7 @@ class PolygonGeofenceService {
 
   /// Disposes resources.
   Future<void> dispose() async {
+    _isDisposed = true;
     await _eventController.close();
   }
 }

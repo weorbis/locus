@@ -47,16 +47,27 @@ class TripEngine {
     }
 
     _config = config;
-    _pendingStartLocation = null;
-    _lastUpdateAt = null;
-    _lastDeviationAt = null;
-    _lastStationaryAt = null;
-    _lastPersistAt = null;
-    _dwellEmitted = false;
 
     if (shouldRestore) {
       _state = restored;
+      // Preserve timing context from restored state to avoid losing
+      // stationary duration and emitting duplicate dwell events.
+      _lastUpdateAt = restored.lastLocation?.timestamp;
+      _lastDeviationAt = null;
+      _lastStationaryAt = null;
+      _lastPersistAt = restored.lastLocation?.timestamp;
+      _pendingStartLocation = null;
+      // Keep _dwellEmitted false so dwell can still fire if threshold is met
+      // after restore, but _lastStationaryAt being null means it won't
+      // incorrectly fire until the device is actually detected stationary again.
+      _dwellEmitted = false;
     } else {
+      _pendingStartLocation = null;
+      _lastUpdateAt = null;
+      _lastDeviationAt = null;
+      _lastStationaryAt = null;
+      _lastPersistAt = null;
+      _dwellEmitted = false;
       final tripId = config.tripId ?? _generateTripId();
       _state = TripState(
         tripId: tripId,

@@ -25,8 +25,8 @@ class HeadlessService : JobIntentService() {
         private const val JOB_ID = 197812512
         private const val ENGINE_IDLE_TIMEOUT_MS = 60_000L
         private const val LATCH_TIMEOUT_SECONDS = 30L
-        private const val PREFS_NAME = "locus_plugin"
-        private const val KEY_ENABLE_HEADLESS = "enableHeadless"
+        private const val PREFS_NAME = "dev.locus.preferences"
+        private const val KEY_ENABLE_HEADLESS = "bg_enable_headless"
 
         fun enqueueWork(context: Context, intent: Intent) {
             enqueueWork(context, HeadlessService::class.java, JOB_ID, intent)
@@ -34,6 +34,7 @@ class HeadlessService : JobIntentService() {
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onHandleWork(intent: Intent) {
         val dispatcherHandle = intent.getLongExtra("dispatcher", 0L)
@@ -97,8 +98,8 @@ class HeadlessService : JobIntentService() {
                 )
                 channel.invokeMethod("headlessEvent", args)
 
-                // Schedule engine cleanup
-                CoroutineScope(Dispatchers.Main).launch {
+                // Schedule engine cleanup using bound scope
+                serviceScope.launch {
                     delay(ENGINE_IDLE_TIMEOUT_MS)
                     FlutterEngineCache.getInstance().get(CACHE_KEY)?.let { cached ->
                         try {
@@ -125,5 +126,10 @@ class HeadlessService : JobIntentService() {
             Thread.currentThread().interrupt()
             Log.w(TAG, "Interrupted while waiting for FlutterEngine initialization")
         }
+    }
+
+    override fun onDestroy() {
+        serviceScope.cancel()
+        super.onDestroy()
     }
 }

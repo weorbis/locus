@@ -27,8 +27,17 @@ class SyncManager {
     // Simple network monitor
     private var monitor: NWPathMonitor?
     private let queue = DispatchQueue(label: "dev.locus.network")
-    private var isConnected = true
-    private var isCellular = false
+    private let networkStateQueue = DispatchQueue(label: "dev.locus.networkstate")
+    private var _isConnected = true
+    private var _isCellular = false
+    private var isConnected: Bool {
+        get { networkStateQueue.sync { _isConnected } }
+        set { networkStateQueue.sync { _isConnected = newValue } }
+    }
+    private var isCellular: Bool {
+        get { networkStateQueue.sync { _isCellular } }
+        set { networkStateQueue.sync { _isCellular = newValue } }
+    }
     private var isMonitorRunning = false
     
     // Thread-safe sync pause state
@@ -43,18 +52,21 @@ class SyncManager {
         set { syncStateQueue.sync { _isSyncPaused = newValue } }
     }
     
-    private lazy var urlSession: URLSession = {
+    private var urlSession: URLSession!
+
+    private func createURLSession() -> URLSession {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = config.httpTimeout
         configuration.timeoutIntervalForResource = config.httpTimeout * 2
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.waitsForConnectivity = true
         return URLSession(configuration: configuration)
-    }()
+    }
     
     init(config: ConfigManager, storage: StorageManager) {
         self.config = config
         self.storage = storage
+        self.urlSession = createURLSession()
         startNetworkMonitor()
         NSLog("[Locus] SyncManager initialized - sync PAUSED by default (call resumeSync() when app is ready)")
     }
@@ -91,9 +103,10 @@ class SyncManager {
         urlSession.invalidateAndCancel()
     }
     
-    /// Restarts the network monitor after a release.
+    /// Restarts the network monitor and URLSession after a release.
     /// Call when plugin re-attaches.
     func restart() {
+        urlSession = createURLSession()
         startNetworkMonitor()
     }
 
@@ -215,18 +228,30 @@ class SyncManager {
         request.httpMethod = config.httpMethod
         request.timeoutInterval = config.httpTimeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
+
         for (k, v) in config.httpHeaders {
-            request.setValue(v, forHTTPHeaderField: k)
+            let sanitizedKey = sanitizeHeaderKey(k)
+            let sanitizedValue = sanitizeHeaderValue(v)
+            request.setValue(sanitizedValue, forHTTPHeaderField: sanitizedKey)
         }
-        
+
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         } catch {
             return nil
         }
-        
+
         return request
+    }
+
+    private func sanitizeHeaderKey(_ key: String) -> String {
+        let invalidCharacters = CharacterSet(charactersIn: "\r\n")
+        return key.components(separatedBy: invalidCharacters).joined(separator: "").trimmingCharacters(in: .whitespaces)
+    }
+
+    private func sanitizeHeaderValue(_ value: String) -> String {
+        let invalidCharacters = CharacterSet(charactersIn: "\r\n")
+        return value.components(separatedBy: invalidCharacters).joined(separator: "").trimmingCharacters(in: .whitespaces)
     }
     
     private func enqueueHttp(locationPayload: [String: Any], idsToDelete: [String]?, attempt: Int) {
@@ -327,7 +352,7 @@ class SyncManager {
             var body = self.buildQueueBody(payload: payload, id: id, type: type, idempotencyKey: idempotencyKey)
             guard var request = self.makeRequest(urlString, body: body) else { return }
             
-            let header = self.config.idempotencyHeader.trimmingCharacters(in: .whitespacesAndNewlines)
+            let header = self.sanitizeHeaderKey(self.config.idempotencyHeader)
             if !header.isEmpty {
                 request.setValue(idempotencyKey, forHTTPHeaderField: header)
             }

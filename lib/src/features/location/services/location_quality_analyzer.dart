@@ -25,12 +25,17 @@ class LocationQualityAnalyzer {
     LocationQualityConfig config = const LocationQualityConfig(),
   }) {
     final window = <Location>[];
+    final maxWindowSize = config.windowSize.clamp(1, 100);
     Location? previous;
 
     return source.asyncExpand((location) async* {
       window.add(location);
-      if (window.length >= config.windowSize) {
-        window.removeAt(0);
+      if (window.length >= maxWindowSize) {
+        if (window.length > maxWindowSize) {
+          window.removeRange(0, window.length - maxWindowSize);
+        } else {
+          window.removeAt(0);
+        }
       }
 
       final accuracyScore = _accuracyScore(location, config);

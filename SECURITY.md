@@ -49,9 +49,13 @@ To ensure the security of your users when using Locus:
 ### Client-Side
 
 - Locations are queued in SQLite; prefer encrypted storage where available.
+- **Important**: Do not store authentication tokens or API keys in SharedPreferences unencrypted.
+  - Use flutter_secure_storage or platform-specific secure storage (Keychain on iOS, Keystore on Android).
+  - When using `setHeadersCallback` or `setSyncBodyBuilder`, retrieve credentials from secure storage.
 - Do not start tracking before user consent; allow opt-out.
 - Keep foreground notifications visible on Android when tracking.
 - Avoid logging raw coordinates in production logs.
+- Consider enabling SSL pinning in production using `sslPinningCertificate` (Android) or `sslPinningFingerprints` (iOS).
 
 ## Vulnerability Scanning
 

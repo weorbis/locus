@@ -32,8 +32,10 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS locations")
-        onCreate(db)
+        // Preserve data across schema upgrades.
+        // Add migration steps for each version increment here.
+        // Example: if (oldVersion < 3) { db.execSQL("ALTER TABLE locations ADD COLUMN new_col TEXT") }
+        // Only drop and recreate as last resort.
     }
 
     fun insertLocation(
@@ -82,56 +84,61 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
 
     fun insertPayload(payload: Map<String, Any>?, maxDays: Int, maxRecords: Int) {
         if (payload == null) return
-        
+
         try {
+            val coords = payload["coords"] as? Map<*, *> ?: return
+            val latitude = coords["latitude"].toDoubleOrZero()
+            val longitude = coords["longitude"].toDoubleOrZero()
+            val accuracy = coords["accuracy"].toDoubleOrZero()
+            val speed = coords["speed"].toDoubleOrZero()
+            val heading = coords["heading"].toDoubleOrZero()
+            val altitude = coords["altitude"].toDoubleOrZero()
 
-        val coords = payload["coords"] as? Map<*, *> ?: return
-        val latitude = coords["latitude"].toDoubleOrZero()
-        val longitude = coords["longitude"].toDoubleOrZero()
-        val accuracy = coords["accuracy"].toDoubleOrZero()
-        val speed = coords["speed"].toDoubleOrZero()
-        val heading = coords["heading"].toDoubleOrZero()
-        val altitude = coords["altitude"].toDoubleOrZero()
+            val activity = payload["activity"] as? Map<*, *>
+            val activityType = activity?.get("type") as? String
+            val activityConfidence = (activity?.get("confidence") as? Number)?.toInt() ?: 0
 
-        val activity = payload["activity"] as? Map<*, *>
-        val activityType = activity?.get("type") as? String
-        val activityConfidence = (activity?.get("confidence") as? Number)?.toInt() ?: 0
+            val timestamp = (payload["timestamp"] as? String)?.let { timestampStr ->
+                runCatching { Instant.parse(timestampStr).toEpochMilli() }.getOrNull()
+            } ?: System.currentTimeMillis()
 
-        val timestamp = (payload["timestamp"] as? String)?.let { timestampStr ->
-            runCatching { Instant.parse(timestampStr).toEpochMilli() }.getOrNull()
-        } ?: System.currentTimeMillis()
+            val isMoving = payload["is_moving"] as? Boolean ?: false
+            val event = payload["event"] as? String
+            val odometer = payload["odometer"].toDoubleOrZero()
 
-        val isMoving = payload["is_moving"] as? Boolean ?: false
-        val event = payload["event"] as? String
-        val odometer = payload["odometer"].toDoubleOrZero()
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                db.execSQL(
+                    """
+                    INSERT OR REPLACE INTO locations
+                    (id, timestamp, latitude, longitude, accuracy, speed, heading, altitude, is_moving, activity_type, activity_confidence, event, odometer)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """.trimIndent(),
+                    arrayOf(
+                        UUID.randomUUID().toString(),
+                        timestamp,
+                        latitude,
+                        longitude,
+                        accuracy,
+                        speed,
+                        heading,
+                        altitude,
+                        if (isMoving) 1 else 0,
+                        activityType,
+                        activityConfidence,
+                        event,
+                        odometer
+                    )
+                )
 
-        writableDatabase.execSQL(
-            """
-            INSERT OR REPLACE INTO locations 
-            (id, timestamp, latitude, longitude, accuracy, speed, heading, altitude, is_moving, activity_type, activity_confidence, event, odometer) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent(),
-            arrayOf(
-                UUID.randomUUID().toString(),
-                timestamp,
-                latitude,
-                longitude,
-                accuracy,
-                speed,
-                heading,
-                altitude,
-                if (isMoving) 1 else 0,
-                activityType,
-                activityConfidence,
-                event,
-                odometer
-            )
-        )
-
-            if (maxDays > 0) pruneByAge(maxDays)
-            if (maxRecords > 0) pruneByCount(maxRecords)
+                if (maxDays > 0) pruneByAge(maxDays)
+                if (maxRecords > 0) pruneByCount(maxRecords)
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
         } catch (e: Exception) {
-            // Log error but don't crash - graceful degradation
             android.util.Log.e("LocationStore", "Failed to insert payload: ${e.message}", e)
         }
     }

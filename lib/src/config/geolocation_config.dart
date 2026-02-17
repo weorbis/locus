@@ -72,6 +72,8 @@ class Config {
     this.queueMaxDays,
     this.queueMaxRecords,
     this.idempotencyHeader,
+    this.sslPinningCertificate,
+    this.sslPinningFingerprints,
     this.persistMode,
     this.maxDaysToPersist,
     this.maxRecordsToPersist,
@@ -175,6 +177,10 @@ class Config {
       queueMaxDays: (map['queueMaxDays'] as num?)?.toInt(),
       queueMaxRecords: (map['queueMaxRecords'] as num?)?.toInt(),
       idempotencyHeader: map['idempotencyHeader'] as String?,
+      sslPinningCertificate: map['sslPinningCertificate'] as String?,
+      sslPinningFingerprints: map['sslPinningFingerprints'] is List
+          ? List<String>.from(map['sslPinningFingerprints'] as List)
+          : null,
       persistMode: _parseEnum(
         map['persistMode'] as String?,
         PersistMode.values,
@@ -229,7 +235,7 @@ class Config {
   }
 
   /// The current SDK version.
-  static const String version = '1.1.0';
+  static const String version = '2.1.0';
 
   // Location settings
   /// Desired location accuracy level.
@@ -392,6 +398,15 @@ class Config {
   /// HTTP header name for idempotency key.
   final String? idempotencyHeader;
 
+  /// Base64-encoded certificate pin for SSL pinning (Android).
+  /// When set, only connections using this certificate will be allowed.
+  /// Provides protection against MITM attacks.
+  final String? sslPinningCertificate;
+
+  /// List of allowed certificate fingerprint hashes for SSL pinning (iOS).
+  /// When set, only connections matching one of these fingerprints will be allowed.
+  final List<String>? sslPinningFingerprints;
+
   // Persistence settings
   /// Mode for persisting location data locally.
   final PersistMode? persistMode;
@@ -526,6 +541,8 @@ class Config {
     int? queueMaxDays,
     int? queueMaxRecords,
     String? idempotencyHeader,
+    String? sslPinningCertificate,
+    List<String>? sslPinningFingerprints,
     PersistMode? persistMode,
     int? maxDaysToPersist,
     int? maxRecordsToPersist,
@@ -623,6 +640,10 @@ class Config {
       queueMaxDays: queueMaxDays ?? this.queueMaxDays,
       queueMaxRecords: queueMaxRecords ?? this.queueMaxRecords,
       idempotencyHeader: idempotencyHeader ?? this.idempotencyHeader,
+      sslPinningCertificate:
+          sslPinningCertificate ?? this.sslPinningCertificate,
+      sslPinningFingerprints:
+          sslPinningFingerprints ?? this.sslPinningFingerprints,
       persistMode: persistMode ?? this.persistMode,
       maxDaysToPersist: maxDaysToPersist ?? this.maxDaysToPersist,
       maxRecordsToPersist: maxRecordsToPersist ?? this.maxRecordsToPersist,
@@ -726,6 +747,8 @@ class Config {
     put('queueMaxDays', queueMaxDays);
     put('queueMaxRecords', queueMaxRecords);
     put('idempotencyHeader', idempotencyHeader);
+    put('sslPinningCertificate', sslPinningCertificate);
+    put('sslPinningFingerprints', sslPinningFingerprints);
     put('persistMode', persistMode?.name);
     put('maxDaysToPersist', maxDaysToPersist);
     put('maxRecordsToPersist', maxRecordsToPersist);

@@ -512,6 +512,8 @@ class MethodChannelLocus implements LocusInterface {
   // Dynamic Headers
   // ============================================================
   Future<Map<String, String>> Function()? _headersCallback;
+  DateTime? _lastHeaderUpdate;
+  static const _minHeaderUpdateInterval = Duration(seconds: 1);
 
   @override
   Future<void> setHeadersCallback(
@@ -528,16 +530,28 @@ class MethodChannelLocus implements LocusInterface {
 
   Future<void> _updateDynamicHeaders() async {
     if (_headersCallback == null) {
-      debugPrint(
-        '[Locus] refreshHeaders called but no headersCallback is set. Use setHeadersCallback() first.',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '[Locus] refreshHeaders called but no headersCallback is set. Use setHeadersCallback() first.',
+        );
+      }
       return;
     }
+
+    final now = DateTime.now();
+    if (_lastHeaderUpdate != null &&
+        now.difference(_lastHeaderUpdate!) < _minHeaderUpdateInterval) {
+      return;
+    }
+    _lastHeaderUpdate = now;
+
     try {
       final headers = await _headersCallback!();
       await LocusChannels.methods.invokeMethod('setDynamicHeaders', headers);
     } catch (e) {
-      debugPrint('[Locus] Error refreshing headers: $e');
+      if (kDebugMode) {
+        debugPrint('[Locus] Error refreshing headers: $e');
+      }
     }
   }
 
@@ -880,7 +894,9 @@ class MethodChannelLocus implements LocusInterface {
               event.type == EventType.heartbeat ||
               event.type == EventType.schedule,
         )
-        .map((event) => event.data as Location);
+        .map((event) => event.data)
+        .where((data) => data is Location)
+        .cast<Location>();
     return LocationAnomalyDetector.watch(source, config: config);
   }
 

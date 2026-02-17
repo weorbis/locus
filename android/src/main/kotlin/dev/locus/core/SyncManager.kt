@@ -302,6 +302,7 @@ class SyncManager(
         
         executor.execute {
             listener.onSyncRequest()
+            var connection: HttpURLConnection? = null
             try {
                 val body = buildQueueBody(payload, id, type, idempotencyKey).apply {
                     config.httpParams.forEach { (key, value) ->
@@ -309,17 +310,17 @@ class SyncManager(
                     }
                 }
 
-                val connection = (URL(config.httpUrl).openConnection() as HttpURLConnection).apply {
+                connection = (URL(config.httpUrl).openConnection() as HttpURLConnection).apply {
                     requestMethod = config.httpMethod
                     connectTimeout = config.httpTimeoutMs
                     readTimeout = config.httpTimeoutMs
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
-                    config.httpHeaders.forEach { (key, value) ->
-                        setRequestProperty(key, value.toString())
+                    config.httpHeaders.toMap().forEach { (key, value) ->
+                        setRequestProperty(sanitizeHeaderKey(key), sanitizeHeaderValue(value.toString()))
                     }
                     config.idempotencyHeader?.let { header ->
-                        setRequestProperty(header, idempotencyKey)
+                        setRequestProperty(sanitizeHeaderKey(header), idempotencyKey)
                     }
                 }
 
@@ -334,7 +335,7 @@ class SyncManager(
                 } else {
                     connection.inputStream
                 }
-                
+
                 val responseText = BufferedReader(InputStreamReader(stream)).use { reader ->
                     reader.readText()
                 }
@@ -343,10 +344,10 @@ class SyncManager(
                 if (ok) {
                     queueStore.deleteByIds(listOf(id))
                 }
-                
+
                 emitHttpEvent(status, ok, responseText)
                 log("info", "http $status")
-                
+
                 when {
                     status == 401 -> {
                         isSyncPaused = true
@@ -355,10 +356,12 @@ class SyncManager(
                     !ok -> scheduleQueueRetry(payload, id, type, idempotencyKey, attempt + 1)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Queue HTTP sync failed: ${e.message}")
+                Log.e(TAG, "Queue HTTP sync failed: ${sanitizeError(e)}")
                 emitHttpEvent(0, false, e.message)
-                log("error", "http error ${e.message}")
+                log("error", "http error ${sanitizeError(e)}")
                 scheduleQueueRetry(payload, id, type, idempotencyKey, attempt + 1)
+            } finally {
+                connection?.disconnect()
             }
         }
     }
@@ -408,15 +411,16 @@ class SyncManager(
         attempt: Int,
         originalPayload: Map<String, Any>
     ) {
+        var connection: HttpURLConnection? = null
         try {
-            val connection = (URL(config.httpUrl).openConnection() as HttpURLConnection).apply {
+            connection = (URL(config.httpUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = config.httpMethod
                 connectTimeout = config.httpTimeoutMs
                 readTimeout = config.httpTimeoutMs
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
-                config.httpHeaders.forEach { (key, value) ->
-                    setRequestProperty(key, value.toString())
+                config.httpHeaders.toMap().forEach { (key, value) ->
+                    setRequestProperty(sanitizeHeaderKey(key), sanitizeHeaderValue(value.toString()))
                 }
             }
 
@@ -452,10 +456,12 @@ class SyncManager(
                 !ok -> scheduleHttpRetry(originalPayload, idsToDelete, attempt + 1)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "HTTP sync failed: ${e.message}")
+            Log.e(TAG, "HTTP sync failed: ${sanitizeError(e)}")
             emitHttpEvent(0, false, e.message)
-            log("error", "http error ${e.message}")
+            log("error", "http error ${sanitizeError(e)}")
             scheduleHttpRetry(originalPayload, idsToDelete, attempt + 1)
+        } finally {
+            connection?.disconnect()
         }
     }
 
@@ -465,15 +471,16 @@ class SyncManager(
         attempt: Int,
         payloads: List<Map<String, Any>>
     ) {
+        var connection: HttpURLConnection? = null
         try {
-            val connection = (URL(config.httpUrl).openConnection() as HttpURLConnection).apply {
+            connection = (URL(config.httpUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = config.httpMethod
                 connectTimeout = config.httpTimeoutMs
                 readTimeout = config.httpTimeoutMs
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
-                config.httpHeaders.forEach { (key, value) ->
-                    setRequestProperty(key, value.toString())
+                config.httpHeaders.toMap().forEach { (key, value) ->
+                    setRequestProperty(sanitizeHeaderKey(key), sanitizeHeaderValue(value.toString()))
                 }
             }
 
@@ -509,10 +516,12 @@ class SyncManager(
                 !ok -> scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "HTTP sync failed: ${e.message}")
+            Log.e(TAG, "HTTP sync failed: ${sanitizeError(e)}")
             emitHttpEvent(0, false, e.message)
-            log("error", "http error ${e.message}")
+            log("error", "http error ${sanitizeError(e)}")
             scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
+        } finally {
+            connection?.disconnect()
         }
     }
 
@@ -620,5 +629,18 @@ class SyncManager(
 
     companion object {
         private const val TAG = "locus"
+
+        private fun sanitizeError(e: Exception): String =
+            e.javaClass.simpleName + if (e.message?.contains("://") == true) " (network)" else ": ${e.message}"
+
+        private val headerInjectionPattern = Regex("[\r\n]")
+
+        private fun sanitizeHeaderKey(key: String): String {
+            return key.replace(headerInjectionPattern, "").trim()
+        }
+
+        private fun sanitizeHeaderValue(value: String): String {
+            return value.replace(headerInjectionPattern, "").trim()
+        }
     }
 }

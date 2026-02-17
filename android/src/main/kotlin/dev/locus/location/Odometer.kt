@@ -40,14 +40,21 @@ class Odometer(context: Context) {
     }
 
     private fun readOdometer(): Double {
-        return prefs.getFloat(KEY_ODOMETER, 0.0f).toDouble()
+        // Migration: prefer 64-bit long storage, fall back to legacy 32-bit float
+        if (prefs.contains(KEY_ODOMETER_LONG)) {
+            return Double.fromBits(prefs.getLong(KEY_ODOMETER_LONG, 0L))
+        }
+        val legacy = prefs.getFloat(KEY_ODOMETER, 0.0f).toDouble()
+        if (legacy > 0) writeOdometer(legacy) // migrate to long storage
+        return legacy
     }
 
     private fun writeOdometer(value: Double) {
-        prefs.edit().putFloat(KEY_ODOMETER, value.toFloat()).apply()
+        prefs.edit().putLong(KEY_ODOMETER_LONG, value.toBits()).apply()
     }
 
     companion object {
         private const val KEY_ODOMETER = "bg_odometer"
+        private const val KEY_ODOMETER_LONG = "bg_odometer_long"
     }
 }

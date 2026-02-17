@@ -82,30 +82,37 @@ class LocationQuery {
 
   /// Filters a list of locations according to this query.
   List<Location> apply(List<Location> locations) {
-    final filtered = locations.where((loc) {
+    if (locations.isEmpty) return const [];
+
+    // First pass: filter into a new list.
+    // Pre-allocating with a reasonable estimate to avoid frequent resizing
+    final filtered = <Location>[];
+    for (final loc in locations) {
       // Time range filter
-      if (from != null && loc.timestamp.isBefore(from!)) return false;
-      if (to != null && loc.timestamp.isAfter(to!)) return false;
+      if (from != null && loc.timestamp.isBefore(from!)) continue;
+      if (to != null && loc.timestamp.isAfter(to!)) continue;
 
       // Accuracy filter
       final accuracy = loc.coords.accuracy;
       if (minAccuracy != null && accuracy > minAccuracy!) {
-        return false;
+        continue;
       }
       if (maxAccuracy != null && accuracy < maxAccuracy!) {
-        return false;
+        continue;
       }
 
       // Motion filter
-      if (isMoving != null && loc.isMoving != isMoving) return false;
+      if (isMoving != null && loc.isMoving != isMoving) continue;
 
       // Bounds filter
-      if (bounds != null && !bounds!.contains(loc.coords)) return false;
+      if (bounds != null && !bounds!.contains(loc.coords)) continue;
 
-      return true;
-    }).toList();
+      filtered.add(loc);
+    }
 
-    // Sort
+    if (filtered.isEmpty) return const [];
+
+    // Sort in-place on the filtered list
     filtered.sort((a, b) {
       switch (sortOrder) {
         case LocationSortOrder.newestFirst:
@@ -115,14 +122,12 @@ class LocationQuery {
       }
     });
 
-    // Apply pagination (offset + limit) in a single sublist call to avoid
-    // redundant allocations. Previously this used two separate sublist() calls.
     final length = filtered.length;
     if (offset >= length) {
       return const [];
     }
 
-    // Calculate the final range for a single sublist operation
+    // Calculate the final range for sublist
     final startIndex = offset;
     final endIndex = limit != null
         ? (startIndex + limit!).clamp(startIndex, length)

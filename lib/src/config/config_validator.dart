@@ -244,6 +244,30 @@ class ConfigValidator {
           suggestion: 'Use HTTPS for production apps',
         ));
       }
+
+      // Validate URL format (basic structure check)
+      final urlPattern = RegExp(
+        r'^https?:\/\/([a-zA-Z0-9_-]+\.)+[a-zA-Z0-9_-]+(:\d{1,5})?(\/.*)?$',
+      );
+      if (!urlPattern.hasMatch(config.url!)) {
+        warnings.add(const ConfigValidationWarning(
+          field: 'url',
+          message: 'URL format may be invalid',
+          suggestion: 'Ensure URL is a valid HTTP/HTTPS endpoint',
+        ));
+      }
+
+      // SSL pinning recommendation
+      if (config.sslPinningCertificate == null &&
+          config.sslPinningFingerprints == null) {
+        warnings.add(const ConfigValidationWarning(
+          field: 'sslPinning',
+          message:
+              'No SSL pinning configured - consider adding for production security',
+          suggestion:
+              'Set sslPinningCertificate (Android) or sslPinningFingerprints (iOS) for MITM protection',
+        ));
+      }
     }
 
     // Validate sync when URL is configured
@@ -401,9 +425,9 @@ class ConfigValidator {
         config.maxMonitoredGeofences! > 20) {
       warnings.add(const ConfigValidationWarning(
         field: 'maxMonitoredGeofences',
-        message: 'iOS has a limit of 20 monitored geofences',
+        message: 'iOS limits geofences to 20 maximum',
         suggestion:
-            'Consider using 20 or fewer for cross-platform compatibility',
+            'Set maxMonitoredGeofences to 20 or fewer for iOS compatibility',
       ));
     }
 

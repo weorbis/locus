@@ -17,9 +17,8 @@ class LocationEventProcessor(
         )
         eventDispatcher.sendEvent(event)
 
-        Log.d("locus.EventProcessor", ">>> privacyModeEnabled=${config.privacyModeEnabled}")
         if (config.privacyModeEnabled) {
-            Log.w("locus.EventProcessor", ">>> Location NOT stored/synced - privacy mode is ENABLED")
+            Log.d("locus.EventProcessor", ">>> Location NOT stored/synced - privacy mode is ENABLED")
             return
         }
         

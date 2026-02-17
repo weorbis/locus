@@ -21,7 +21,7 @@ class EventDispatcher(
             return
         }
         mainHandler.post {
-            eventSink?.success(event)
+            sink.success(event)
         }
     }
 }

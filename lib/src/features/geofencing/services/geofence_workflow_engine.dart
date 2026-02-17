@@ -149,6 +149,10 @@ class GeofenceWorkflowEngine {
         }
 
         runtime.completeStep(step);
+        // Robustness: Auto-save state after every step completion to prevent
+        // progress loss if the app is killed in the background.
+        unawaited(saveState());
+
         final status = runtime.isCompleted
             ? GeofenceWorkflowStatus.completed
             : GeofenceWorkflowStatus.inProgress;

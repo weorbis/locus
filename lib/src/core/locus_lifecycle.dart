@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:locus/src/config/config.dart';
@@ -29,19 +30,24 @@ class LocusLifecycle {
 
       // Log warnings
       for (final warning in validationResult.warnings) {
-        debugPrint(
-            '[Locus] Config warning: ${warning.field} - ${warning.message}');
-        if (warning.suggestion != null) {
-          debugPrint('[Locus]   Suggestion: ${warning.suggestion}');
+        if (kDebugMode) {
+          debugPrint(
+              '[Locus] Config warning: ${warning.field} - ${warning.message}');
+          if (warning.suggestion != null) {
+            debugPrint('[Locus]   Suggestion: ${warning.suggestion}');
+          }
         }
       }
 
       // Throw on errors
       if (!validationResult.isValid) {
         for (final error in validationResult.errors) {
-          debugPrint('[Locus] Config error: ${error.field} - ${error.message}');
-          if (error.suggestion != null) {
-            debugPrint('[Locus]   Suggestion: ${error.suggestion}');
+          if (kDebugMode) {
+            debugPrint(
+                '[Locus] Config error: ${error.field} - ${error.message}');
+            if (error.suggestion != null) {
+              debugPrint('[Locus]   Suggestion: ${error.suggestion}');
+            }
           }
         }
         throw ConfigValidationException(validationResult.errors);
@@ -73,7 +79,10 @@ class LocusLifecycle {
     if (result is Map) {
       return GeolocationState.fromMap(Map<String, dynamic>.from(result));
     }
-    debugPrint('[Locus] start failed: unexpected result ${result.runtimeType}');
+    if (kDebugMode) {
+      debugPrint(
+          '[Locus] start failed: unexpected result ${result.runtimeType}');
+    }
     return const GeolocationState(enabled: false, isMoving: false);
   }
 
@@ -184,7 +193,7 @@ class LocusLifecycle {
       // Only log verbose stack trace for unexpected errors
       if (e.toString().contains('MissingPluginException')) {
         // Expected in test environments - silently return false
-      } else {
+      } else if (kDebugMode) {
         debugPrint('[Locus] Error checking geofence status: $e');
         debugPrint('[Locus] Stack trace: $stack');
       }
@@ -200,7 +209,11 @@ class _LifecycleObserver extends WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final isForeground = state == AppLifecycleState.resumed;
+    // Treat both resumed and inactive as foreground.
+    // inactive fires during permission dialogs, phone calls, etc.
+    // and should NOT trigger background behavior.
+    final isForeground = state == AppLifecycleState.resumed ||
+        state == AppLifecycleState.inactive;
     onStateChange(isForeground);
   }
 }

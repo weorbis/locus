@@ -5,6 +5,17 @@ import 'package:locus/src/testing/mock_locus.dart';
 import 'package:locus/src/locus.dart';
 import 'package:locus/src/models.dart';
 
+/// Theme that disables ink sparkle shader to avoid test environment issues
+/// with 'shaders/ink_sparkle.frag' manifest decoding.
+final _testTheme = ThemeData(splashFactory: NoSplash.splashFactory);
+
+Widget _testApp({required Widget child}) {
+  return MaterialApp(
+    theme: _testTheme,
+    home: Stack(children: [child]),
+  );
+}
+
 void main() {
   group('LocusDebugOverlay', () {
     late MockLocus mockLocus;
@@ -21,13 +32,7 @@ void main() {
 
     testWidgets('renders in collapsed state by default', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Stack(
-            children: [
-              LocusDebugOverlay(),
-            ],
-          ),
-        ),
+        _testApp(child: const LocusDebugOverlay()),
       );
 
       // Should show collapsed view with tracking status
@@ -36,13 +41,7 @@ void main() {
 
     testWidgets('expands when tapped', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Stack(
-            children: [
-              LocusDebugOverlay(),
-            ],
-          ),
-        ),
+        _testApp(child: const LocusDebugOverlay()),
       );
 
       // Tap to expand
@@ -62,13 +61,7 @@ void main() {
 
     testWidgets('starts expanded when configured', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Stack(
-            children: [
-              LocusDebugOverlay(expanded: true),
-            ],
-          ),
-        ),
+        _testApp(child: const LocusDebugOverlay(expanded: true)),
       );
 
       // Should show expanded view immediately
@@ -78,13 +71,7 @@ void main() {
     testWidgets('positions correctly in each corner', (tester) async {
       for (final position in DebugOverlayPosition.values) {
         await tester.pumpWidget(
-          MaterialApp(
-            home: Stack(
-              children: [
-                LocusDebugOverlay(position: position),
-              ],
-            ),
-          ),
+          _testApp(child: LocusDebugOverlay(position: position)),
         );
 
         // Should find the overlay
@@ -96,13 +83,7 @@ void main() {
       mockLocus.setMockState(const GeolocationState(enabled: true));
 
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Stack(
-            children: [
-              LocusDebugOverlay(),
-            ],
-          ),
-        ),
+        _testApp(child: const LocusDebugOverlay()),
       );
 
       await tester.pump(const Duration(milliseconds: 100));
@@ -112,13 +93,7 @@ void main() {
 
     testWidgets('shows location data when available', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Stack(
-            children: [
-              LocusDebugOverlay(expanded: true),
-            ],
-          ),
-        ),
+        _testApp(child: const LocusDebugOverlay(expanded: true)),
       );
 
       // Emit a location
@@ -141,13 +116,7 @@ void main() {
 
     testWidgets('control buttons trigger SDK methods', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Stack(
-            children: [
-              LocusDebugOverlay(expanded: true),
-            ],
-          ),
-        ),
+        _testApp(child: const LocusDebugOverlay(expanded: true)),
       );
 
       await tester.pumpAndSettle();
@@ -164,13 +133,7 @@ void main() {
 
     testWidgets('respects opacity setting', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Stack(
-            children: [
-              LocusDebugOverlay(opacity: 0.5),
-            ],
-          ),
-        ),
+        _testApp(child: const LocusDebugOverlay(opacity: 0.5)),
       );
 
       // Widget should render
@@ -179,13 +142,7 @@ void main() {
 
     testWidgets('closes when close button is tapped', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Stack(
-            children: [
-              LocusDebugOverlay(expanded: true),
-            ],
-          ),
-        ),
+        _testApp(child: const LocusDebugOverlay(expanded: true)),
       );
 
       await tester.pumpAndSettle();
@@ -200,13 +157,7 @@ void main() {
 
     testWidgets('shows sync queue stats', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Stack(
-            children: [
-              LocusDebugOverlay(expanded: true),
-            ],
-          ),
-        ),
+        _testApp(child: const LocusDebugOverlay(expanded: true)),
       );
 
       await tester.pumpAndSettle();
@@ -220,13 +171,7 @@ void main() {
 
     testWidgets('shows geofence stats', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Stack(
-            children: [
-              LocusDebugOverlay(expanded: true),
-            ],
-          ),
-        ),
+        _testApp(child: const LocusDebugOverlay(expanded: true)),
       );
 
       await tester.pumpAndSettle();

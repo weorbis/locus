@@ -1,8 +1,9 @@
-import 'dart:ui' show CallbackHandle, PluginUtilities;
+import 'dart:ui' show PluginUtilities;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:locus/src/models.dart';
+import 'package:locus/src/core/locus_headless.dart' show LocusHeadless;
 import 'package:locus/src/core/locus_interface.dart';
 import 'package:locus/src/core/locus_channels.dart';
 import 'package:locus/src/services/sync_service.dart';
@@ -56,6 +57,23 @@ class LocusSync {
     if (_isPaused) return false;
     final result = await LocusChannels.methods.invokeMethod('sync');
     return result == true;
+  }
+
+  /// Returns whether sync is ready to proceed (not paused and URL configured).
+  ///
+  /// Use this to check if sync can proceed without calling [resume] first.
+  static Future<bool> isSyncReady() async {
+    if (_isPaused) return false;
+    try {
+      final result = await LocusChannels.methods.invokeMethod('getSyncState');
+      if (result is Map) {
+        final state = Map<String, dynamic>.from(result);
+        return state['urlConfigured'] == true;
+      }
+    } catch (_) {
+      return false;
+    }
+    return false;
   }
 
   /// Resumes syncing after app initialization or token refresh.
@@ -321,39 +339,12 @@ class LocusSync {
   // ============================================================
 
   /// Entry point for headless sync body building.
+  /// NOTE: The actual headless handler is now unified in LocusHeadless.headlessDispatcher()
+  /// which handles both 'headlessEvent' and 'headlessBuildSyncBody' methods on the
+  /// same channel to avoid handler overwrite conflicts.
   @pragma('vm:entry-point')
   static void _headlessSyncBodyDispatcher() {
-    WidgetsFlutterBinding.ensureInitialized();
-
-    LocusChannels.headless.setMethodCallHandler((call) async {
-      if (call.method != 'headlessBuildSyncBody') {
-        return null;
-      }
-
-      final args = Map<String, dynamic>.from(call.arguments as Map);
-      final rawHandle = args['callbackHandle'] as int?;
-
-      if (rawHandle == null) {
-        return null;
-      }
-
-      final handle = CallbackHandle.fromRawHandle(rawHandle);
-      final callback = PluginUtilities.getCallbackFromHandle(handle)
-          as Future<JsonMap> Function(SyncBodyContext)?;
-
-      if (callback == null) {
-        debugPrint('Locus: Could not resolve headless sync body callback');
-        return null;
-      }
-
-      try {
-        final context = SyncBodyContext.fromMap(args);
-        final body = await callback(context);
-        return body;
-      } catch (e) {
-        debugPrint('Locus: Error in headless sync body builder: $e');
-        return null;
-      }
-    });
+    // Delegate to the unified headless dispatcher
+    LocusHeadless.headlessDispatcher();
   }
 }

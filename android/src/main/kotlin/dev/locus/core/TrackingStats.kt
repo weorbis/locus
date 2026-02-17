@@ -49,6 +49,7 @@ class TrackingStats(context: Context) {
     /**
      * Called when tracking stops.
      */
+    @Synchronized
     fun onTrackingStop() {
         if (sessionStartTime > 0) {
             val totalUpdates = prefs.getInt(KEY_LOCATION_UPDATES, 0) + sessionLocationUpdates
@@ -76,6 +77,7 @@ class TrackingStats(context: Context) {
     /**
      * Records a location update.
      */
+    @Synchronized
     fun onLocationUpdate(accuracy: Float) {
         sessionLocationUpdates++
         if (accuracy > 0) {
@@ -165,7 +167,7 @@ class TrackingStats(context: Context) {
         val accumulatedMs = prefs.getLong(KEY_TRACKING_ACCUM, 0)
         val activeMs = if (sessionStartTime > 0) now - sessionStartTime else 0
         val totalTrackingMs = accumulatedMs + maxOf(activeMs, 0)
-        val trackingMinutes = (totalTrackingMs / 60000).toInt()
+        val trackingMinutes = (totalTrackingMs / 60000L).toInt()
 
         // Time by state
         val movingMs = prefs.getLong(KEY_MOVING_TIME, 0)

@@ -19,7 +19,7 @@ class HeartbeatScheduler(
                 handler.postDelayed(this, intervalSeconds * 1000L)
             }
         }.also { runnable ->
-            handler.postDelayed(runnable, intervalSeconds * 1000L)
+            handler.post(runnable) // Fire first heartbeat immediately
         }
     }
 
