@@ -1,6 +1,6 @@
 name: locus
 description: Core background geolocation SDK of the WeOrbis ecosystem for Flutter. Native tracking, geofencing, activity recognition, and sync.
-version: 2.1.0
+version: 2.1.1
 homepage: https://github.com/weorbis/locus
 repository: https://github.com/weorbis/locus
 issue_tracker: https://github.com/weorbis/locus/issues

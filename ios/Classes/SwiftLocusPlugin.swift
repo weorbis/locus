@@ -15,6 +15,16 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
   static let headlessCallbackKey = "bg_headless_callback"
   static let tripStateKey = "bg_trip_state"
 
+  /// Singleton guard for multi-engine environments.
+  ///
+  /// flutter_background_service and other plugins can create additional Flutter engines.
+  /// Each engine triggers GeneratedPluginRegistrant which creates a new LocusPlugin instance.
+  /// Only one instance should own native resources to prevent:
+  /// - Duplicate CLLocationManager / CMMotionManager instances
+  /// - Database access conflicts (SQLite contention)
+  /// - Resource cleanup on secondary engine dealloc killing primary tracking
+  private static var primaryInstance: SwiftLocusPlugin?
+
   // Managers
   let configManager = ConfigManager()
   let storage: StorageManager
@@ -46,7 +56,22 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
   var methodChannel: FlutterMethodChannel?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
+    // Singleton guard: only the first engine creates native resources.
+    // Secondary engines (from flutter_background_service, etc.) get
+    // a lightweight no-op channel handler.
+    if primaryInstance != nil {
+      NSLog("[locus] LocusPlugin: secondary engine registered - skipping native resource init")
+      let channel = FlutterMethodChannel(name: methodChannelName, binaryMessenger: registrar.messenger())
+      // Set up a no-op handler for the secondary engine's channel
+      channel.setMethodCallHandler { (call, result) in
+        NSLog("[locus] LocusPlugin: ignoring '\(call.method)' on secondary engine")
+        result(nil)
+      }
+      return
+    }
+
     let instance = SwiftLocusPlugin()
+    primaryInstance = instance
     let methodChannel = FlutterMethodChannel(name: methodChannelName, binaryMessenger: registrar.messenger())
     let eventChannel = FlutterEventChannel(name: eventChannelName, binaryMessenger: registrar.messenger())
     instance.methodChannel = methodChannel
@@ -90,6 +115,10 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
   }
 
   deinit {
+    // Clear singleton reference if this is the primary instance
+    if Self.primaryInstance === self {
+      Self.primaryInstance = nil
+    }
     stopConnectivityMonitor()
     NotificationCenter.default.removeObserver(self)
     releaseBackgroundTasks()

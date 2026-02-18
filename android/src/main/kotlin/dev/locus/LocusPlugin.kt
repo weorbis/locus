@@ -68,7 +68,23 @@ class LocusPlugin : FlutterPlugin,
         const val KEY_ACTIVITY_EVENT = "bg_activity_event"
         const val KEY_GEOFENCE_EVENT = "bg_geofence_event"
         const val KEY_NOTIFICATION_ACTION = "bg_notification_action"
+
+        /**
+         * Singleton guard for multi-engine environments.
+         *
+         * flutter_background_service and other plugins can create additional Flutter engines.
+         * Each engine triggers GeneratedPluginRegistrant which creates a new LocusPlugin instance.
+         * Only one instance should own native resources to prevent:
+         * - SharedPreferences races (privacy mode reset, config overwrites)
+         * - Duplicate Activity Recognition PendingIntents being unregistered
+         * - Database access conflicts (SQLite contention)
+         * - Resource cleanup on secondary engine detach killing primary tracking
+         */
+        @Volatile
+        private var primaryInstance: LocusPlugin? = null
     }
+
+    private var isPrimary = false
 
     private var methodChannel: MethodChannel? = null
     private var eventChannel: EventChannel? = null
@@ -98,6 +114,28 @@ class LocusPlugin : FlutterPlugin,
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         androidContext = binding.applicationContext
+
+        // Always set up method/event channels so this engine can handle calls
+        methodChannel = MethodChannel(binding.binaryMessenger, METHOD_CHANNEL).also {
+            it.setMethodCallHandler(this)
+        }
+        eventChannel = EventChannel(binding.binaryMessenger, EVENT_CHANNEL).also {
+            it.setStreamHandler(this)
+        }
+
+        // Singleton guard: only the first engine creates native resources.
+        // Secondary engines (from flutter_background_service, geolocator, etc.)
+        // get lightweight instances that handle method calls as no-ops.
+        synchronized(LocusPlugin::class.java) {
+            if (primaryInstance != null) {
+                Log.w(TAG, "LocusPlugin: secondary engine attached - native resources owned by primary instance, skipping init")
+                isPrimary = false
+                return
+            }
+            primaryInstance = this
+            isPrimary = true
+        }
+
         prefs = androidContext?.let { it.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
         // IMPORTANT: Always start with privacy mode disabled on fresh plugin attach.
@@ -105,13 +143,6 @@ class LocusPlugin : FlutterPlugin,
         // Privacy mode should only be enabled explicitly via setPrivacyMode() API or config.
         privacyModeEnabled = false
         prefs?.edit()?.remove("bg_privacy_mode")?.apply()
-
-        methodChannel = MethodChannel(binding.binaryMessenger, METHOD_CHANNEL).also {
-            it.setMethodCallHandler(this)
-        }
-        eventChannel = EventChannel(binding.binaryMessenger, EVENT_CHANNEL).also {
-            it.setStreamHandler(this)
-        }
 
         val context = androidContext ?: return
         val preferences = prefs ?: return
@@ -362,6 +393,22 @@ class LocusPlugin : FlutterPlugin,
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        // Always clean up this engine's channels
+        eventChannel?.setStreamHandler(null)
+        methodChannel?.setMethodCallHandler(null)
+
+        // Only the primary instance should clean up native resources.
+        // Secondary engines (from flutter_background_service etc.) must NOT
+        // tear down shared resources like Activity Recognition PendingIntents,
+        // connectivity listeners, or database connections.
+        synchronized(LocusPlugin::class.java) {
+            if (!isPrimary) {
+                Log.d(TAG, "LocusPlugin: secondary engine detached - skipping native resource cleanup")
+                return
+            }
+            primaryInstance = null
+        }
+
         configManager?.let { config ->
             if (config.stopOnTerminate) {
                 locationTracker?.stopTracking()
@@ -374,7 +421,7 @@ class LocusPlugin : FlutterPlugin,
         scheduler?.stop()
         backgroundTaskManager?.release()
         syncManager?.release()
-        
+
         // Close database helpers
         stateManager?.locationStore?.close()
         stateManager?.queueStore?.close()
@@ -385,17 +432,17 @@ class LocusPlugin : FlutterPlugin,
         }
 
         eventDispatcher?.setEventSink(null)
-        eventChannel?.setStreamHandler(null)
-        methodChannel?.setMethodCallHandler(null)
     }
 
     override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+        if (!isPrimary) return
         eventDispatcher?.setEventSink(events)
         systemMonitor?.readConnectivityEvent()?.let { emitConnectivityChange(it) }
         systemMonitor?.readPowerSaveState()?.let { emitPowerSaveChange(it) }
     }
 
     override fun onCancel(arguments: Any?) {
+        if (!isPrimary) return
         eventDispatcher?.setEventSink(null)
     }
 
@@ -422,6 +469,13 @@ class LocusPlugin : FlutterPlugin,
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        // Secondary engines must not interact with native resources
+        if (!isPrimary) {
+            Log.d(TAG, "LocusPlugin: ignoring '${call.method}' on secondary engine")
+            result.success(null)
+            return
+        }
+
         when (call.method) {
             "ready" -> {
                 locationTracker?.applyConfig(call.arguments.asMap())

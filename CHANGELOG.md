@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.1] - 2026-02-18
+
+### Fixed
+
+- **Android/iOS: Multi-engine singleton guard** — Added singleton pattern to prevent secondary Flutter engines (created by `flutter_background_service`, `geolocator`, etc.) from initializing duplicate native resources. Previously, when a background service engine was destroyed, its `LocusPlugin.onDetachedFromEngine()` would tear down shared native resources (Activity Recognition PendingIntents, connectivity listeners, database connections), killing the primary engine's active tracking. Secondary engines now skip native resource initialization and cleanup entirely.
+
 ## [2.1.0] - 2026-02-17
 
 ### Fixed
