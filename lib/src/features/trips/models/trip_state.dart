@@ -72,8 +72,15 @@ class TripState {
     final durationSeconds = endedAt.difference(startedAt!).inSeconds;
     final movingSeconds =
         (durationSeconds - idleSeconds).clamp(0, durationSeconds);
+    // Use total duration as fallback when movingSeconds is unreliable
+    // (e.g., idle detection over-counts due to GPS jitter on short trips).
+    final effectiveSeconds =
+        movingSeconds > 0 ? movingSeconds : durationSeconds;
+    final rawAverageKph =
+        effectiveSeconds > 0 ? (distanceMeters / effectiveSeconds) * 3.6 : 0.0;
+    // The average of any sample set cannot exceed the maximum observed value.
     final averageSpeedKph =
-        movingSeconds > 0 ? (distanceMeters / movingSeconds) * 3.6 : 0.0;
+        maxSpeedKph > 0 ? rawAverageKph.clamp(0.0, maxSpeedKph) : rawAverageKph;
 
     return TripSummary(
       tripId: tripId,

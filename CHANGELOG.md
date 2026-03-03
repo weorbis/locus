@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.2] - 2026-03-03
+
+### Added
+
+- **Android/iOS: Pre-flight manifest permission validation** — Added `validateManifestPermissions()` check in `ready()` handler. Instead of crashing with a raw `SecurityException`/`PlatformException` when `ACCESS_NETWORK_STATE` or location permissions are missing, the plugin now emits structured error events through the EventChannel stream with `ERR_MISSING_MANIFEST` and `ERR_PERMISSION_DENIED` error codes.
+- **Android: `ACCESS_NETWORK_STATE` permission** — Declared in plugin `AndroidManifest.xml` so host apps inherit it automatically.
+- **Dart: `MissingManifestPermissionException` and `PermissionErrorEvent`** — Typed error models for permission-related failures, with `missingManifestPermission` added to `LocusErrorType` enum.
+- **iOS: Structured permission error events** — Emits typed `PermissionErrorEvent` for denied/restricted location permission states instead of silently failing.
+
+### Fixed
+
+- **Dart: Trip summary average speed exceeding max speed** — `TripState.toSummary()` computed `averageSpeedKph` as `distance / movingSeconds` without capping it. When idle detection over-counted due to GPS jitter on short trips, `movingSeconds` shrunk to near-zero, producing an average speed higher than the observed `maxSpeedKph` (e.g., 36.6 km/h average vs 1.6 km/h max). Now falls back to total duration when `movingSeconds` is zero and clamps the result to never exceed `maxSpeedKph`.
+- **Android: `SystemMonitor` `ConnectivityManager` hardening** — Wrapped `ConnectivityManager` calls in `runCatching` to handle `SecurityException` gracefully when `ACCESS_NETWORK_STATE` is missing at runtime.
+
 ## [2.1.1] - 2026-02-18
 
 ### Fixed
