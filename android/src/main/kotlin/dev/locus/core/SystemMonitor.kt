@@ -114,11 +114,11 @@ class SystemMonitor(
     }
 
     fun isAutoSyncAllowed(config: ConfigManager): Boolean {
-        connectivityManager ?: return true
+        val cm = connectivityManager ?: return true
 
         return runCatching {
-            val network = connectivityManager.activeNetwork
-            val capabilities = connectivityManager.getNetworkCapabilities(network)
+            val network = cm.activeNetwork
+            val capabilities = cm.getNetworkCapabilities(network)
 
             if (capabilities == null || !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
                 return@runCatching false
