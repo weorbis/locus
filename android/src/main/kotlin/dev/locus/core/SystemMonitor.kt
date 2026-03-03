@@ -83,22 +83,24 @@ class SystemMonitor(
     fun readConnectivityEvent(): Map<String, Any> {
         var connected = false
         var networkType = "unknown"
-        
-        connectivityManager?.let { cm ->
-            val network = cm.activeNetwork ?: return@let
-            val capabilities = cm.getNetworkCapabilities(network)
-            
-            capabilities?.let { caps ->
-                connected = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                networkType = when {
-                    caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
-                    caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
-                    caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
-                    else -> "unknown"
+
+        runCatching {
+            connectivityManager?.let { cm ->
+                val network = cm.activeNetwork ?: return@let
+                val capabilities = cm.getNetworkCapabilities(network)
+
+                capabilities?.let { caps ->
+                    connected = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    networkType = when {
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+                        else -> "unknown"
+                    }
                 }
             }
         }
-        
+
         return mapOf(
             "connected" to connected,
             "networkType" to networkType
@@ -112,20 +114,22 @@ class SystemMonitor(
     }
 
     fun isAutoSyncAllowed(config: ConfigManager): Boolean {
-        connectivityManager ?: return true
-        
-        val network = connectivityManager.activeNetwork
-        val capabilities = connectivityManager.getNetworkCapabilities(network)
-        
-        if (capabilities == null || !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
-            return false
-        }
-        
-        if (config.disableAutoSyncOnCellular && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
-            return false
-        }
-        
-        return true
+        val cm = connectivityManager ?: return true
+
+        return runCatching {
+            val network = cm.activeNetwork
+            val capabilities = cm.getNetworkCapabilities(network)
+
+            if (capabilities == null || !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                return@runCatching false
+            }
+
+            if (config.disableAutoSyncOnCellular && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                return@runCatching false
+            }
+
+            true
+        }.getOrDefault(true)
     }
 
     private fun notifyConnectivity() {

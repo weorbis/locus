@@ -308,7 +308,9 @@ class LocusStreams {
   static LocusErrorType _classifyError(Object error) {
     final errorStr = error.toString().toLowerCase();
 
-    if (errorStr.contains('permission')) {
+    if (errorStr.contains('manifest')) {
+      return LocusErrorType.missingManifestPermission;
+    } else if (errorStr.contains('permission')) {
       return LocusErrorType.permissionDenied;
     } else if (errorStr.contains('timeout')) {
       return LocusErrorType.locationTimeout;

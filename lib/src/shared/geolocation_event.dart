@@ -44,6 +44,8 @@ class GeolocationEvent<T> {
         return EventType.notificationAction;
       case 'http':
         return EventType.http;
+      case 'error':
+        return EventType.error;
       default:
         return EventType.unknown;
     }
@@ -110,6 +112,13 @@ class GeolocationEvent<T> {
         return GeolocationEvent<HttpEvent>(
           type: type,
           data: HttpEvent.fromMap(
+            payload is Map ? Map<String, dynamic>.from(payload) : const {},
+          ),
+        );
+      case EventType.error:
+        return GeolocationEvent<PermissionErrorEvent>(
+          type: type,
+          data: PermissionErrorEvent.fromMap(
             payload is Map ? Map<String, dynamic>.from(payload) : const {},
           ),
         );

@@ -190,10 +190,35 @@ extension SwiftLocusPlugin {
       pendingLocationResult = nil
       pending(FlutterError(code: "LOCATION_ERROR", message: error.localizedDescription, details: nil))
     }
+
+    // Emit structured error event through the stream for permission denial
+    let nsError = error as NSError
+    if nsError.domain == kCLErrorDomain && nsError.code == CLError.denied.rawValue {
+      let errorEvent: [String: Any] = [
+        "type": "error",
+        "data": [
+          "code": "ERR_PERMISSION_DENIED",
+          "message": "Location permission denied by user"
+        ]
+      ]
+      sendEvent(errorEvent)
+    }
+
     appendLog("Location error: \(error.localizedDescription)", level: "error")
   }
 
   public func onAuthorizationChange() {
+    let status = locationClient.getAuthorizationStatus()
+    if status == .denied || status == .restricted {
+      let errorEvent: [String: Any] = [
+        "type": "error",
+        "data": [
+          "code": "ERR_PERMISSION_DENIED",
+          "message": "Location authorization changed to \(status == .denied ? "denied" : "restricted")"
+        ]
+      ]
+      sendEvent(errorEvent)
+    }
     emitProviderChange()
   }
 }
