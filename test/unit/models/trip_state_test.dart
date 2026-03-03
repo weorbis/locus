@@ -3,7 +3,7 @@ import 'package:locus/src/features/trips/models/trip_state.dart';
 
 void main() {
   group('TripState.toSummary', () {
-    TripState _makeState({
+    TripState makeState({
       required double distanceMeters,
       required int idleSeconds,
       required double maxSpeedKph,
@@ -28,7 +28,7 @@ void main() {
       // Raw avg = (50 / 5) * 3.6 = 36 km/h, but max was only 1.6.
       final start = DateTime.utc(2026, 1, 1, 10, 0, 0);
       final end = start.add(const Duration(seconds: 60));
-      final state = _makeState(
+      final state = makeState(
         distanceMeters: 50,
         idleSeconds: 55,
         maxSpeedKph: 1.6,
@@ -46,7 +46,7 @@ void main() {
       // to total duration.
       final start = DateTime.utc(2026, 1, 1, 10, 0, 0);
       final end = start.add(const Duration(seconds: 60));
-      final state = _makeState(
+      final state = makeState(
         distanceMeters: 100,
         idleSeconds: 120, // more idle than duration
         maxSpeedKph: 10,
@@ -64,7 +64,7 @@ void main() {
       // avg = (10000 / 1500) * 3.6 = 24 km/h
       final start = DateTime.utc(2026, 1, 1, 10, 0, 0);
       final end = start.add(const Duration(minutes: 30));
-      final state = _makeState(
+      final state = makeState(
         distanceMeters: 10000,
         idleSeconds: 300,
         maxSpeedKph: 60,
