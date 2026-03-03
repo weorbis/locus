@@ -34,16 +34,26 @@ Common exceptions and native error codes with causes and fixes.
 - **When:** Headless callback is not top-level/static or missing entry-point pragma.
 - **Fix:** Register a top-level function with `@pragma('vm:entry-point')`.
 
-## Native error codes (1-5)
+### MissingManifestPermissionException
+- **When:** Required permissions not declared in `AndroidManifest.xml`.
+- **Fix:** Add missing `<uses-permission>` entries to your manifest.
+
+## Native error codes (1-6)
 - **1:** Permission denied → Request again; if denied, degrade gracefully.
 - **2:** Provider disabled → Prompt to enable location services.
 - **3:** Network unavailable → Queue payloads; retry with backoff.
 - **4:** Storage error → Check disk space; clear/prune queue; retry after recovery.
 - **5:** Invalid request → Validate payload and required fields.
+- **6:** Missing manifest permission → Add required `<uses-permission>` declarations.
+
+## Event stream error codes
+- **ERR_MISSING_MANIFEST:** Permission not declared in the manifest. Emitted during `Locus.ready()` on Android when required permissions are missing from `AndroidManifest.xml`.
+- **ERR_PERMISSION_DENIED:** User has not granted a required runtime permission. Emitted on both Android and iOS when location or network permissions are denied.
 
 ## Recovery checklist
 - Ensure `Locus.ready` succeeded before other calls.
-- Verify permissions (foreground + background on Android; Always on iOS when needed).
+- Verify manifest declarations include all required permissions (`ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `ACCESS_NETWORK_STATE`).
+- Verify runtime permissions (foreground + background on Android; Always on iOS when needed).
 - Set sync URL/headers before enabling auto sync.
 - Keep geofence counts under platform limits (≈100 Android, ≈20 iOS per app).
 - Use headless-safe callbacks for background execution.

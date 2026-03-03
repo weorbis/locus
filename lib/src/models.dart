@@ -9,6 +9,7 @@ export 'shared/models/enums.dart';
 export 'shared/models/json_map.dart';
 export 'shared/models/geolocation_state.dart';
 export 'shared/models/headless_event.dart';
+export 'shared/models/permission_error_event.dart';
 
 // Location feature models
 export 'features/location/models/location.dart';

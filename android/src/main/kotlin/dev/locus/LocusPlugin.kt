@@ -478,6 +478,15 @@ class LocusPlugin : FlutterPlugin,
 
         when (call.method) {
             "ready" -> {
+                val missingPermissions = validateManifestPermissions()
+                if (missingPermissions.isNotEmpty()) {
+                    Log.w(TAG, "Missing manifest permissions: $missingPermissions")
+                    emitPermissionError(
+                        "ERR_MISSING_MANIFEST",
+                        "Required permissions not declared in AndroidManifest.xml: ${missingPermissions.joinToString(", ")}",
+                        mapOf("permissions" to missingPermissions)
+                    )
+                }
                 locationTracker?.applyConfig(call.arguments.asMap())
                 result.success(locationTracker?.buildState())
             }
@@ -875,6 +884,38 @@ class LocusPlugin : FlutterPlugin,
         )
     }
 
+    private fun validateManifestPermissions(): List<String> {
+        val context = androidContext ?: return emptyList()
+        return try {
+            val packageInfo = context.packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.GET_PERMISSIONS
+            )
+            val declared = packageInfo.requestedPermissions?.toSet() ?: emptySet()
+            val required = listOf(
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+            required.filter { it !in declared }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to validate manifest permissions: ${e.message}")
+            emptyList()
+        }
+    }
+
+    private fun emitPermissionError(code: String, message: String, details: Map<String, Any>? = null) {
+        val errorData = mutableMapOf<String, Any>(
+            "code" to code,
+            "message" to message
+        )
+        details?.let { errorData.putAll(it) }
+        val event = mapOf(
+            "type" to "error",
+            "data" to errorData
+        )
+        eventDispatcher?.sendEvent(event)
+    }
+
     private fun hasLocationPermission(): Boolean {
         val context = androidContext ?: return false
         val fine = ContextCompat.checkSelfPermission(
@@ -977,23 +1018,33 @@ class LocusPlugin : FlutterPlugin,
 
     private fun getNetworkType(): String {
         val context = androidContext ?: return "none"
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return "none"
-        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return "none"
+        return runCatching {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return@runCatching "none"
+            val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return@runCatching "none"
 
-        return when {
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "wifi"
-            else -> "unknown"
+            when {
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "wifi"
+                else -> "unknown"
+            }
+        }.getOrElse { e ->
+            Log.w(TAG, "Failed to get network type: ${e.message}")
+            "none"
         }
     }
 
     private fun isMeteredConnection(): Boolean {
         val context = androidContext ?: return false
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        return cm.isActiveNetworkMetered
+        return runCatching {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return@runCatching false
+            cm.isActiveNetworkMetered
+        }.getOrElse { e ->
+            Log.w(TAG, "Failed to check metered connection: ${e.message}")
+            false
+        }
     }
 
     private fun setSyncPolicy(policyMap: Map<String, Any>?) {

@@ -384,6 +384,32 @@ class GeofenceValidationException extends LocusException {
         );
 }
 
+/// Thrown when required permissions are not declared in AndroidManifest.xml.
+///
+/// This exception indicates that the app's AndroidManifest.xml is missing
+/// required permission declarations. Unlike [InsufficientPermissionsException]
+/// (which means the user denied a runtime permission), this means the permission
+/// was never declared in the manifest, so it cannot be requested at runtime.
+///
+/// Example scenarios:
+/// - Forgetting to add ACCESS_FINE_LOCATION or ACCESS_COARSE_LOCATION
+/// - Removing a permission during manifest merging
+/// - Using a plugin feature that requires an undeclared permission
+class MissingManifestPermissionException extends LocusException {
+  /// Creates a [MissingManifestPermissionException].
+  ///
+  /// The [permissions] parameter lists the missing permission identifiers.
+  MissingManifestPermissionException({required this.permissions})
+      : super(
+          'Required permissions not declared in AndroidManifest.xml: ${permissions.join(", ")}.',
+          suggestion:
+              'Add the missing <uses-permission> entries to your AndroidManifest.xml.',
+        );
+
+  /// The list of missing permission identifiers.
+  final List<String> permissions;
+}
+
 /// Thrown when native plugin is not available.
 ///
 /// This exception indicates that the Locus native plugin cannot be accessed.
@@ -458,6 +484,8 @@ class LocusDiagnosticMessages {
         return '[Locus] Network unavailable. Locations are being queued for later sync.';
       case 5:
         return '[Locus] Storage error. Check device storage capacity.';
+      case 6:
+        return '[Locus] Required permission not declared in AndroidManifest.xml. Check your manifest.';
       default:
         return null;
     }

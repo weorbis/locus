@@ -228,6 +228,16 @@ class LocusError implements Exception {
         suggestedRecovery: RecoveryAction.retry,
       );
 
+  /// Required permission not declared in AndroidManifest.xml.
+  factory LocusError.missingManifestPermission({List<String>? permissions}) =>
+      LocusError(
+        type: LocusErrorType.missingManifestPermission,
+        message:
+            'Required permissions not declared in manifest: ${permissions?.join(", ") ?? "unknown"}',
+        isRecoverable: false,
+        suggestedRecovery: RecoveryAction.requestUserAction,
+      );
+
   /// Service disconnected.
   factory LocusError.serviceDisconnected() => LocusError(
         type: LocusErrorType.serviceDisconnected,
@@ -313,6 +323,9 @@ enum LocusErrorType {
 
   /// Authorization changed unexpectedly.
   authorizationChanged,
+
+  /// Required permission not declared in AndroidManifest.xml.
+  missingManifestPermission,
 
   /// Unknown error.
   unknown,

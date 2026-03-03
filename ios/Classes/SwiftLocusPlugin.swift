@@ -149,6 +149,18 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       if let config = call.arguments as? [String: Any] {
         applyConfig(config)
       }
+      // Emit a warning if location permissions are denied or not determined
+      let authStatus = locationClient.getAuthorizationStatus()
+      if authStatus == .denied || authStatus == .restricted {
+        let errorEvent: [String: Any] = [
+          "type": "error",
+          "data": [
+            "code": "ERR_PERMISSION_DENIED",
+            "message": "Location permission is \(authStatus == .denied ? "denied" : "restricted"). Request permission before starting tracking."
+          ]
+        ]
+        sendEvent(errorEvent)
+      }
       result(buildState())
     case "start":
       startTracking()

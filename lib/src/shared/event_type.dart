@@ -15,5 +15,6 @@ enum EventType {
   enabledChange,
   notificationAction,
   http,
+  error,
   unknown,
 }
