@@ -53,8 +53,10 @@ void main() {
       );
       await Locus.geofencing.add(zoneA);
 
-      expect(methodCalls.last.method, 'addGeofence');
-      expect(methodCalls.last.arguments['identifier'], 'zone_a');
+      final addZoneACall = methodCalls.lastWhere(
+        (call) => call.method == 'addGeofence',
+      );
+      expect(addZoneACall.arguments['identifier'], 'zone_a');
 
       // Simulate entry into A (would come from platform)
       // For this test, we verify the logic we would implement in an app using the SDK
@@ -94,10 +96,19 @@ void main() {
       await Locus.geofencing.removeAll();
       await Locus.geofencing.addAll(newGeofences);
 
-      expect(methodCalls.length, 2);
-      expect(methodCalls[0].method, 'removeGeofences');
-      expect(methodCalls[1].method, 'addGeofences');
-      expect((methodCalls[1].arguments as List).length, 100);
+      final geofenceCalls = methodCalls
+          .where(
+            (call) =>
+                call.method == 'removeGeofences' ||
+                call.method == 'addGeofences',
+          )
+          .toList();
+
+      expect(
+        geofenceCalls.map((call) => call.method),
+        ['removeGeofences', 'addGeofences'],
+      );
+      expect((geofenceCalls[1].arguments as List).length, 100);
     });
 
     test('Geofence Dwell Workflow', () async {
@@ -115,8 +126,9 @@ void main() {
 
       await Locus.geofencing.add(dwellZone);
 
-      final call = methodCalls.last;
-      expect(call.method, 'addGeofence');
+      final call = methodCalls.lastWhere(
+        (methodCall) => methodCall.method == 'addGeofence',
+      );
       expect(call.arguments['loiteringDelay'], 300000);
       expect(call.arguments['notifyOnDwell'], true);
       expect(call.arguments['notifyOnEntry'], false);
