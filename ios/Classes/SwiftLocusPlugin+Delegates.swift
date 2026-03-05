@@ -133,9 +133,16 @@ extension SwiftLocusPlugin {
       payload["location"] = locationPayload
       if !configManager.privacyModeEnabled {
         if shouldPersist(eventName: "geofence") {
-          storage.saveLocation(locationPayload, maxDays: configManager.maxDaysToPersist, maxRecords: configManager.maxRecordsToPersist)
+          storage.saveLocation(
+            locationPayload,
+            maxDays: configManager.maxDaysToPersist,
+            maxRecords: configManager.maxRecordsToPersist
+          ) { [weak self] in
+            self?.syncManager.syncNow(currentPayload: locationPayload)
+          }
+        } else {
+          syncManager.syncNow(currentPayload: locationPayload)
         }
-        syncManager.syncNow(currentPayload: locationPayload)
       }
     }
 

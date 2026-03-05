@@ -183,7 +183,7 @@ class SQLiteStorage {
     
     // MARK: - Locations
     
-    func insertLocation(_ payload: [String: Any]) {
+    func insertLocation(_ payload: [String: Any], completion: (() -> Void)? = nil) {
         queue.async { [weak self] in
             guard let self = self, let db = self.db else { return }
             
@@ -202,6 +202,12 @@ class SQLiteStorage {
                 sqlite3_step(statement)
             }
             sqlite3_finalize(statement)
+
+            if let completion {
+                DispatchQueue.main.async {
+                    completion()
+                }
+            }
         }
     }
     

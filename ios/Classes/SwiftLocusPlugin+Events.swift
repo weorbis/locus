@@ -44,9 +44,16 @@ extension SwiftLocusPlugin {
 
     if !configManager.privacyModeEnabled {
       if shouldPersist(eventName: eventName) {
-        storage.saveLocation(payload, maxDays: configManager.maxDaysToPersist, maxRecords: configManager.maxRecordsToPersist)
+        storage.saveLocation(
+          payload,
+          maxDays: configManager.maxDaysToPersist,
+          maxRecords: configManager.maxRecordsToPersist
+        ) { [weak self] in
+          self?.syncManager.syncNow(currentPayload: payload)
+        }
+      } else {
+        syncManager.syncNow(currentPayload: payload)
       }
-      syncManager.syncNow(currentPayload: payload)
     }
     completion?(true)
   }

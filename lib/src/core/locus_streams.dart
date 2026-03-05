@@ -29,6 +29,7 @@ class LocusStreams {
 
   // Privacy zone integration
   static PrivacyZoneService? _privacyZoneService;
+  static StreamSubscription<PrivacyZoneEvent>? _privacyZoneSubscription;
 
   /// Stream of all geolocation events (after spoof filtering).
   static Stream<GeolocationEvent<dynamic>> get events {
@@ -81,16 +82,32 @@ class LocusStreams {
   /// Sets the privacy zone service for filtering location events.
   /// When set, locations in privacy zones will be obfuscated or excluded.
   static Future<void> setPrivacyZoneService(PrivacyZoneService? service) async {
+    await _privacyZoneSubscription?.cancel();
+    _privacyZoneSubscription = null;
     _privacyZoneService = service;
     if (kDebugMode) {
       debugPrint(
           '[Locus] Privacy zone service ${service != null ? 'registered' : 'cleared'}');
     }
 
-    // Inform native side to avoid persisting raw locations when privacy zones are active.
+    await _syncNativePrivacyMode();
+
+    if (service != null) {
+      _privacyZoneSubscription = service.zoneChanges.listen((_) {
+        unawaited(_syncNativePrivacyMode());
+      });
+    }
+  }
+
+  static Future<void> _syncNativePrivacyMode() async {
+    final hasEnabledPrivacyZones =
+        _privacyZoneService?.enabledZones.isNotEmpty ?? false;
+
+    // Inform native side to avoid persisting raw locations only when an
+    // enabled privacy zone actually exists.
     try {
       await LocusChannels.methods
-          .invokeMethod('setPrivacyMode', service != null);
+          .invokeMethod('setPrivacyMode', hasEnabledPrivacyZones);
     } catch (error) {
       if (kDebugMode) {
         debugPrint('[Locus] Failed to set privacy mode on native side: $error');

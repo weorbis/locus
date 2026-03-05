@@ -119,7 +119,7 @@ class SyncManager {
             delegate?.onLog(level: "debug", message: "syncNow skipped: Sync is paused (401 received). Call resumeSync() after token refresh.")
             return
         }
-        
+
         if config.batchSync {
             attemptBatchSync()
             return
@@ -151,7 +151,7 @@ class SyncManager {
         
         let threshold = config.autoSyncThreshold > 0 ? config.autoSyncThreshold : config.maxBatchSize
         let stored = storage.readLocations()
-        
+
         if stored.count < threshold {
             return
         }
@@ -159,7 +159,7 @@ class SyncManager {
         let sendCount = min(config.maxBatchSize, stored.count)
         let batch = Array(stored.prefix(sendCount))
         let ids = batch.compactMap { $0["uuid"] as? String }
-        
+
         enqueueHttpBatch(payloads: batch, idsToDelete: ids, attempt: 0)
     }
     
@@ -173,7 +173,7 @@ class SyncManager {
         let sendCount = min(limit, stored.count)
         let batch = Array(stored.prefix(sendCount))
         let ids = batch.compactMap { $0["uuid"] as? String }
-        
+
         enqueueHttpBatch(payloads: batch, idsToDelete: ids, attempt: 0)
     }
     
@@ -229,7 +229,11 @@ class SyncManager {
         request.timeoutInterval = config.httpTimeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        for (k, v) in config.httpHeaders {
+        let mergedHeaders = config.httpHeaders.merging(config.dynamicHeaders) { _, dynamicValue in
+            dynamicValue
+        }
+
+        for (k, v) in mergedHeaders {
             let sanitizedKey = sanitizeHeaderKey(k)
             let sanitizedValue = sanitizeHeaderValue(v)
             request.setValue(sanitizedValue, forHTTPHeaderField: sanitizedKey)

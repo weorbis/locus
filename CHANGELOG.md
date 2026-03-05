@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.3] - 2026-03-05
+
+### Fixed
+
+- **iOS: Dynamic sync headers applied to HTTP requests** — `dynamicHeaders` are now merged into request headers before sync requests are sent, ensuring refreshed auth tokens are included during background and foreground sync.
+- **iOS: Privacy mode activation matches configured zones** — Native privacy mode is now enabled only when at least one privacy zone is actively enabled, preventing raw location persistence/sync from being disabled just because the privacy service exists.
+- **iOS: Sync waits for persisted locations** — Location and geofence-triggered sync now runs after SQLite persistence completes, avoiding races where sync read an empty batch before the insert committed.
+
 ## [2.1.2] - 2026-03-03
 
 ### Added

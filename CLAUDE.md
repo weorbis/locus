@@ -1,5 +1,15 @@
-# Safety
+# Locus
 
-- Never read `.env`, `secrets/`, credentials, or private keys.
-- Never run destructive commands (`rm -rf`, `drop`, `--force`, `reset --hard`).
-- All findings must cite concrete evidence (file:line, test output, logs).
+Background geolocation SDK for WeOrbis. Flutter/Dart native plugin for Android/iOS.
+
+## Build & Validation
+
+```bash
+flutter analyze
+flutter test
+```
+
+## CLI
+
+- `setup` — Initialize plugin configuration
+- `doctor` — Diagnose plugin health

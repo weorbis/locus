@@ -49,9 +49,9 @@ class StorageManager {
         }
     }
     
-    func saveLocation(_ payload: [String: Any], maxDays: Int, maxRecords: Int) {
+    func saveLocation(_ payload: [String: Any], maxDays: Int, maxRecords: Int, completion: (() -> Void)? = nil) {
         // All operations are async and thread-safe via SQLiteStorage queue
-        sqliteStorage.insertLocation(payload)
+        sqliteStorage.insertLocation(payload, completion: completion)
         
         // Prune old locations (executed asynchronously)
         if maxDays > 0 || maxRecords > 0 {
