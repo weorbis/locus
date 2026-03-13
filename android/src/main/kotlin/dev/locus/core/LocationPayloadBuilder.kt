@@ -6,6 +6,7 @@ import java.time.Instant
 import java.util.UUID
 
 class LocationPayloadBuilder(
+    private val configManager: ConfigManager,
     private val motionManager: MotionManager,
     private val stateManager: StateManager
 ) {
@@ -31,7 +32,8 @@ class LocationPayloadBuilder(
             "activity" to activity,
             "event" to eventName,
             "is_moving" to motionManager.isMoving,
-            "odometer" to stateManager.odometerValue
+            "odometer" to stateManager.odometerValue,
+            "extras" to configManager.extras.toMap()
         )
     }
 }

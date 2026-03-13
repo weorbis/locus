@@ -37,16 +37,20 @@ void main() {
       });
     });
 
-    test('refreshHeaders invokes the headers callback', () async {
+    test(
+        'setHeadersCallback refreshes immediately and refreshHeaders triggers again',
+        () async {
       var callbackCalls = 0;
-      service.setHeadersCallback(() async {
+      await service.setHeadersCallback(() async {
         callbackCalls++;
         return {'Authorization': 'Bearer token'};
       });
 
+      expect(callbackCalls, 1);
+
       await service.refreshHeaders();
 
-      expect(callbackCalls, 1);
+      expect(callbackCalls, 2);
     });
 
     test('getQueue returns most recent items when limit is set', () async {

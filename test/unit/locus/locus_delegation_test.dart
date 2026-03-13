@@ -200,7 +200,7 @@ void main() {
     final eventSub = Locus.events.listen(events.add);
 
     var headersRefreshed = false;
-    Locus.setHeadersCallback(() async {
+    await Locus.setHeadersCallback(() async {
       headersRefreshed = true;
       return {'Authorization': 'test'};
     });

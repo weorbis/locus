@@ -114,6 +114,13 @@ class MockLocus implements LocusInterface {
   TripState? _tripState;
   TripSummary? _tripSummary;
   ErrorRecoveryManager? _errorRecoveryManager;
+  LocationSyncBacklog _locationSyncBacklog = const LocationSyncBacklog(
+    pendingLocationCount: 0,
+    pendingBatchCount: 0,
+    isPaused: false,
+    quarantinedLocationCount: 0,
+    groups: [],
+  );
 
   /// List of method calls made to this mock.
   ///
@@ -128,6 +135,10 @@ class MockLocus implements LocusInterface {
 
   /// The current mock configuration.
   Config get config => _config;
+
+  void setLocationSyncBacklog(LocationSyncBacklog backlog) {
+    _locationSyncBacklog = backlog;
+  }
 
   /// Sets the mock state.
   void setMockState(GeolocationState state) {
@@ -725,11 +736,14 @@ class MockLocus implements LocusInterface {
   }
 
   @override
-  void setHeadersCallback(
+  Future<void> setHeadersCallback(
     Future<Map<String, String>> Function()? callback,
-  ) {
+  ) async {
     _methodCalls.add('setHeadersCallback');
     _headersCallback = callback;
+    if (callback != null) {
+      await callback();
+    }
   }
 
   @override
@@ -739,10 +753,30 @@ class MockLocus implements LocusInterface {
   }
 
   @override
-  Future<void> refreshHeaders() async {
+  Future<void> refreshHeaders({bool force = false}) async {
     _methodCalls.add('refreshHeaders');
     if (_headersCallback == null) return;
     await _headersCallback!();
+  }
+
+  @override
+  Future<void> registerHeadlessPreSyncValidator(
+    HeadlessPreSyncValidator validator,
+  ) async {
+    _methodCalls.add('registerHeadlessPreSyncValidator');
+  }
+
+  @override
+  Future<void> registerHeadlessHeadersCallback(
+    HeadlessHeadersCallback callback,
+  ) async {
+    _methodCalls.add('registerHeadlessHeadersCallback');
+  }
+
+  @override
+  Future<LocationSyncBacklog> getLocationSyncBacklog() async {
+    _methodCalls.add('getLocationSyncBacklog');
+    return _locationSyncBacklog;
   }
 
   @override

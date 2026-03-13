@@ -1,7 +1,9 @@
 package dev.locus.core
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
+import dev.locus.LocusPlugin
 import dev.locus.storage.LocationStore
 import dev.locus.storage.QueueStore
 import kotlinx.coroutines.*
@@ -56,10 +58,21 @@ class SyncManager(
         ) {
             callback(true)
         }
+
+        /**
+         * Called when native sync receives 401 and wants one background header
+         * refresh attempt before pausing sync.
+         */
+        fun onHeadersRefresh(callback: (Map<String, String>?) -> Unit) {
+            callback(null)
+        }
     }
 
     private val executor: ExecutorService = Executors.newFixedThreadPool(4)
     private val mainScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences(LocusPlugin.PREFS_NAME, Context.MODE_PRIVATE)
+    private val locationSyncLock = Any()
 
     /**
      * Sync is PAUSED by default on startup.
@@ -80,7 +93,26 @@ class SyncManager(
     private var isReleased = false
 
     @Volatile
+    private var isLocationSyncInFlight = false
+
+    @Volatile
+    private var pendingLocationDrainRequested = false
+
+    @Volatile
     var syncBodyBuilderEnabled = false
+
+    private data class RouteContext(
+        val ownerId: String,
+        val driverId: String,
+        val taskId: String,
+        val trackingSessionId: String,
+        val startedAt: String,
+    )
+
+    private data class LocationBatch(
+        val payloads: List<Map<String, Any>>,
+        val ids: List<String>,
+    )
 
     init {
         Log.i(TAG, "SyncManager initialized - sync PAUSED by default (call resumeSync() when app is ready)")
@@ -104,7 +136,7 @@ class SyncManager(
             return
         }
         if (config.batchSync) {
-            syncStoredLocations(config.maxBatchSize)
+            requestLocationSync(config.maxBatchSize)
             return
         }
         currentPayload?.let { enqueueHttp(it, null, 0) }
@@ -118,7 +150,7 @@ class SyncManager(
     fun resumeSync() {
         Log.i(TAG, "Sync RESUMED by app request - processing any pending locations...")
         isSyncPaused = false
-        syncStoredLocations(config.maxBatchSize)
+        requestLocationSync(config.maxBatchSize)
         syncQueue(0)
     }
 
@@ -132,60 +164,30 @@ class SyncManager(
             Log.d("locus.SyncManager", "attemptBatchSync: skipped - sync is paused")
             return
         }
-        
-        val threshold = if (config.autoSyncThreshold > 0) config.autoSyncThreshold else config.maxBatchSize
-        val effectiveThreshold = if (threshold <= 0) config.maxBatchSize else threshold
-        val fetchLimit = max(effectiveThreshold, config.maxBatchSize)
-        
-        val records = locationStore.readLocations(fetchLimit)
-        Log.d("locus.SyncManager", "attemptBatchSync: records=${records.size}, threshold=$effectiveThreshold")
-        
-        if (records.size < effectiveThreshold) {
-            Log.d("locus.SyncManager", "attemptBatchSync: skipped - need $effectiveThreshold records, have ${records.size}")
+
+        val threshold = if (config.autoSyncThreshold > 0) {
+            config.autoSyncThreshold
+        } else {
+            config.maxBatchSize
+        }
+        val backlog = buildBacklog()
+        Log.d(
+            "locus.SyncManager",
+            "attemptBatchSync: pending=${backlog.pendingLocationCount}, threshold=$threshold"
+        )
+        if (backlog.pendingLocationCount < threshold) {
+            Log.d(
+                "locus.SyncManager",
+                "attemptBatchSync: skipped - need $threshold records, have ${backlog.pendingLocationCount}"
+            )
             return
         }
-        
-        val sendCount = min(config.maxBatchSize, records.size)
-        val batch = records.subList(0, sendCount)
-        
-        val payloads = mutableListOf<Map<String, Any>>()
-        val ids = mutableListOf<String>()
-        
-        for (record in batch) {
-            val payload = buildPayloadFromRecord(record)
-            if (payload.isNotEmpty()) {
-                payloads.add(payload)
-            }
-            (record["id"] as? String)?.let { ids.add(it) }
-        }
-        
-        if (payloads.isNotEmpty()) {
-            Log.d("locus.SyncManager", "attemptBatchSync: sending ${payloads.size} locations...")
-            enqueueHttpBatch(payloads, ids, 0)
-        }
+
+        requestLocationSync(config.maxBatchSize)
     }
 
     fun syncStoredLocations(limit: Int) {
-        if (isSyncPaused) return
-        
-        val effectiveLimit = if (limit <= 0) config.maxBatchSize else limit
-        val records = locationStore.readLocations(effectiveLimit)
-        if (records.isEmpty()) return
-        
-        val payloads = mutableListOf<Map<String, Any>>()
-        val ids = mutableListOf<String>()
-        
-        for (record in records) {
-            val payload = buildPayloadFromRecord(record)
-            if (payload.isNotEmpty()) {
-                payloads.add(payload)
-            }
-            (record["id"] as? String)?.let { ids.add(it) }
-        }
-        
-        if (payloads.isNotEmpty()) {
-            enqueueHttpBatch(payloads, ids, 0)
-        }
+        requestLocationSync(limit)
     }
 
     fun syncQueue(limit: Int): Int {
@@ -218,6 +220,184 @@ class SyncManager(
         return scheduled
     }
 
+    fun getLocationSyncBacklog(): Map<String, Any?> {
+        val backlog = buildBacklog()
+        return mapOf(
+            "pendingLocationCount" to backlog.pendingLocationCount,
+            "pendingBatchCount" to backlog.pendingBatchCount,
+            "isPaused" to isSyncPaused,
+            "quarantinedLocationCount" to backlog.quarantinedLocationCount,
+            "lastSuccessAt" to readLastSuccessAt(),
+            "lastFailureReason" to readLastFailureReason(),
+            "groups" to backlog.groups,
+        )
+    }
+
+    private data class BacklogSnapshot(
+        val pendingLocationCount: Int,
+        val pendingBatchCount: Int,
+        val quarantinedLocationCount: Int,
+        val groups: List<Map<String, Any>>,
+    )
+
+    private fun requestLocationSync(limit: Int) {
+        if (config.httpUrl.isNullOrEmpty() || isSyncPaused) return
+
+        val effectiveLimit = if (limit <= 0) config.maxBatchSize else limit
+        val batch = synchronized(locationSyncLock) {
+            pendingLocationDrainRequested = true
+            if (isLocationSyncInFlight) {
+                null
+            } else {
+                val nextBatch = selectNextLocationBatch(effectiveLimit)
+                if (nextBatch == null) {
+                    pendingLocationDrainRequested = false
+                    null
+                } else {
+                    isLocationSyncInFlight = true
+                    pendingLocationDrainRequested = false
+                    nextBatch
+                }
+            }
+        } ?: return
+
+        enqueueHttpBatch(batch.payloads, batch.ids, 0)
+    }
+
+    private fun completeLocationSync(continueDrain: Boolean) {
+        val shouldContinue = synchronized(locationSyncLock) {
+            isLocationSyncInFlight = false
+            if (continueDrain) {
+                pendingLocationDrainRequested = true
+            }
+            val next = pendingLocationDrainRequested
+            pendingLocationDrainRequested = false
+            next
+        }
+
+        if (shouldContinue && !isSyncPaused && !isReleased) {
+            requestLocationSync(config.maxBatchSize)
+        }
+    }
+
+    private fun selectNextLocationBatch(limit: Int): LocationBatch? {
+        val records = locationStore.readLocations(0)
+        if (records.isEmpty()) return null
+
+        var selectedContext: RouteContext? = null
+        val payloads = mutableListOf<Map<String, Any>>()
+        val ids = mutableListOf<String>()
+
+        for (record in records) {
+            val payload = buildPayloadFromRecord(record)
+            if (payload.isEmpty()) continue
+
+            val context = extractRouteContext(payload) ?: continue
+            if (selectedContext == null) {
+                selectedContext = context
+            }
+            if (selectedContext != context) {
+                continue
+            }
+
+            payloads.add(payload)
+            (record["id"] as? String)?.let(ids::add)
+            if (payloads.size >= limit) {
+                break
+            }
+        }
+
+        return if (payloads.isEmpty()) null else LocationBatch(payloads, ids)
+    }
+
+    private fun buildBacklog(): BacklogSnapshot {
+        val records = locationStore.readLocations(0)
+        val groupedCounts = linkedMapOf<RouteContext, Int>()
+        var pendingLocationCount = 0
+        var quarantinedLocationCount = 0
+
+        for (record in records) {
+            val payload = buildPayloadFromRecord(record)
+            if (payload.isEmpty()) continue
+            val context = extractRouteContext(payload)
+            if (context == null) {
+                quarantinedLocationCount++
+                continue
+            }
+            pendingLocationCount++
+            groupedCounts[context] = (groupedCounts[context] ?: 0) + 1
+        }
+
+        val pendingBatchCount = groupedCounts.values.sumOf { count ->
+            max(1, (count + config.maxBatchSize - 1) / config.maxBatchSize)
+        }
+        val groups = groupedCounts.entries.map { (context, count) ->
+            mapOf(
+                "ownerId" to context.ownerId,
+                "driverId" to context.driverId,
+                "taskId" to context.taskId,
+                "trackingSessionId" to context.trackingSessionId,
+                "startedAt" to context.startedAt,
+                "pendingLocationCount" to count,
+            )
+        }
+
+        return BacklogSnapshot(
+            pendingLocationCount = pendingLocationCount,
+            pendingBatchCount = pendingBatchCount,
+            quarantinedLocationCount = quarantinedLocationCount,
+            groups = groups,
+        )
+    }
+
+    private fun extractRouteContext(payload: Map<String, Any>): RouteContext? {
+        val extras = payload["extras"] as? Map<*, *> ?: return null
+        val ownerId = extras["owner_id"]?.toString().orEmpty()
+        val driverId = extras["driver_id"]?.toString().orEmpty()
+        val taskId = extras["task_id"]?.toString().orEmpty()
+        val trackingSessionId = extras["tracking_session_id"]?.toString().orEmpty()
+        val startedAt = extras["started_at"]?.toString().orEmpty()
+
+        if (ownerId.isBlank() ||
+            driverId.isBlank() ||
+            taskId.isBlank() ||
+            trackingSessionId.isBlank() ||
+            startedAt.isBlank()
+        ) {
+            return null
+        }
+
+        return RouteContext(
+            ownerId = ownerId,
+            driverId = driverId,
+            taskId = taskId,
+            trackingSessionId = trackingSessionId,
+            startedAt = startedAt,
+        )
+    }
+
+    private fun recordSyncSuccess() {
+        prefs.edit()
+            .putLong(KEY_LAST_LOCATION_SYNC_SUCCESS_AT, System.currentTimeMillis())
+            .remove(KEY_LAST_LOCATION_SYNC_FAILURE_REASON)
+            .apply()
+    }
+
+    private fun recordSyncFailure(reason: String) {
+        prefs.edit()
+            .putString(KEY_LAST_LOCATION_SYNC_FAILURE_REASON, reason)
+            .apply()
+    }
+
+    private fun readLastSuccessAt(): String? {
+        val timestamp = prefs.getLong(KEY_LAST_LOCATION_SYNC_SUCCESS_AT, 0L)
+        if (timestamp <= 0L) return null
+        return Instant.ofEpochMilli(timestamp).toString()
+    }
+
+    private fun readLastFailureReason(): String? =
+        prefs.getString(KEY_LAST_LOCATION_SYNC_FAILURE_REASON, null)
+
     private fun enqueueHttp(payload: Map<String, Any>, idsToDelete: List<String>?, attempt: Int) {
         if (isSyncPaused) return
 
@@ -232,7 +412,9 @@ class SyncManager(
                         "error",
                         "pre-sync validator rejected locations=1 extras=${JSONObject(config.extras as Map<*, *>).toString()}"
                     )
+                    recordSyncFailure("pre_sync_validator_rejected")
                 }
+                completeLocationSync(false)
                 return@onPreSyncValidation
             }
 
@@ -248,7 +430,9 @@ class SyncManager(
                                 "error",
                                 "sync body builder failed locations=1 extras=${JSONObject(config.extras as Map<*, *>).toString()}"
                             )
+                            recordSyncFailure("sync_body_builder_failed")
                             scheduleHttpRetry(locationPayload, idsToDelete, attempt + 1)
+                            completeLocationSync(false)
                             return@execute
                         }
                         listener.onSyncRequest()
@@ -285,7 +469,9 @@ class SyncManager(
                         "error",
                         "pre-sync validator rejected locations=${payloads.size} extras=${JSONObject(config.extras as Map<*, *>).toString()}"
                     )
+                    recordSyncFailure("pre_sync_validator_rejected")
                 }
+                completeLocationSync(false)
                 return@onPreSyncValidation
             }
 
@@ -301,7 +487,9 @@ class SyncManager(
                                 "error",
                                 "sync body builder failed locations=${payloads.size} extras=${JSONObject(config.extras as Map<*, *>).toString()}"
                             )
+                            recordSyncFailure("sync_body_builder_failed")
                             scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
+                            completeLocationSync(false)
                             return@execute
                         }
                         listener.onSyncRequest()
@@ -449,7 +637,8 @@ class SyncManager(
         body: JSONObject,
         idsToDelete: List<String>?,
         attempt: Int,
-        originalPayload: Map<String, Any>
+        originalPayload: Map<String, Any>,
+        allowRecovery: Boolean = true,
     ) {
         var connection: HttpURLConnection? = null
         try {
@@ -480,26 +669,49 @@ class SyncManager(
                 reader.readText()
             }
 
+            if (status == 401 && allowRecovery) {
+                attemptLocationHeadersRecovery {
+                    performHttpRequest(
+                        body = body,
+                        idsToDelete = idsToDelete,
+                        attempt = attempt,
+                        originalPayload = originalPayload,
+                        allowRecovery = false,
+                    )
+                }
+                return
+            }
+
             val ok = status in 200..299
             if (ok && !idsToDelete.isNullOrEmpty()) {
                 locationStore.deleteLocations(idsToDelete)
+                recordSyncSuccess()
             }
 
             emitHttpEvent(status, ok, responseText)
-            log("info", "http $status")
+            log(if (ok) "info" else "error", "http $status${if (ok) "" else " $responseText"}")
 
             when {
                 status == 401 -> {
+                    recordSyncFailure("http_401")
                     isSyncPaused = true
                     log("error", "http 401 - sync paused")
+                    completeLocationSync(false)
                 }
-                !ok -> scheduleHttpRetry(originalPayload, idsToDelete, attempt + 1)
+                !ok -> {
+                    recordSyncFailure("http_$status")
+                    scheduleHttpRetry(originalPayload, idsToDelete, attempt + 1)
+                    completeLocationSync(false)
+                }
+                else -> completeLocationSync(true)
             }
         } catch (e: Exception) {
             Log.e(TAG, "HTTP sync failed: ${sanitizeError(e)}")
             emitHttpEvent(0, false, e.message)
             log("error", "http error ${sanitizeError(e)}")
+            recordSyncFailure("exception:${e.javaClass.simpleName}")
             scheduleHttpRetry(originalPayload, idsToDelete, attempt + 1)
+            completeLocationSync(false)
         } finally {
             connection?.disconnect()
         }
@@ -509,7 +721,8 @@ class SyncManager(
         body: JSONObject,
         idsToDelete: List<String>,
         attempt: Int,
-        payloads: List<Map<String, Any>>
+        payloads: List<Map<String, Any>>,
+        allowRecovery: Boolean = true,
     ) {
         var connection: HttpURLConnection? = null
         try {
@@ -540,28 +753,71 @@ class SyncManager(
                 reader.readText()
             }
 
+            if (status == 401 && allowRecovery) {
+                attemptLocationHeadersRecovery {
+                    performBatchHttpRequest(
+                        body = body,
+                        idsToDelete = idsToDelete,
+                        attempt = attempt,
+                        payloads = payloads,
+                        allowRecovery = false,
+                    )
+                }
+                return
+            }
+
             val ok = status in 200..299
             if (ok && idsToDelete.isNotEmpty()) {
                 locationStore.deleteLocations(idsToDelete)
+                recordSyncSuccess()
             }
 
             emitHttpEvent(status, ok, responseText)
-            log("info", "http $status")
+            log(if (ok) "info" else "error", "http $status${if (ok) "" else " $responseText"}")
 
             when {
                 status == 401 -> {
+                    recordSyncFailure("http_401")
                     isSyncPaused = true
                     log("error", "http 401 - sync paused")
+                    completeLocationSync(false)
                 }
-                !ok -> scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
+                !ok -> {
+                    recordSyncFailure("http_$status")
+                    scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
+                    completeLocationSync(false)
+                }
+                else -> completeLocationSync(true)
             }
         } catch (e: Exception) {
             Log.e(TAG, "HTTP sync failed: ${sanitizeError(e)}")
             emitHttpEvent(0, false, e.message)
             log("error", "http error ${sanitizeError(e)}")
+            recordSyncFailure("exception:${e.javaClass.simpleName}")
             scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
+            completeLocationSync(false)
         } finally {
             connection?.disconnect()
+        }
+    }
+
+    private fun attemptLocationHeadersRecovery(retry: () -> Unit) {
+        listener.onHeadersRefresh { headers ->
+            val recovered = headers?.get("Authorization")?.isNotBlank() == true
+            if (recovered) {
+                synchronized(config.httpHeaders) {
+                    config.httpHeaders.clear()
+                    config.httpHeaders.putAll(headers)
+                }
+                retry()
+                return@onHeadersRefresh
+            }
+
+            recordSyncFailure("http_401")
+            isSyncPaused = true
+            emitHttpEvent(401, false, "unauthorized")
+            log("error", "http 401 - sync paused")
+            completeLocationSync(false)
         }
     }
 
@@ -669,6 +925,10 @@ class SyncManager(
 
     companion object {
         private const val TAG = "locus"
+        private const val KEY_LAST_LOCATION_SYNC_SUCCESS_AT =
+            "bg_last_location_sync_success_at"
+        private const val KEY_LAST_LOCATION_SYNC_FAILURE_REASON =
+            "bg_last_location_sync_failure_reason"
 
         private fun sanitizeError(e: Exception): String =
             e.javaClass.simpleName + if (e.message?.contains("://") == true) " (network)" else ": ${e.message}"

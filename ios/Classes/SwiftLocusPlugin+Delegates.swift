@@ -89,6 +89,20 @@ extension SwiftLocusPlugin {
     }
   }
 
+  public func onHeadersRefresh(completion: @escaping ([String: String]?) -> Void) {
+    guard methodChannel == nil else {
+      completion(nil)
+      return
+    }
+
+    guard headlessHeadersDispatcher.isAvailable else {
+      completion(nil)
+      return
+    }
+
+    headlessHeadersDispatcher.refreshHeaders(completion: completion)
+  }
+
   // MARK: - SchedulerDelegate
   public func onScheduleCheck(shouldBeEnabled: Bool) {
     if shouldBeEnabled {
