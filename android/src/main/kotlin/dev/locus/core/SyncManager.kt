@@ -225,7 +225,16 @@ class SyncManager(
         if (locationPayload.isEmpty()) return
 
         listener.onPreSyncValidation(listOf(locationPayload), config.extras) { proceed ->
-            if (!proceed || isReleased) return@onPreSyncValidation
+            if (!proceed || isReleased) {
+                if (!proceed && !isReleased) {
+                    emitHttpEvent(0, false, "pre_sync_validator_rejected")
+                    log(
+                        "error",
+                        "pre-sync validator rejected locations=1 extras=${JSONObject(config.extras as Map<*, *>).toString()}"
+                    )
+                }
+                return@onPreSyncValidation
+            }
 
             if (syncBodyBuilderEnabled) {
                 // Ask Dart to build the sync body asynchronously
@@ -233,8 +242,17 @@ class SyncManager(
                     if (isReleased) return@buildSyncBody
 
                     executor.execute {
+                        if (customBody == null) {
+                            emitHttpEvent(0, false, "sync_body_builder_failed")
+                            log(
+                                "error",
+                                "sync body builder failed locations=1 extras=${JSONObject(config.extras as Map<*, *>).toString()}"
+                            )
+                            scheduleHttpRetry(locationPayload, idsToDelete, attempt + 1)
+                            return@execute
+                        }
                         listener.onSyncRequest()
-                        val body = (customBody ?: buildHttpBody(locationPayload, null)).apply {
+                        val body = customBody.apply {
                             config.httpParams.forEach { (key, value) ->
                                 put(key, value)
                             }
@@ -260,7 +278,16 @@ class SyncManager(
         if (isSyncPaused) return
 
         listener.onPreSyncValidation(payloads, config.extras) { proceed ->
-            if (!proceed || isReleased) return@onPreSyncValidation
+            if (!proceed || isReleased) {
+                if (!proceed && !isReleased) {
+                    emitHttpEvent(0, false, "pre_sync_validator_rejected")
+                    log(
+                        "error",
+                        "pre-sync validator rejected locations=${payloads.size} extras=${JSONObject(config.extras as Map<*, *>).toString()}"
+                    )
+                }
+                return@onPreSyncValidation
+            }
 
             if (syncBodyBuilderEnabled) {
                 // Ask Dart to build the sync body asynchronously
@@ -268,8 +295,17 @@ class SyncManager(
                     if (isReleased) return@buildSyncBody
 
                     executor.execute {
+                        if (customBody == null) {
+                            emitHttpEvent(0, false, "sync_body_builder_failed")
+                            log(
+                                "error",
+                                "sync body builder failed locations=${payloads.size} extras=${JSONObject(config.extras as Map<*, *>).toString()}"
+                            )
+                            scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
+                            return@execute
+                        }
                         listener.onSyncRequest()
-                        val body = (customBody ?: buildHttpBody(null, payloads)).apply {
+                        val body = customBody.apply {
                             config.httpParams.forEach { (key, value) ->
                                 put(key, value)
                             }
@@ -370,6 +406,10 @@ class SyncManager(
         locationPayload: Map<String, Any>?,
         locations: List<Map<String, Any>>?
     ): JSONObject = JSONObject().apply {
+        config.extras.forEach { (key, value) ->
+            put(key, value)
+        }
+
         // Merge extras at top level first (these are user-defined envelope fields)
         config.httpExtras?.forEach { (key, value) ->
             put(key, value)

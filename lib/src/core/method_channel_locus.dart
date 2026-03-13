@@ -476,7 +476,11 @@ class MethodChannelLocus implements LocusInterface {
           final data = event.data;
           if (data is HttpEvent) return data;
           if (data is Map<String, dynamic>) {
-            return HttpEvent.fromMap(data);
+            try {
+              return HttpEvent.fromMap(data);
+            } catch (_) {
+              return null;
+            }
           }
           // Handle Map without proper type - attempt safe conversion
           if (data is Map) {
@@ -516,11 +520,10 @@ class MethodChannelLocus implements LocusInterface {
   static const _minHeaderUpdateInterval = Duration(seconds: 1);
 
   @override
-  Future<void> setHeadersCallback(
+  void setHeadersCallback(
     Future<Map<String, String>> Function()? callback,
-  ) async {
+  ) {
     _headersCallback = callback;
-    await _updateDynamicHeaders();
   }
 
   @override
@@ -528,7 +531,7 @@ class MethodChannelLocus implements LocusInterface {
     _headersCallback = null;
   }
 
-  Future<void> _updateDynamicHeaders() async {
+  Future<void> _updateDynamicHeaders({bool force = false}) async {
     if (_headersCallback == null) {
       if (kDebugMode) {
         debugPrint(
@@ -539,7 +542,8 @@ class MethodChannelLocus implements LocusInterface {
     }
 
     final now = DateTime.now();
-    if (_lastHeaderUpdate != null &&
+    if (!force &&
+        _lastHeaderUpdate != null &&
         now.difference(_lastHeaderUpdate!) < _minHeaderUpdateInterval) {
       return;
     }
@@ -557,7 +561,7 @@ class MethodChannelLocus implements LocusInterface {
 
   @override
   Future<void> refreshHeaders() async {
-    await _updateDynamicHeaders();
+    await _updateDynamicHeaders(force: true);
   }
 
   // ============================================================

@@ -116,7 +116,9 @@ class MockSyncService implements SyncService {
   }
 
   @override
-  void setHeadersCallback(Future<Map<String, String>> Function()? callback) {
+  void setHeadersCallback(
+    Future<Map<String, String>> Function()? callback,
+  ) {
     _headersCallback = callback;
   }
 

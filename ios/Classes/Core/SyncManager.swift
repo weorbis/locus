@@ -263,14 +263,44 @@ class SyncManager {
         guard !isSyncPaused else { return }
         
         let proceedBlock = { [weak self] (proceed: Bool) in
-            guard let self = self, proceed else { return }
+            guard let self = self else { return }
+            guard proceed else {
+                self.delegate?.onHttpEvent([
+                    "type": "http",
+                    "data": [
+                        "status": 0,
+                        "ok": false,
+                        "responseText": "pre_sync_validator_rejected"
+                    ]
+                ])
+                self.delegate?.onLog(
+                    level: "error",
+                    message: "pre-sync validator rejected locations=1 extras=\(self.config.extras)"
+                )
+                return
+            }
             
             // If sync body builder is enabled, ask Dart to build the body
             if self.syncBodyBuilderEnabled {
                 self.delegate?.buildSyncBody(locations: [locationPayload], extras: self.config.extras) { [weak self] customBody in
                     guard let self = self else { return }
                     self.queue.async {
-                        let body = customBody ?? self.buildHttpBody(locationPayload: locationPayload, locations: nil)
+                        guard let body = customBody else {
+                            self.delegate?.onHttpEvent([
+                                "type": "http",
+                                "data": [
+                                    "status": 0,
+                                    "ok": false,
+                                    "responseText": "sync_body_builder_failed"
+                                ]
+                            ])
+                            self.delegate?.onLog(
+                                level: "error",
+                                message: "sync body builder failed locations=1 extras=\(self.config.extras)"
+                            )
+                            self.scheduleRetry(payload: locationPayload, idsToDelete: idsToDelete, attempt: attempt + 1)
+                            return
+                        }
                         guard let request = self.makeRequest(urlString, body: body) else { return }
                         
                         let task = self.urlSession.dataTask(with: request) { data, response, error in
@@ -308,14 +338,44 @@ class SyncManager {
         guard !isSyncPaused else { return }
         
         let proceedBlock = { [weak self] (proceed: Bool) in
-            guard let self = self, proceed else { return }
+            guard let self = self else { return }
+            guard proceed else {
+                self.delegate?.onHttpEvent([
+                    "type": "http",
+                    "data": [
+                        "status": 0,
+                        "ok": false,
+                        "responseText": "pre_sync_validator_rejected"
+                    ]
+                ])
+                self.delegate?.onLog(
+                    level: "error",
+                    message: "pre-sync validator rejected locations=\(payloads.count) extras=\(self.config.extras)"
+                )
+                return
+            }
             
             // If sync body builder is enabled, ask Dart to build the body
             if self.syncBodyBuilderEnabled {
                 self.delegate?.buildSyncBody(locations: payloads, extras: self.config.extras) { [weak self] customBody in
                     guard let self = self else { return }
                     self.queue.async {
-                        let body = customBody ?? self.buildHttpBody(locationPayload: nil, locations: payloads)
+                        guard let body = customBody else {
+                            self.delegate?.onHttpEvent([
+                                "type": "http",
+                                "data": [
+                                    "status": 0,
+                                    "ok": false,
+                                    "responseText": "sync_body_builder_failed"
+                                ]
+                            ])
+                            self.delegate?.onLog(
+                                level: "error",
+                                message: "sync body builder failed locations=\(payloads.count) extras=\(self.config.extras)"
+                            )
+                            self.scheduleBatchRetry(payloads: payloads, idsToDelete: idsToDelete, attempt: attempt + 1)
+                            return
+                        }
                         guard let request = self.makeRequest(urlString, body: body) else { return }
                         
                         let task = self.urlSession.dataTask(with: request) { data, response, error in

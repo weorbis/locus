@@ -63,8 +63,11 @@ class SyncServiceImpl implements SyncService {
       _instance.registerHeadlessSyncBodyBuilder(builder);
 
   @override
-  void setHeadersCallback(Future<Map<String, String>> Function()? callback) =>
-      _instance.setHeadersCallback(callback);
+  void setHeadersCallback(
+    Future<Map<String, String>> Function()? callback,
+  ) {
+    _instance.setHeadersCallback(callback);
+  }
 
   @override
   void clearHeadersCallback() => _instance.clearHeadersCallback();

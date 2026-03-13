@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.4] - 2026-03-12
+
+### Fixed
+
+- **Dart: Explicit header refresh is immediate without changing the public API** — `setHeadersCallback()` remains synchronous, while `refreshHeaders()` now bypasses header-refresh throttling for explicit refresh requests. This keeps the public contract stable and restores deterministic auth refresh for sync recovery.
+- **Dart: Malformed HTTP sync events no longer break listeners** — `HttpEvent` parsing is now guarded so invalid payloads are ignored instead of terminating the stream.
+- **Android/iOS: Custom sync body builder failures preserve queued data** — When a registered sync body builder throws or returns `null`, sync now treats it as a retryable failure and retains queued locations instead of falling back to a partial native body.
+- **Android: Native sync body includes configured extras** — The native sync body path now merges `config.extras` before request-specific HTTP extras so owner/task metadata remains available when the native builder is used.
+- **Android/iOS: Validator and sync diagnostics improved** — Added clearer diagnostics for skipped sync attempts and builder failures to make RouteHistory delivery issues easier to investigate in production.
+
 ## [2.1.3] - 2026-03-05
 
 ### Fixed

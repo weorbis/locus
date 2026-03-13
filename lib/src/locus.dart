@@ -329,9 +329,9 @@ class Locus {
     _instance.clearHeadersCallback();
   }
 
-  /// Manually triggers a header update.
-  static Future<void> refreshHeaders() async {
-    await _instance.refreshHeaders();
+  /// Manually triggers a header update immediately.
+  static Future<void> refreshHeaders() {
+    return _instance.refreshHeaders();
   }
 
   // ============================================================
