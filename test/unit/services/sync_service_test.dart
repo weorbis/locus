@@ -238,12 +238,12 @@ void main() {
         expect(mockLocus.methodCalls, contains('clearSyncBodyBuilder'));
       });
 
-      test('should set headers callback', () {
+      test('should set headers callback', () async {
         Future<Map<String, String>> callback() async {
           return {'Authorization': 'Bearer token'};
         }
 
-        service.setHeadersCallback(callback);
+        await service.setHeadersCallback(callback);
 
         // Callback is set internally
         expect(true, isTrue);

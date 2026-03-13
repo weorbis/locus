@@ -314,8 +314,8 @@ class MethodChannelLocus implements LocusInterface {
   }
 
   @override
-  Future<void> clearSyncBodyBuilder() async {
-    await LocusSync.clearSyncBodyBuilder();
+  void clearSyncBodyBuilder() {
+    unawaited(LocusSync.clearSyncBodyBuilder());
   }
 
   @override
@@ -476,7 +476,11 @@ class MethodChannelLocus implements LocusInterface {
           final data = event.data;
           if (data is HttpEvent) return data;
           if (data is Map<String, dynamic>) {
-            return HttpEvent.fromMap(data);
+            try {
+              return HttpEvent.fromMap(data);
+            } catch (_) {
+              return null;
+            }
           }
           // Handle Map without proper type - attempt safe conversion
           if (data is Map) {
@@ -520,7 +524,9 @@ class MethodChannelLocus implements LocusInterface {
     Future<Map<String, String>> Function()? callback,
   ) async {
     _headersCallback = callback;
-    await _updateDynamicHeaders();
+    if (callback != null) {
+      await _updateDynamicHeaders(force: true);
+    }
   }
 
   @override
@@ -528,7 +534,7 @@ class MethodChannelLocus implements LocusInterface {
     _headersCallback = null;
   }
 
-  Future<void> _updateDynamicHeaders() async {
+  Future<void> _updateDynamicHeaders({bool force = false}) async {
     if (_headersCallback == null) {
       if (kDebugMode) {
         debugPrint(
@@ -539,7 +545,8 @@ class MethodChannelLocus implements LocusInterface {
     }
 
     final now = DateTime.now();
-    if (_lastHeaderUpdate != null &&
+    if (!force &&
+        _lastHeaderUpdate != null &&
         now.difference(_lastHeaderUpdate!) < _minHeaderUpdateInterval) {
       return;
     }
@@ -556,8 +563,39 @@ class MethodChannelLocus implements LocusInterface {
   }
 
   @override
-  Future<void> refreshHeaders() async {
-    await _updateDynamicHeaders();
+  Future<void> refreshHeaders({bool force = false}) async {
+    await _updateDynamicHeaders(force: force);
+  }
+
+  @override
+  Future<void> registerHeadlessPreSyncValidator(
+    HeadlessPreSyncValidator validator,
+  ) {
+    return LocusSync.registerHeadlessPreSyncValidator(validator);
+  }
+
+  @override
+  Future<void> registerHeadlessHeadersCallback(
+    HeadlessHeadersCallback callback,
+  ) {
+    return LocusSync.registerHeadlessHeadersCallback(callback);
+  }
+
+  @override
+  Future<LocationSyncBacklog> getLocationSyncBacklog() async {
+    final result = await LocusChannels.methods.invokeMethod(
+      'getLocationSyncBacklog',
+    );
+    if (result is Map) {
+      return LocationSyncBacklog.fromMap(Map<String, dynamic>.from(result));
+    }
+    return const LocationSyncBacklog(
+      pendingLocationCount: 0,
+      pendingBatchCount: 0,
+      isPaused: false,
+      quarantinedLocationCount: 0,
+      groups: [],
+    );
   }
 
   // ============================================================

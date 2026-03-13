@@ -8,6 +8,10 @@ protocol SyncManagerDelegate: AnyObject {
     
     /// Called before sync to validate context.
     func onPreSyncValidation(locations: [[String: Any]], extras: [String: Any], completion: @escaping (Bool) -> Void)
+
+    /// Called when location sync gets 401 and native wants one background
+    /// header refresh attempt before pausing sync.
+    func onHeadersRefresh(completion: @escaping ([String: String]?) -> Void)
     
     func onHttpEvent(_ event: [String: Any])
     func onSyncEvent(_ event: [String: Any])
@@ -46,13 +50,34 @@ class SyncManager {
     // task IDs, etc.) after app restart.
     // The app MUST call resumeSync() after initialization is complete.
     private let syncStateQueue = DispatchQueue(label: "dev.locus.syncstate")
+    private let locationDrainStateQueue = DispatchQueue(label: "dev.locus.locationdrain")
     private var _isSyncPaused = true
     private var isSyncPaused: Bool {
         get { syncStateQueue.sync { _isSyncPaused } }
         set { syncStateQueue.sync { _isSyncPaused = newValue } }
     }
+
+    private var _isLocationSyncInFlight = false
+    private var _pendingLocationDrainRequested = false
+    private var isLocationSyncInFlight: Bool {
+        get { locationDrainStateQueue.sync { _isLocationSyncInFlight } }
+        set { locationDrainStateQueue.sync { _isLocationSyncInFlight = newValue } }
+    }
     
     private var urlSession: URLSession!
+
+    private struct RouteContext: Hashable {
+        let ownerId: String
+        let driverId: String
+        let taskId: String
+        let trackingSessionId: String
+        let startedAt: String
+    }
+
+    private struct LocationBatch {
+        let payloads: [[String: Any]]
+        let ids: [String]
+    }
 
     private func createURLSession() -> URLSession {
         let configuration = URLSessionConfiguration.default
@@ -121,7 +146,7 @@ class SyncManager {
         }
 
         if config.batchSync {
-            attemptBatchSync()
+            requestLocationSync(limit: config.maxBatchSize)
             return
         }
         
@@ -138,7 +163,7 @@ class SyncManager {
     func resumeSync() {
         delegate?.onLog(level: "info", message: "Sync RESUMED by app request - processing any pending locations...")
         isSyncPaused = false
-        syncStoredLocations(limit: config.maxBatchSize)
+        requestLocationSync(limit: config.maxBatchSize)
         _ = syncQueue(limit: 0)
     }
 
@@ -148,33 +173,18 @@ class SyncManager {
     func attemptBatchSync() {
         guard let url = config.httpUrl, !url.isEmpty, isAutoSyncAllowed() else { return }
         guard !isSyncPaused else { return }
-        
-        let threshold = config.autoSyncThreshold > 0 ? config.autoSyncThreshold : config.maxBatchSize
-        let stored = storage.readLocations()
 
-        if stored.count < threshold {
+        let threshold = config.autoSyncThreshold > 0 ? config.autoSyncThreshold : config.maxBatchSize
+        let backlog = buildBacklog()
+        if backlog.pendingLocationCount < threshold {
             return
         }
-        
-        let sendCount = min(config.maxBatchSize, stored.count)
-        let batch = Array(stored.prefix(sendCount))
-        let ids = batch.compactMap { $0["uuid"] as? String }
 
-        enqueueHttpBatch(payloads: batch, idsToDelete: ids, attempt: 0)
+        requestLocationSync(limit: config.maxBatchSize)
     }
     
     func syncStoredLocations(limit: Int) {
-        guard let url = config.httpUrl, !url.isEmpty else { return }
-        guard !isSyncPaused else { return }
-        
-        let stored = storage.readLocations()
-        if stored.isEmpty { return }
-        
-        let sendCount = min(limit, stored.count)
-        let batch = Array(stored.prefix(sendCount))
-        let ids = batch.compactMap { $0["uuid"] as? String }
-
-        enqueueHttpBatch(payloads: batch, idsToDelete: ids, attempt: 0)
+        requestLocationSync(limit: limit)
     }
     
     func syncQueue(limit: Int) -> Int {
@@ -212,6 +222,173 @@ class SyncManager {
         }
         
         return scheduled
+    }
+
+    func getLocationSyncBacklog() -> [String: Any] {
+        let backlog = buildBacklog()
+        return [
+            "pendingLocationCount": backlog.pendingLocationCount,
+            "pendingBatchCount": backlog.pendingBatchCount,
+            "isPaused": isSyncPaused,
+            "quarantinedLocationCount": backlog.quarantinedLocationCount,
+            "lastSuccessAt": readLastSuccessAt() as Any,
+            "lastFailureReason": readLastFailureReason() as Any,
+            "groups": backlog.groups
+        ]
+    }
+
+    private struct BacklogSnapshot {
+        let pendingLocationCount: Int
+        let pendingBatchCount: Int
+        let quarantinedLocationCount: Int
+        let groups: [[String: Any]]
+    }
+
+    private func requestLocationSync(limit: Int) {
+        guard let url = config.httpUrl, !url.isEmpty else { return }
+        guard !isSyncPaused else { return }
+
+        let batch: LocationBatch? = locationDrainStateQueue.sync {
+            _pendingLocationDrainRequested = true
+            guard !_isLocationSyncInFlight else { return nil }
+            guard let nextBatch = selectNextLocationBatch(limit: limit) else {
+                _pendingLocationDrainRequested = false
+                return nil
+            }
+            _isLocationSyncInFlight = true
+            _pendingLocationDrainRequested = false
+            return nextBatch
+        }
+
+        guard let batch else { return }
+        enqueueHttpBatch(payloads: batch.payloads, idsToDelete: batch.ids, attempt: 0)
+    }
+
+    private func completeLocationSync(continueDrain: Bool) {
+        let shouldContinue = locationDrainStateQueue.sync { () -> Bool in
+            _isLocationSyncInFlight = false
+            if continueDrain {
+                _pendingLocationDrainRequested = true
+            }
+            let next = _pendingLocationDrainRequested
+            _pendingLocationDrainRequested = false
+            return next
+        }
+
+        if shouldContinue && !isSyncPaused {
+            requestLocationSync(limit: config.maxBatchSize)
+        }
+    }
+
+    private func selectNextLocationBatch(limit: Int) -> LocationBatch? {
+        let effectiveLimit = limit > 0 ? limit : config.maxBatchSize
+        let stored = Array(storage.readLocations().reversed())
+        guard !stored.isEmpty else { return nil }
+
+        var selectedContext: RouteContext?
+        var payloads: [[String: Any]] = []
+        var ids: [String] = []
+
+        for payload in stored {
+            guard let context = extractRouteContext(from: payload) else {
+                continue
+            }
+            if selectedContext == nil {
+                selectedContext = context
+            }
+            guard selectedContext == context else {
+                continue
+            }
+            payloads.append(payload)
+            if let uuid = payload["uuid"] as? String {
+                ids.append(uuid)
+            }
+            if payloads.count >= effectiveLimit {
+                break
+            }
+        }
+
+        guard !payloads.isEmpty else { return nil }
+        return LocationBatch(payloads: payloads, ids: ids)
+    }
+
+    private func buildBacklog() -> BacklogSnapshot {
+        let stored = storage.readLocations()
+        var groupedCounts: [RouteContext: Int] = [:]
+        var pendingLocationCount = 0
+        var quarantinedLocationCount = 0
+
+        for payload in stored {
+            guard let context = extractRouteContext(from: payload) else {
+                quarantinedLocationCount += 1
+                continue
+            }
+            pendingLocationCount += 1
+            groupedCounts[context, default: 0] += 1
+        }
+
+        let pendingBatchCount = groupedCounts.values.reduce(0) { partial, count in
+            partial + max(1, Int(ceil(Double(count) / Double(config.maxBatchSize))))
+        }
+        let groups = groupedCounts.map { entry in
+            [
+                "ownerId": entry.key.ownerId,
+                "driverId": entry.key.driverId,
+                "taskId": entry.key.taskId,
+                "trackingSessionId": entry.key.trackingSessionId,
+                "startedAt": entry.key.startedAt,
+                "pendingLocationCount": entry.value,
+            ]
+        }
+
+        return BacklogSnapshot(
+            pendingLocationCount: pendingLocationCount,
+            pendingBatchCount: pendingBatchCount,
+            quarantinedLocationCount: quarantinedLocationCount,
+            groups: groups
+        )
+    }
+
+    private func extractRouteContext(from payload: [String: Any]) -> RouteContext? {
+        guard let extras = payload["extras"] as? [String: Any] else { return nil }
+        let ownerId = (extras["owner_id"] as? String) ?? ""
+        let driverId = (extras["driver_id"] as? String) ?? ""
+        let taskId = (extras["task_id"] as? String) ?? ""
+        let trackingSessionId = (extras["tracking_session_id"] as? String) ?? ""
+        let startedAt = (extras["started_at"] as? String) ?? ""
+        guard !ownerId.isEmpty,
+              !driverId.isEmpty,
+              !taskId.isEmpty,
+              !trackingSessionId.isEmpty,
+              !startedAt.isEmpty else {
+            return nil
+        }
+        return RouteContext(
+            ownerId: ownerId,
+            driverId: driverId,
+            taskId: taskId,
+            trackingSessionId: trackingSessionId,
+            startedAt: startedAt
+        )
+    }
+
+    private func recordSyncSuccess() {
+        UserDefaults.standard.set(Date().timeIntervalSince1970 * 1000, forKey: "bg_last_location_sync_success_at")
+        UserDefaults.standard.removeObject(forKey: "bg_last_location_sync_failure_reason")
+    }
+
+    private func recordSyncFailure(_ reason: String) {
+        UserDefaults.standard.set(reason, forKey: "bg_last_location_sync_failure_reason")
+    }
+
+    private func readLastSuccessAt() -> String? {
+        let raw = UserDefaults.standard.double(forKey: "bg_last_location_sync_success_at")
+        guard raw > 0 else { return nil }
+        return ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: raw / 1000))
+    }
+
+    private func readLastFailureReason() -> String? {
+        UserDefaults.standard.string(forKey: "bg_last_location_sync_failure_reason")
     }
     
     // MARK: - Private Http
@@ -263,14 +440,48 @@ class SyncManager {
         guard !isSyncPaused else { return }
         
         let proceedBlock = { [weak self] (proceed: Bool) in
-            guard let self = self, proceed else { return }
+            guard let self = self else { return }
+            guard proceed else {
+                self.delegate?.onHttpEvent([
+                    "type": "http",
+                    "data": [
+                        "status": 0,
+                        "ok": false,
+                        "responseText": "pre_sync_validator_rejected"
+                    ]
+                ])
+                self.delegate?.onLog(
+                    level: "error",
+                    message: "pre-sync validator rejected locations=1 extras=\(self.config.extras)"
+                )
+                self.recordSyncFailure("pre_sync_validator_rejected")
+                self.completeLocationSync(continueDrain: false)
+                return
+            }
             
             // If sync body builder is enabled, ask Dart to build the body
             if self.syncBodyBuilderEnabled {
                 self.delegate?.buildSyncBody(locations: [locationPayload], extras: self.config.extras) { [weak self] customBody in
                     guard let self = self else { return }
                     self.queue.async {
-                        let body = customBody ?? self.buildHttpBody(locationPayload: locationPayload, locations: nil)
+                        guard let body = customBody else {
+                            self.delegate?.onHttpEvent([
+                                "type": "http",
+                                "data": [
+                                    "status": 0,
+                                    "ok": false,
+                                    "responseText": "sync_body_builder_failed"
+                                ]
+                            ])
+                            self.delegate?.onLog(
+                                level: "error",
+                                message: "sync body builder failed locations=1 extras=\(self.config.extras)"
+                            )
+                            self.recordSyncFailure("sync_body_builder_failed")
+                            self.scheduleRetry(payload: locationPayload, idsToDelete: idsToDelete, attempt: attempt + 1)
+                            self.completeLocationSync(continueDrain: false)
+                            return
+                        }
                         guard let request = self.makeRequest(urlString, body: body) else { return }
                         
                         let task = self.urlSession.dataTask(with: request) { data, response, error in
@@ -308,14 +519,48 @@ class SyncManager {
         guard !isSyncPaused else { return }
         
         let proceedBlock = { [weak self] (proceed: Bool) in
-            guard let self = self, proceed else { return }
+            guard let self = self else { return }
+            guard proceed else {
+                self.delegate?.onHttpEvent([
+                    "type": "http",
+                    "data": [
+                        "status": 0,
+                        "ok": false,
+                        "responseText": "pre_sync_validator_rejected"
+                    ]
+                ])
+                self.delegate?.onLog(
+                    level: "error",
+                    message: "pre-sync validator rejected locations=\(payloads.count) extras=\(self.config.extras)"
+                )
+                self.recordSyncFailure("pre_sync_validator_rejected")
+                self.completeLocationSync(continueDrain: false)
+                return
+            }
             
             // If sync body builder is enabled, ask Dart to build the body
             if self.syncBodyBuilderEnabled {
                 self.delegate?.buildSyncBody(locations: payloads, extras: self.config.extras) { [weak self] customBody in
                     guard let self = self else { return }
                     self.queue.async {
-                        let body = customBody ?? self.buildHttpBody(locationPayload: nil, locations: payloads)
+                        guard let body = customBody else {
+                            self.delegate?.onHttpEvent([
+                                "type": "http",
+                                "data": [
+                                    "status": 0,
+                                    "ok": false,
+                                    "responseText": "sync_body_builder_failed"
+                                ]
+                            ])
+                            self.delegate?.onLog(
+                                level: "error",
+                                message: "sync body builder failed locations=\(payloads.count) extras=\(self.config.extras)"
+                            )
+                            self.recordSyncFailure("sync_body_builder_failed")
+                            self.scheduleBatchRetry(payloads: payloads, idsToDelete: idsToDelete, attempt: attempt + 1)
+                            self.completeLocationSync(continueDrain: false)
+                            return
+                        }
                         guard let request = self.makeRequest(urlString, body: body) else { return }
                         
                         let task = self.urlSession.dataTask(with: request) { data, response, error in
@@ -384,8 +629,37 @@ class SyncManager {
             responseText = error?.localizedDescription ?? ""
         }
         
+        if status == 401 {
+            attemptLocationHeadersRecovery { [weak self] recovered in
+                guard let self else { return }
+                if recovered {
+                    if isBatch, let batch = batchPayloads {
+                        self.enqueueHttpBatch(payloads: batch, idsToDelete: idsToDelete, attempt: attempt)
+                    } else if let payload {
+                        self.enqueueHttp(locationPayload: payload, idsToDelete: idsToDelete, attempt: attempt)
+                    }
+                    return
+                }
+
+                self.recordSyncFailure("http_401")
+                self.isSyncPaused = true
+                self.delegate?.onHttpEvent([
+                    "type": "http",
+                    "data": [
+                        "status": 401,
+                        "ok": false,
+                        "responseText": responseText
+                    ]
+                ])
+                self.delegate?.onLog(level: "error", message: "http 401 - sync paused")
+                self.completeLocationSync(continueDrain: false)
+            }
+            return
+        }
+
         if ok, let ids = idsToDelete {
             storage.removeLocations(ids)
+            recordSyncSuccess()
         }
         
         let event: [String: Any] = [
@@ -399,18 +673,16 @@ class SyncManager {
         delegate?.onHttpEvent(event)
         delegate?.onLog(level: ok ? "info" : "error", message: "http \(status) \(ok ? "" : responseText)")
 
-        if status == 401 {
-            isSyncPaused = true
-            delegate?.onLog(level: "error", message: "http 401 - sync paused")
-            return
-        }
-
         if !ok {
+            recordSyncFailure("http_\(status)")
             if isBatch, let batch = batchPayloads {
                 scheduleBatchRetry(payloads: batch, idsToDelete: idsToDelete, attempt: attempt + 1)
             } else if let p = payload {
                 scheduleRetry(payload: p, idsToDelete: idsToDelete, attempt: attempt + 1)
             }
+            completeLocationSync(continueDrain: false)
+        } else {
+            completeLocationSync(continueDrain: true)
         }
     }
     
@@ -443,15 +715,26 @@ class SyncManager {
         delegate?.onHttpEvent(event)
         delegate?.onLog(level: ok ? "info" : "error", message: "http \(status) \(ok ? "" : responseText)")
 
-        if status == 401 {
-            isSyncPaused = true
-            delegate?.onLog(level: "error", message: "http 401 - sync paused")
-            return
-        }
-
         if !ok {
             scheduleQueueRetry(payload: payload, id: id, type: type, idempotencyKey: idempotencyKey, attempt: attempt + 1)
         }
+    }
+
+    private func attemptLocationHeadersRecovery(completion: @escaping (Bool) -> Void) {
+        delegate?.onHeadersRefresh { [weak self] headers in
+            guard let self else {
+                completion(false)
+                return
+            }
+            guard let headers,
+                  let authHeader = headers["Authorization"],
+                  !authHeader.isEmpty else {
+                completion(false)
+                return
+            }
+            self.config.dynamicHeaders = headers
+            completion(true)
+        } ?? completion(false)
     }
     
     private func scheduleRetry(payload: [String: Any], idsToDelete: [String]?, attempt: Int) {

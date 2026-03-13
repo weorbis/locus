@@ -647,8 +647,10 @@ void main() {
       expect(_wasMethodCalled(mockLocus, 'clearSyncBodyBuilder'), isTrue);
     });
 
-    test('setHeadersCallback delegates to instance', () {
-      service.setHeadersCallback(() async => {'Authorization': 'Bearer token'});
+    test('setHeadersCallback delegates to instance', () async {
+      await service.setHeadersCallback(
+        () async => {'Authorization': 'Bearer token'},
+      );
       expect(_wasMethodCalled(mockLocus, 'setHeadersCallback'), isTrue);
     });
 
@@ -660,6 +662,44 @@ void main() {
     test('refreshHeaders delegates to instance', () async {
       await service.refreshHeaders();
       expect(_wasMethodCalled(mockLocus, 'refreshHeaders'), isTrue);
+    });
+
+    test('registerHeadlessPreSyncValidator delegates to instance', () async {
+      await service.registerHeadlessPreSyncValidator((context) async => true);
+      expect(
+        _wasMethodCalled(mockLocus, 'registerHeadlessPreSyncValidator'),
+        isTrue,
+      );
+    });
+
+    test('registerHeadlessHeadersCallback delegates to instance', () async {
+      await service.registerHeadlessHeadersCallback(
+        () async => {'Authorization': 'Bearer token'},
+      );
+      expect(
+        _wasMethodCalled(mockLocus, 'registerHeadlessHeadersCallback'),
+        isTrue,
+      );
+    });
+
+    test('getBacklog delegates to instance', () async {
+      mockLocus.setLocationSyncBacklog(
+        const LocationSyncBacklog(
+          pendingLocationCount: 3,
+          pendingBatchCount: 2,
+          isPaused: true,
+          quarantinedLocationCount: 1,
+          groups: <LocationSyncBacklogGroup>[],
+        ),
+      );
+
+      final backlog = await service.getBacklog();
+
+      expect(_wasMethodCalled(mockLocus, 'getLocationSyncBacklog'), isTrue);
+      expect(backlog.pendingLocationCount, 3);
+      expect(backlog.pendingBatchCount, 2);
+      expect(backlog.isPaused, isTrue);
+      expect(backlog.quarantinedLocationCount, 1);
     });
 
     test('enqueue delegates to instance', () async {

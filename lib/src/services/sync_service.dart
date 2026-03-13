@@ -148,13 +148,28 @@ abstract class SyncService {
   );
 
   /// Sets a callback to provide dynamic HTTP headers.
-  void setHeadersCallback(Future<Map<String, String>> Function()? callback);
+  Future<void> setHeadersCallback(
+    Future<Map<String, String>> Function()? callback,
+  );
 
   /// Clears the dynamic headers callback.
   void clearHeadersCallback();
 
   /// Manually triggers a header update.
-  Future<void> refreshHeaders();
+  Future<void> refreshHeaders({bool force = false});
+
+  /// Registers a headless pre-sync validator for terminated/background syncs.
+  Future<void> registerHeadlessPreSyncValidator(
+    HeadlessPreSyncValidator validator,
+  );
+
+  /// Registers a headless dynamic headers callback for terminated/background syncs.
+  Future<void> registerHeadlessHeadersCallback(
+    HeadlessHeadersCallback callback,
+  );
+
+  /// Returns RouteHistory backlog information from native storage.
+  Future<LocationSyncBacklog> getBacklog();
 
   // ============================================================
   // Queue Operations
