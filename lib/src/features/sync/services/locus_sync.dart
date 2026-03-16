@@ -40,6 +40,9 @@ class LocusSync {
   /// Pre-sync validator callback.
   static PreSyncValidator? _preSyncValidator;
 
+  /// Foreground headers callback for native 401 recovery.
+  static Future<Map<String, String>> Function()? _foregroundHeadersCallback;
+
   // ============================================================
   // Standard Sync Methods
   // ============================================================
@@ -55,7 +58,10 @@ class LocusSync {
 
   /// Triggers an immediate sync of pending locations.
   static Future<bool> sync() async {
-    if (_isPaused) return false;
+    if (_isPaused) {
+      debugPrint('[Locus] WARNING: sync() called while paused. Call Locus.dataSync.resume() after app initialization.');
+      return false;
+    }
     final result = await LocusChannels.methods.invokeMethod('sync');
     return result == true;
   }
@@ -64,7 +70,10 @@ class LocusSync {
   ///
   /// Use this to check if sync can proceed without calling [resume] first.
   static Future<bool> isSyncReady() async {
-    if (_isPaused) return false;
+    if (_isPaused) {
+      debugPrint('[Locus] WARNING: isSyncReady() called while paused. Call Locus.dataSync.resume() after app initialization.');
+      return false;
+    }
     try {
       final result = await LocusChannels.methods.invokeMethod('getSyncState');
       if (result is Map) {
@@ -126,6 +135,14 @@ class LocusSync {
     _preSyncValidator = null;
   }
 
+  /// Sets the foreground headers callback for native 401 recovery.
+  static void setForegroundHeadersCallback(
+    Future<Map<String, String>> Function()? callback,
+  ) {
+    _setupSyncBodyChannel();
+    _foregroundHeadersCallback = callback;
+  }
+
   /// Validates sync with the registered validator.
   ///
   /// Called by native side before each sync attempt via method channel.
@@ -140,6 +157,19 @@ class LocusSync {
     } catch (e) {
       debugPrint('[Locus] Pre-sync validator threw an error: $e');
       return false; // Skip sync on error
+    }
+  }
+
+  /// Refreshes dynamic headers via the foreground callback.
+  ///
+  /// Called by native side on 401 when method channel is available.
+  static Future<Map<String, String>?> refreshDynamicHeaders() async {
+    if (_foregroundHeadersCallback == null) return null;
+    try {
+      return await _foregroundHeadersCallback!();
+    } catch (e) {
+      debugPrint('[Locus] Error refreshing dynamic headers: $e');
+      return null;
     }
   }
 
@@ -401,6 +431,9 @@ class LocusSync {
           final args = Map<String, dynamic>.from(call.arguments as Map);
           final context = SyncBodyContext.fromMap(args);
           return validatePreSync(context.locations, context.extras);
+
+        case 'refreshDynamicHeaders':
+          return refreshDynamicHeaders();
 
         default:
           return null;

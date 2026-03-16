@@ -524,6 +524,7 @@ class MethodChannelLocus implements LocusInterface {
     Future<Map<String, String>> Function()? callback,
   ) async {
     _headersCallback = callback;
+    LocusSync.setForegroundHeadersCallback(callback);
     if (callback != null) {
       await _updateDynamicHeaders(force: true);
     }
@@ -532,6 +533,7 @@ class MethodChannelLocus implements LocusInterface {
   @override
   void clearHeadersCallback() {
     _headersCallback = null;
+    LocusSync.setForegroundHeadersCallback(null);
   }
 
   Future<void> _updateDynamicHeaders({bool force = false}) async {

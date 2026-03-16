@@ -41,7 +41,12 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
   var eventSink: FlutterEventSink?
   var pendingLocationResult: FlutterResult?
   var isEnabled = false
-  var lastLocation: CLLocation?
+  private let lastLocationQueue = DispatchQueue(label: "dev.locus.lastLocation")
+  private var _lastLocation: CLLocation?
+  var lastLocation: CLLocation? {
+    get { lastLocationQueue.sync { _lastLocation } }
+    set { lastLocationQueue.sync { _lastLocation = newValue } }
+  }
   let networkQueue = DispatchQueue(label: "dev.locus.network")
   var networkMonitor: NWPathMonitor?
 

@@ -90,8 +90,15 @@ extension SwiftLocusPlugin {
   }
 
   public func onHeadersRefresh(completion: @escaping ([String: String]?) -> Void) {
-    guard methodChannel == nil else {
-      completion(nil)
+    if let channel = methodChannel {
+      DispatchQueue.main.async {
+        channel.invokeMethod("refreshDynamicHeaders", arguments: nil) { result in
+          let headers = (result as? [String: Any])?.reduce(into: [String: String]()) { partial, entry in
+            partial[entry.key] = "\(entry.value)"
+          }
+          completion(headers)
+        }
+      }
       return
     }
 

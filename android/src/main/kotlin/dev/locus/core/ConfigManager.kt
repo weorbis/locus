@@ -45,9 +45,9 @@ class ConfigManager(context: Context) {
     var queueMaxDays: Int = 0
     var queueMaxRecords: Int = 0
     var idempotencyHeader: String = "Idempotency-Key"
-    @Volatile var httpHeaders: MutableMap<String, Any> = mutableMapOf()
-    @Volatile var httpParams: MutableMap<String, Any> = mutableMapOf()
-    @Volatile var httpExtras: MutableMap<String, Any> = mutableMapOf()
+    var httpHeaders: MutableMap<String, Any> = java.util.concurrent.ConcurrentHashMap()
+    var httpParams: MutableMap<String, Any> = java.util.concurrent.ConcurrentHashMap()
+    var httpExtras: MutableMap<String, Any> = java.util.concurrent.ConcurrentHashMap()
 
     /** Alias for httpExtras to match iOS API */
     val extras: Map<String, Any> get() = httpExtras
@@ -201,9 +201,13 @@ class ConfigManager(context: Context) {
     }
 
     private fun Map<*, *>.toStringKeyMap(): MutableMap<String, Any> =
-        entries.mapNotNull { (k, v) ->
-            (k as? String)?.let { key -> v?.let { value -> key to value } }
-        }.toMap().toMutableMap()
+        java.util.concurrent.ConcurrentHashMap<String, Any>().also { map ->
+            entries.forEach { (k, v) ->
+                val key = k as? String ?: return@forEach
+                val value = v ?: return@forEach
+                map[key] = value
+            }
+        }
 
     private fun JSONObject.toMap(): Map<String, Any> {
         val map = mutableMapOf<String, Any>()

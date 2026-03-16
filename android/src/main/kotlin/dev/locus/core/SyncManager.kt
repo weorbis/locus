@@ -410,7 +410,7 @@ class SyncManager(
                     emitHttpEvent(0, false, "pre_sync_validator_rejected")
                     log(
                         "error",
-                        "pre-sync validator rejected locations=1 extras=${JSONObject(config.extras as Map<*, *>).toString()}"
+                        "pre-sync validator rejected locations=1 extras=${JSONObject(config.extras).toString()}"
                     )
                     recordSyncFailure("pre_sync_validator_rejected")
                 }
@@ -428,7 +428,7 @@ class SyncManager(
                             emitHttpEvent(0, false, "sync_body_builder_failed")
                             log(
                                 "error",
-                                "sync body builder failed locations=1 extras=${JSONObject(config.extras as Map<*, *>).toString()}"
+                                "sync body builder failed locations=1 extras=${JSONObject(config.extras).toString()}"
                             )
                             recordSyncFailure("sync_body_builder_failed")
                             scheduleHttpRetry(locationPayload, idsToDelete, attempt + 1)
@@ -467,7 +467,7 @@ class SyncManager(
                     emitHttpEvent(0, false, "pre_sync_validator_rejected")
                     log(
                         "error",
-                        "pre-sync validator rejected locations=${payloads.size} extras=${JSONObject(config.extras as Map<*, *>).toString()}"
+                        "pre-sync validator rejected locations=${payloads.size} extras=${JSONObject(config.extras).toString()}"
                     )
                     recordSyncFailure("pre_sync_validator_rejected")
                 }
@@ -485,7 +485,7 @@ class SyncManager(
                             emitHttpEvent(0, false, "sync_body_builder_failed")
                             log(
                                 "error",
-                                "sync body builder failed locations=${payloads.size} extras=${JSONObject(config.extras as Map<*, *>).toString()}"
+                                "sync body builder failed locations=${payloads.size} extras=${JSONObject(config.extras).toString()}"
                             )
                             recordSyncFailure("sync_body_builder_failed")
                             scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
@@ -594,10 +594,6 @@ class SyncManager(
         locationPayload: Map<String, Any>?,
         locations: List<Map<String, Any>>?
     ): JSONObject = JSONObject().apply {
-        config.extras.forEach { (key, value) ->
-            put(key, value)
-        }
-
         // Merge extras at top level first (these are user-defined envelope fields)
         config.httpExtras?.forEach { (key, value) ->
             put(key, value)
@@ -805,10 +801,8 @@ class SyncManager(
         listener.onHeadersRefresh { headers ->
             val recovered = headers?.get("Authorization")?.isNotBlank() == true
             if (recovered) {
-                synchronized(config.httpHeaders) {
-                    config.httpHeaders.clear()
-                    config.httpHeaders.putAll(headers)
-                }
+                val newHeaders = java.util.concurrent.ConcurrentHashMap<String, Any>(headers)
+                config.httpHeaders = newHeaders
                 retry()
                 return@onHeadersRefresh
             }

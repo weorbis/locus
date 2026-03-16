@@ -59,10 +59,6 @@ class SyncManager {
 
     private var _isLocationSyncInFlight = false
     private var _pendingLocationDrainRequested = false
-    private var isLocationSyncInFlight: Bool {
-        get { locationDrainStateQueue.sync { _isLocationSyncInFlight } }
-        set { locationDrainStateQueue.sync { _isLocationSyncInFlight = newValue } }
-    }
     
     private var urlSession: URLSession!
 
@@ -714,6 +710,12 @@ class SyncManager {
         ]
         delegate?.onHttpEvent(event)
         delegate?.onLog(level: ok ? "info" : "error", message: "http \(status) \(ok ? "" : responseText)")
+
+        if status == 401 {
+            isSyncPaused = true
+            delegate?.onLog(level: "error", message: "http 401 - sync paused (queue)")
+            return
+        }
 
         if !ok {
             scheduleQueueRetry(payload: payload, id: id, type: type, idempotencyKey: idempotencyKey, attempt: attempt + 1)

@@ -302,7 +302,44 @@ class LocusPlugin : FlutterPlugin,
                 override fun onHeadersRefresh(callback: (Map<String, String>?) -> Unit) {
                     val channel = methodChannel
                     if (channel != null) {
-                        callback(null)
+                        var responded = false
+                        val timeoutRunnable = Runnable {
+                            if (!responded) {
+                                responded = true
+                                Log.w(TAG, "refreshDynamicHeaders timed out after 10s")
+                                callback(null)
+                            }
+                        }
+                        mainHandler.postDelayed(timeoutRunnable, 10_000L)
+                        mainHandler.post {
+                            channel.invokeMethod("refreshDynamicHeaders", null, object : MethodChannel.Result {
+                                override fun success(result: Any?) {
+                                    if (responded) return
+                                    responded = true
+                                    mainHandler.removeCallbacks(timeoutRunnable)
+                                    @Suppress("UNCHECKED_CAST")
+                                    val headers = (result as? Map<*, *>)?.entries?.mapNotNull { entry ->
+                                        val key = entry.key?.toString() ?: return@mapNotNull null
+                                        val value = entry.value?.toString() ?: return@mapNotNull null
+                                        key to value
+                                    }?.toMap()
+                                    callback(headers)
+                                }
+                                override fun error(code: String, message: String?, details: Any?) {
+                                    if (responded) return
+                                    responded = true
+                                    mainHandler.removeCallbacks(timeoutRunnable)
+                                    Log.e(TAG, "refreshDynamicHeaders error: $code - $message")
+                                    callback(null)
+                                }
+                                override fun notImplemented() {
+                                    if (responded) return
+                                    responded = true
+                                    mainHandler.removeCallbacks(timeoutRunnable)
+                                    callback(null)
+                                }
+                            })
+                        }
                         return
                     }
 
