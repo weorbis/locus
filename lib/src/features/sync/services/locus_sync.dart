@@ -59,7 +59,8 @@ class LocusSync {
   /// Triggers an immediate sync of pending locations.
   static Future<bool> sync() async {
     if (_isPaused) {
-      debugPrint('[Locus] WARNING: sync() called while paused. Call Locus.dataSync.resume() after app initialization.');
+      debugPrint(
+          '[Locus] WARNING: sync() called while paused. Call Locus.dataSync.resume() after app initialization.');
       return false;
     }
     final result = await LocusChannels.methods.invokeMethod('sync');
@@ -71,7 +72,8 @@ class LocusSync {
   /// Use this to check if sync can proceed without calling [resume] first.
   static Future<bool> isSyncReady() async {
     if (_isPaused) {
-      debugPrint('[Locus] WARNING: isSyncReady() called while paused. Call Locus.dataSync.resume() after app initialization.');
+      debugPrint(
+          '[Locus] WARNING: isSyncReady() called while paused. Call Locus.dataSync.resume() after app initialization.');
       return false;
     }
     try {

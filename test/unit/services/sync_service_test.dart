@@ -279,7 +279,9 @@ void main() {
         expect(result, equals({'Authorization': 'Bearer fresh-token'}));
       });
 
-      test('refreshDynamicHeaders calls the stored callback and returns headers', () async {
+      test(
+          'refreshDynamicHeaders calls the stored callback and returns headers',
+          () async {
         final expectedHeaders = {'Authorization': 'Bearer fresh-token'};
         LocusSync.setForegroundHeadersCallback(() async => expectedHeaders);
 
@@ -289,7 +291,6 @@ void main() {
       });
 
       test('refreshDynamicHeaders returns null when no callback set', () async {
-
         final result = await LocusSync.refreshDynamicHeaders();
 
         expect(result, isNull);
@@ -306,7 +307,8 @@ void main() {
       });
 
       test('setForegroundHeadersCallback(null) clears the callback', () async {
-        LocusSync.setForegroundHeadersCallback(() async => {'Authorization': 'Bearer token'});
+        LocusSync.setForegroundHeadersCallback(
+            () async => {'Authorization': 'Bearer token'});
         LocusSync.setForegroundHeadersCallback(null);
 
         final result = await LocusSync.refreshDynamicHeaders();
