@@ -3,7 +3,7 @@ import 'dart:ui' show PluginUtilities;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:locus/src/models.dart';
-import 'package:locus/src/core/locus_headless.dart' show LocusHeadless;
+import 'package:locus/src/core/locus_headless.dart' show headlessDispatcher;
 import 'package:locus/src/core/locus_interface.dart';
 import 'package:locus/src/core/locus_channels.dart';
 import 'package:locus/src/services/sync_service.dart';
@@ -339,12 +339,13 @@ class LocusSync {
   // ============================================================
 
   /// Entry point for headless sync body building.
-  /// NOTE: The actual headless handler is now unified in LocusHeadless.headlessDispatcher()
-  /// which handles both 'headlessEvent' and 'headlessBuildSyncBody' methods on the
-  /// same channel to avoid handler overwrite conflicts.
+  /// NOTE: The actual headless handler is now unified in [headlessDispatcher]
+  /// (top-level function in locus_headless.dart) which handles both
+  /// 'headlessEvent' and 'headlessBuildSyncBody' methods on the same channel
+  /// to avoid handler overwrite conflicts.
   @pragma('vm:entry-point')
   static void _headlessSyncBodyDispatcher() {
     // Delegate to the unified headless dispatcher
-    LocusHeadless.headlessDispatcher();
+    headlessDispatcher();
   }
 }
