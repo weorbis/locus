@@ -10,11 +10,13 @@ import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.embedding.engine.dart.DartExecutor
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.view.FlutterCallbackInformation
 import kotlinx.coroutines.*
+import java.util.Collections
+import java.util.LinkedList
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 class HeadlessService : JobIntentService() {
 
@@ -23,10 +25,18 @@ class HeadlessService : JobIntentService() {
         private const val CHANNEL = "locus/headless"
         private const val CACHE_KEY = "locus_headless_engine"
         private const val JOB_ID = 197812512
-        private const val ENGINE_IDLE_TIMEOUT_MS = 60_000L
-        private const val LATCH_TIMEOUT_SECONDS = 30L
         private const val PREFS_NAME = "dev.locus.preferences"
         private const val KEY_ENABLE_HEADLESS = "bg_enable_headless"
+
+        private var engine: FlutterEngine? = null
+        private var channel: MethodChannel? = null
+        private val pendingEvents: MutableList<Map<String, Any>> =
+            Collections.synchronizedList(LinkedList())
+
+        // Counts down when the Dart dispatcher signals readiness AND all
+        // queued events have been drained. onHandleWork awaits this instead
+        // of polling — deterministic, no Thread.sleep.
+        private var dispatcherReady = CountDownLatch(1)
 
         fun enqueueWork(context: Context, intent: Intent) {
             enqueueWork(context, HeadlessService::class.java, JOB_ID, intent)
@@ -36,95 +46,132 @@ class HeadlessService : JobIntentService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    override fun onHandleWork(intent: Intent) {
-        val dispatcherHandle = intent.getLongExtra("dispatcher", 0L)
-        val callbackHandle = intent.getLongExtra("callback", 0L)
-        
-        if (dispatcherHandle == 0L || callbackHandle == 0L) {
-            Log.d(TAG, "Invalid dispatcher ($dispatcherHandle) or callback ($callbackHandle) handle, skipping")
-            return
+    override fun onCreate() {
+        super.onCreate()
+        // Start the background isolate early (like firebase_messaging does).
+        // By the time onHandleWork is called, the isolate may already be ready.
+        if (engine == null) {
+            startBackgroundIsolate()
         }
+    }
 
-        // Check if headless mode is enabled
+    private fun startBackgroundIsolate() {
         val prefs = applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val headlessEnabled = prefs.getBoolean(KEY_ENABLE_HEADLESS, false)
         if (!headlessEnabled) {
-            Log.d(TAG, "Headless mode not enabled, skipping")
+            dispatcherReady.countDown()
             return
         }
 
-        val rawEvent = intent.getStringExtra("event")
-        
-        // Use CountDownLatch to wait for main thread operations
-        val latch = CountDownLatch(1)
-        
-        // Flutter Engine must be created on main thread
+        val dispatcherHandle = prefs.getLong("bg_headless_dispatcher", 0L)
+        if (dispatcherHandle == 0L) {
+            dispatcherReady.countDown()
+            return
+        }
+
+        val loader = FlutterInjector.instance().flutterLoader()
+
+        // Use ensureInitializationCompleteAsync (like firebase_messaging) to
+        // allow the main looper to process pending Flutter init between loader
+        // init and engine creation. The synchronous version blocks the main
+        // thread, preventing the engine from fully initializing.
         mainHandler.post {
-            try {
-                var engine = FlutterEngineCache.getInstance().get(CACHE_KEY)
-                if (engine == null) {
-                    val injector = FlutterInjector.instance()
-                    injector.flutterLoader().startInitialization(applicationContext)
-                    injector.flutterLoader().ensureInitializationComplete(applicationContext, null)
-                    val appBundlePath = injector.flutterLoader().findAppBundlePath()
+            loader.startInitialization(applicationContext)
+            loader.ensureInitializationCompleteAsync(
+                applicationContext,
+                null,
+                mainHandler
+            ) {
+                val appBundlePath = loader.findAppBundlePath()
+
+                try {
+                    val newEngine = FlutterEngine(applicationContext)
 
                     val info = FlutterCallbackInformation.lookupCallbackInformation(dispatcherHandle)
                     if (info == null) {
-                        Log.w(TAG, "Could not lookup callback information for dispatcher handle: $dispatcherHandle")
-                        latch.countDown()
-                        return@post
+                        Log.w(TAG, "Could not lookup dispatcher callback for handle: $dispatcherHandle")
+                        dispatcherReady.countDown()
+                        return@ensureInitializationCompleteAsync
                     }
 
-                    try {
-                        engine = FlutterEngine(applicationContext)
-                        val callback = DartExecutor.DartCallback(
-                            assets,
-                            appBundlePath,
-                            info
-                        )
-                        engine.dartExecutor.executeDartCallback(callback)
-                        FlutterEngineCache.getInstance().put(CACHE_KEY, engine)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to create or initialize FlutterEngine: ${e.message}")
-                        latch.countDown()
-                        return@post
-                    }
-                }
+                    // Set up MethodChannel BEFORE executeDartCallback (like FCM does).
+                    // The Dart dispatcher calls invokeMethod('dispatcher#initialized')
+                    // immediately on startup — the channel must be listening first.
+                    val newChannel = MethodChannel(newEngine.dartExecutor.binaryMessenger, CHANNEL)
 
-                val channel = MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL)
-                val args = mapOf(
-                    "callbackHandle" to callbackHandle,
-                    "event" to (rawEvent ?: "{\"type\":\"boot\"}")
-                )
-                channel.invokeMethod("headlessEvent", args)
+                    val callback = DartExecutor.DartCallback(
+                        applicationContext.assets,
+                        appBundlePath,
+                        info
+                    )
+                    newEngine.dartExecutor.executeDartCallback(callback)
 
-                // Schedule engine cleanup using bound scope
-                serviceScope.launch {
-                    delay(ENGINE_IDLE_TIMEOUT_MS)
-                    FlutterEngineCache.getInstance().get(CACHE_KEY)?.let { cached ->
-                        try {
-                            cached.destroy()
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Error destroying cached engine: ${e.message}")
+                    // Listen for the Dart dispatcher's readiness signal, then
+                    // drain any events that queued while the isolate started,
+                    // and finally count down the latch so onHandleWork unblocks.
+                    newChannel.setMethodCallHandler { call: MethodCall, result: MethodChannel.Result ->
+                        if (call.method == "dispatcher#initialized") {
+                            result.success(true)
+                            synchronized(pendingEvents) {
+                                for (event in pendingEvents) {
+                                    newChannel.invokeMethod("headlessEvent", event)
+                                }
+                                pendingEvents.clear()
+                            }
+                            dispatcherReady.countDown()
+                        } else {
+                            result.notImplemented()
                         }
-                        FlutterEngineCache.getInstance().remove(CACHE_KEY)
                     }
+
+                    engine = newEngine
+                    channel = newChannel
+                    FlutterEngineCache.getInstance().put(CACHE_KEY, newEngine)
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to start background isolate: ${e.message}", e)
+                    dispatcherReady.countDown()
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Unhandled error in headless service: ${e.message}")
-            } finally {
-                latch.countDown()
             }
         }
-        
-        // Wait for main thread work to complete before returning (with timeout)
-        try {
-            if (!latch.await(LATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                Log.w(TAG, "Timed out waiting for FlutterEngine initialization")
+    }
+
+    override fun onHandleWork(intent: Intent) {
+        val callbackHandle = intent.getLongExtra("callback", 0L)
+        if (callbackHandle == 0L) return
+
+        val prefs = applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val headlessEnabled = prefs.getBoolean(KEY_ENABLE_HEADLESS, false)
+        if (!headlessEnabled) return
+
+        val rawEvent = intent.getStringExtra("event")
+        val args = mapOf<String, Any>(
+            "callbackHandle" to callbackHandle,
+            "event" to (rawEvent ?: "{\"type\":\"boot\"}")
+        )
+
+        // If dispatcher is already ready, dispatch immediately on the main thread.
+        if (dispatcherReady.count == 0L && channel != null) {
+            val latch = CountDownLatch(1)
+            mainHandler.post {
+                try {
+                    channel?.invokeMethod("headlessEvent", args)
+                } finally {
+                    latch.countDown()
+                }
             }
-        } catch (e: InterruptedException) {
-            Thread.currentThread().interrupt()
-            Log.w(TAG, "Interrupted while waiting for FlutterEngine initialization")
+            latch.await()
+        } else {
+            // Queue the event — it will be dispatched when the Dart dispatcher
+            // signals readiness (dispatcher#initialized handler drains the queue
+            // and counts down the latch).
+            synchronized(pendingEvents) {
+                pendingEvents.add(args)
+            }
+            dispatcherReady.await()
+            if (channel == null) {
+                Log.w(TAG, "Dispatcher initialization failed, event dropped")
+            }
         }
     }
 
