@@ -17,8 +17,6 @@ import kotlinx.coroutines.*
 import java.util.Collections
 import java.util.LinkedList
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 class HeadlessService : JobIntentService() {
 
@@ -27,16 +25,18 @@ class HeadlessService : JobIntentService() {
         private const val CHANNEL = "locus/headless"
         private const val CACHE_KEY = "locus_headless_engine"
         private const val JOB_ID = 197812512
-        private const val ENGINE_IDLE_TIMEOUT_MS = 60_000L
-        private const val LATCH_TIMEOUT_SECONDS = 30L
         private const val PREFS_NAME = "dev.locus.preferences"
         private const val KEY_ENABLE_HEADLESS = "bg_enable_headless"
 
         private var engine: FlutterEngine? = null
         private var channel: MethodChannel? = null
-        private val isDispatcherReady = AtomicBoolean(false)
         private val pendingEvents: MutableList<Map<String, Any>> =
             Collections.synchronizedList(LinkedList())
+
+        // Counts down when the Dart dispatcher signals readiness AND all
+        // queued events have been drained. onHandleWork awaits this instead
+        // of polling — deterministic, no Thread.sleep.
+        private var dispatcherReady = CountDownLatch(1)
 
         fun enqueueWork(context: Context, intent: Intent) {
             enqueueWork(context, HeadlessService::class.java, JOB_ID, intent)
@@ -58,10 +58,16 @@ class HeadlessService : JobIntentService() {
     private fun startBackgroundIsolate() {
         val prefs = applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val headlessEnabled = prefs.getBoolean(KEY_ENABLE_HEADLESS, false)
-        if (!headlessEnabled) return
+        if (!headlessEnabled) {
+            dispatcherReady.countDown()
+            return
+        }
 
         val dispatcherHandle = prefs.getLong("bg_headless_dispatcher", 0L)
-        if (dispatcherHandle == 0L) return
+        if (dispatcherHandle == 0L) {
+            dispatcherReady.countDown()
+            return
+        }
 
         val loader = FlutterInjector.instance().flutterLoader()
 
@@ -84,6 +90,7 @@ class HeadlessService : JobIntentService() {
                     val info = FlutterCallbackInformation.lookupCallbackInformation(dispatcherHandle)
                     if (info == null) {
                         Log.w(TAG, "Could not lookup dispatcher callback for handle: $dispatcherHandle")
+                        dispatcherReady.countDown()
                         return@ensureInitializationCompleteAsync
                     }
 
@@ -100,10 +107,10 @@ class HeadlessService : JobIntentService() {
                     newEngine.dartExecutor.executeDartCallback(callback)
 
                     // Listen for the Dart dispatcher's readiness signal, then
-                    // process any events that queued while the isolate started.
+                    // drain any events that queued while the isolate started,
+                    // and finally count down the latch so onHandleWork unblocks.
                     newChannel.setMethodCallHandler { call: MethodCall, result: MethodChannel.Result ->
                         if (call.method == "dispatcher#initialized") {
-                            isDispatcherReady.set(true)
                             result.success(true)
                             synchronized(pendingEvents) {
                                 for (event in pendingEvents) {
@@ -111,6 +118,7 @@ class HeadlessService : JobIntentService() {
                                 }
                                 pendingEvents.clear()
                             }
+                            dispatcherReady.countDown()
                         } else {
                             result.notImplemented()
                         }
@@ -122,6 +130,7 @@ class HeadlessService : JobIntentService() {
 
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to start background isolate: ${e.message}", e)
+                    dispatcherReady.countDown()
                 }
             }
         }
@@ -141,10 +150,8 @@ class HeadlessService : JobIntentService() {
             "event" to (rawEvent ?: "{\"type\":\"boot\"}")
         )
 
-        // If dispatcher is ready, dispatch immediately.
-        // Otherwise, queue the event — it will be sent when the dispatcher
-        // signals readiness (same pattern as firebase_messaging).
-        if (isDispatcherReady.get() && channel != null) {
+        // If dispatcher is already ready, dispatch immediately on the main thread.
+        if (dispatcherReady.count == 0L && channel != null) {
             val latch = CountDownLatch(1)
             mainHandler.post {
                 try {
@@ -153,27 +160,17 @@ class HeadlessService : JobIntentService() {
                     latch.countDown()
                 }
             }
-            try {
-                latch.await(LATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-            }
+            latch.await()
         } else {
+            // Queue the event — it will be dispatched when the Dart dispatcher
+            // signals readiness (dispatcher#initialized handler drains the queue
+            // and counts down the latch).
             synchronized(pendingEvents) {
                 pendingEvents.add(args)
             }
-            // Wait for the dispatcher to process the queued event.
-            val startTime = System.currentTimeMillis()
-            while (!isDispatcherReady.get() &&
-                System.currentTimeMillis() - startTime < LATCH_TIMEOUT_SECONDS * 1000
-            ) {
-                Thread.sleep(100)
-            }
-            if (isDispatcherReady.get()) {
-                // Give a moment for queued events to be processed on main thread.
-                Thread.sleep(500)
-            } else {
-                Log.w(TAG, "Timed out waiting for Dart dispatcher")
+            dispatcherReady.await()
+            if (channel == null) {
+                Log.w(TAG, "Dispatcher initialization failed, event dropped")
             }
         }
     }
