@@ -34,7 +34,8 @@ void headlessDispatcher() {
   // Signal native side that the MethodChannel handler is ready to receive
   // events. Without this, the native HeadlessService may invoke
   // 'headlessEvent' before this handler is registered, losing the event.
-  unawaited(LocusChannels.headless.invokeMethod<void>('dispatcher#initialized'));
+  unawaited(
+      LocusChannels.headless.invokeMethod<void>('dispatcher#initialized'));
 }
 
 Future<void> _handleHeadlessEvent(dynamic call) async {
@@ -44,8 +45,8 @@ Future<void> _handleHeadlessEvent(dynamic call) async {
     return;
   }
   final handle = CallbackHandle.fromRawHandle(rawHandle);
-  final callback = PluginUtilities.getCallbackFromHandle(handle)
-      as Future<void> Function(HeadlessEvent)?;
+  final callback = PluginUtilities.getCallbackFromHandle(handle) as Future<void>
+      Function(HeadlessEvent)?;
   if (callback == null) {
     return;
   }
@@ -85,8 +86,7 @@ Future<dynamic> _handleHeadlessBuildSyncBody(dynamic call) async {
 
   try {
     final context = SyncBodyContext.fromMap(args);
-    final typedCallback =
-        callback as Future<JsonMap> Function(SyncBodyContext);
+    final typedCallback = callback as Future<JsonMap> Function(SyncBodyContext);
     final result = await typedCallback(context);
     return result;
   } catch (e) {
