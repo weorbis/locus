@@ -54,6 +54,11 @@ abstract class LocusInterface {
   Future<GeolocationState> stop();
   Future<GeolocationState> getState();
 
+  /// Updates the foreground notification content while tracking is active.
+  ///
+  /// Returns `true` if the notification was updated, otherwise `false`.
+  Future<bool> updateNotification({String? title, String? text});
+
   // ============================================================
   // Location Methods
   // ============================================================

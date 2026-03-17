@@ -258,6 +258,12 @@ class MockLocus implements LocusInterface {
   }
 
   @override
+  Future<bool> updateNotification({String? title, String? text}) async {
+    _methodCalls.add('updateNotification');
+    return _state.enabled;
+  }
+
+  @override
   Future<Location> getCurrentPosition({
     int? samples,
     int? timeout,

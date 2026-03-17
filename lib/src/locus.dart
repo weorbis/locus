@@ -152,6 +152,13 @@ class Locus {
   /// Gets the current state of the service.
   static Future<GeolocationState> getState() => _instance.getState();
 
+  /// Updates the foreground notification content while tracking is active.
+  ///
+  /// Returns `true` if the notification was updated, otherwise `false`.
+  static Future<bool> updateNotification({String? title, String? text}) {
+    return _instance.updateNotification(title: title, text: text);
+  }
+
   // ============================================================
   // Configuration Methods
   // ============================================================

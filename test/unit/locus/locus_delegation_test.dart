@@ -30,6 +30,7 @@ void main() {
     await Locus.ready(config);
     await Locus.start();
     await Locus.getState();
+    await Locus.updateNotification(title: 'Trip', text: '12.3 km');
     await Locus.location.getCurrentPosition();
     await Locus.location.getLocations();
     await Locus.location.changePace(true);
@@ -139,6 +140,7 @@ void main() {
         'ready',
         'start',
         'getState',
+        'updateNotification',
         'getCurrentPosition',
         'getLocations',
         'changePace:true',

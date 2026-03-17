@@ -63,6 +63,19 @@ void main() {
   });
 
   group('Location Operations', () {
+    test('updateNotification forwards the payload', () async {
+      final updated = await Locus.updateNotification(
+        title: 'Trip',
+        text: '12.3 km',
+      );
+
+      expect(updated, isTrue);
+      final call = methodCalls.firstWhere(
+          (methodCall) => methodCall.method == 'updateNotification');
+      expect(call.arguments['title'], 'Trip');
+      expect(call.arguments['text'], '12.3 km');
+    });
+
     test('getCurrentPosition returns location', () async {
       final location = await Locus.location.getCurrentPosition();
 
@@ -440,6 +453,9 @@ dynamic _handleMethodCall(MethodCall call) {
     case 'startSignificantChangeMonitoring':
     case 'stopSignificantChangeMonitoring':
       return null;
+
+    case 'updateNotification':
+      return true;
 
     case 'start':
     case 'stop':
