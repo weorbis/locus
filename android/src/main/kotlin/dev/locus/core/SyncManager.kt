@@ -914,7 +914,46 @@ class SyncManager(
             record["event"]?.let { put("event", it) }
             record["is_moving"]?.let { put("is_moving", it) }
             record["odometer"]?.let { put("odometer", it) }
+            when (val rawExtras = record["extras"]) {
+                is Map<*, *> -> put("extras", rawExtras)
+                else -> (record["extras_json"] as? String)?.takeIf { it.isNotBlank() }?.let { extrasJson ->
+                    try {
+                        put("extras", JSONObject(extrasJson).toMap())
+                    } catch (_: JSONException) {
+                    }
+                }
+            }
         }
+    }
+
+    private fun JSONObject.toMap(): Map<String, Any> {
+        val map = mutableMapOf<String, Any>()
+        val keys = keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            when (val value = get(key)) {
+                JSONObject.NULL -> {
+                }
+                is JSONObject -> map[key] = value.toMap()
+                is JSONArray -> map[key] = value.toList()
+                else -> map[key] = value
+            }
+        }
+        return map
+    }
+
+    private fun JSONArray.toList(): List<Any> {
+        val list = mutableListOf<Any>()
+        for (index in 0 until length()) {
+            when (val value = get(index)) {
+                JSONObject.NULL -> {
+                }
+                is JSONObject -> list.add(value.toMap())
+                is JSONArray -> list.add(value.toList())
+                else -> list.add(value)
+            }
+        }
+        return list
     }
 
     companion object {

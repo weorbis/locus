@@ -12,6 +12,10 @@ class ConfigManager(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences(LocusPlugin.PREFS_NAME, Context.MODE_PRIVATE)
 
+    init {
+        restorePersistedConfig()
+    }
+
     // Notification settings
     var foregroundService: Boolean = true
     var notificationTitle: String = "Locus"
@@ -198,6 +202,12 @@ class ConfigManager(context: Context) {
         } catch (e: JSONException) {
             emptyMap()
         }
+    }
+
+    private fun restorePersistedConfig() {
+        val persistedConfig = buildConfigSnapshot()
+        if (persistedConfig.isEmpty()) return
+        applyConfig(persistedConfig)
     }
 
     private fun Map<*, *>.toStringKeyMap(): MutableMap<String, Any> =
