@@ -152,9 +152,19 @@ class Locus {
   /// Gets the current state of the service.
   static Future<GeolocationState> getState() => _instance.getState();
 
-  /// Updates the foreground notification content while tracking is active.
+  /// Updates the notification content while tracking is active.
   ///
   /// Returns `true` if the notification was updated, otherwise `false`.
+  ///
+  /// ## Platform differences
+  ///
+  /// - **Android**: Updates the persistent foreground service notification
+  ///   in-place. No additional permissions are needed beyond the notification
+  ///   permission already requested during [PermissionService.requestAll].
+  /// - **iOS**: Posts (or replaces) a local notification via
+  ///   `UNUserNotificationCenter`. Notification authorization must be granted
+  ///   by the host app **before** calling this method; if permission has not
+  ///   been requested or was denied, the call returns `false` silently.
   static Future<bool> updateNotification({String? title, String? text}) {
     return _instance.updateNotification(title: title, text: text);
   }

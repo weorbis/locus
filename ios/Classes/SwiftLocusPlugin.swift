@@ -464,10 +464,10 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       case .authorized, .provisional, .ephemeral:
         completion(true)
       case .notDetermined:
-        center.requestAuthorization(options: [.alert]) { granted, _ in
-          completion(granted)
-        }
+        NSLog("[locus] updateNotification: notification permission not yet requested — the host app must call UNUserNotificationCenter.requestAuthorization() before using this API")
+        completion(false)
       case .denied:
+        NSLog("[locus] updateNotification: notification permission denied by user")
         completion(false)
       @unknown default:
         completion(false)

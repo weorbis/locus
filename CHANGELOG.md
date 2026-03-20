@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.0] - 2026-03-20
+
+### Added
+
+- **Dart/Android/iOS: Dynamic notification updates** — New `Locus.updateNotification(title:, text:)` API to update notification content while tracking is active, without restarting the service. Useful for displaying live trip stats (distance, duration, etc.) in the notification.
+
+### Platform Notes
+
+- **Android**: Updates the persistent foreground service notification in-place. No additional permissions needed beyond what `PermissionService.requestAll()` already requests.
+- **iOS**: Posts or replaces a local notification via `UNUserNotificationCenter`. The host app must obtain notification authorization **before** calling this method; if permission has not been requested or was denied, the call returns `false` silently. Locus will not trigger a permission dialog.
+
 ## [2.1.4] - 2026-03-12
 
 ### Breaking
