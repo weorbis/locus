@@ -15,6 +15,8 @@ class SecureStorage {
     static let headlessSyncBodyCallbackKey = "bg_headless_sync_body_callback"
     static let validationDispatcherKey = "bg_validation_dispatcher"
     static let validationCallbackKey = "bg_validation_callback"
+    static let headersDispatcherKey = "bg_headers_dispatcher"
+    static let headersCallbackKey = "bg_headers_callback"
     
     static let shared = SecureStorage()
     
@@ -126,6 +128,9 @@ class SecureStorage {
             SecureStorage.headlessCallbackKey,
             SecureStorage.headlessSyncBodyDispatcherKey,
             SecureStorage.headlessSyncBodyCallbackKey
+            ,
+            SecureStorage.headersDispatcherKey,
+            SecureStorage.headersCallbackKey
         ]
         
         for key in keysToMigrate {

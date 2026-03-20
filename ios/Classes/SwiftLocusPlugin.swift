@@ -34,13 +34,19 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
   let geofenceManager: GeofenceManager
   let trackingStats = TrackingStats()
   let headlessValidationDispatcher: HeadlessValidationDispatcher
+  let headlessHeadersDispatcher: HeadlessHeadersDispatcher
 
   // State
   let locationClient: LocationClient
   var eventSink: FlutterEventSink?
   var pendingLocationResult: FlutterResult?
   var isEnabled = false
-  var lastLocation: CLLocation?
+  private let lastLocationQueue = DispatchQueue(label: "dev.locus.lastLocation")
+  private var _lastLocation: CLLocation?
+  var lastLocation: CLLocation? {
+    get { lastLocationQueue.sync { _lastLocation } }
+    set { lastLocationQueue.sync { _lastLocation = newValue } }
+  }
   let networkQueue = DispatchQueue(label: "dev.locus.network")
   var networkMonitor: NWPathMonitor?
 
@@ -87,6 +93,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
     geofenceManager = GeofenceManager(config: configManager, storage: storage)
     locationClient = LocationClient(config: configManager)
     headlessValidationDispatcher = HeadlessValidationDispatcher(config: configManager)
+    headlessHeadersDispatcher = HeadlessHeadersDispatcher(config: configManager)
     super.init()
 
     // Migrate existing UserDefaults data to Keychain for security
@@ -348,12 +355,23 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       } else {
         result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected dispatcher and callback handles", details: nil))
       }
+    case "registerHeadlessHeadersCallback":
+      if let args = call.arguments as? [String: Any],
+         let dispatcher = args["dispatcher"] as? Int64,
+         let callback = args["callback"] as? Int64 {
+        HeadlessHeadersDispatcher.registerCallback(dispatcher: dispatcher, callback: callback)
+        result(true)
+      } else {
+        result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected dispatcher and callback handles", details: nil))
+      }
     case "setSyncBodyBuilderEnabled":
       // Enable/disable the Dart-side sync body builder
       if let enabled = call.arguments as? Bool {
         syncManager.syncBodyBuilderEnabled = enabled
       }
       result(true)
+    case "getLocationSyncBacklog":
+      result(syncManager.getLocationSyncBacklog())
     case "startBackgroundTask":
       result(startBackgroundTask())
     case "stopBackgroundTask":

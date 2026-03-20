@@ -28,8 +28,8 @@ class GeofenceManager: NSObject, CLLocationManagerDelegate {
     /// Cleans up resources by stopping all region monitoring and clearing the delegate.
     /// Call this method when the manager is no longer needed.
     func cleanup() {
-        // Stop monitoring all regions
-        for region in locationManager.monitoredRegions {
+        // Stop monitoring all regions (copy to Array to avoid mutation during iteration)
+        for region in Array(locationManager.monitoredRegions) {
             locationManager.stopMonitoring(for: region)
         }
         // Clear delegate to prevent callbacks after cleanup
@@ -62,7 +62,7 @@ class GeofenceManager: NSObject, CLLocationManagerDelegate {
     }
     
     func removeGeofence(_ identifier: String) {
-        for region in locationManager.monitoredRegions {
+        for region in Array(locationManager.monitoredRegions) {
             if region.identifier == identifier {
                 locationManager.stopMonitoring(for: region)
             }
@@ -78,10 +78,10 @@ class GeofenceManager: NSObject, CLLocationManagerDelegate {
         let stored = storage.readGeofences()
         let removedIds = stored.compactMap { $0["identifier"] as? String }
         
-        for region in locationManager.monitoredRegions {
+        for region in Array(locationManager.monitoredRegions) {
             locationManager.stopMonitoring(for: region)
         }
-        
+
         storage.writeGeofences([])
         if !removedIds.isEmpty {
             delegate?.onGeofencesChange(added: [], removed: removedIds)

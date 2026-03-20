@@ -150,7 +150,7 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
         ...extras,
       };
     });
-    Locus.dataSync.setHeadersCallback(() async {
+    await Locus.dataSync.setHeadersCallback(() async {
       return {
         'X-Client': 'locus_example',
         'X-Shift-Id': _syncContext['shift_id']?.toString() ?? 'unknown',

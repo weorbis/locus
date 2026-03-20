@@ -26,8 +26,11 @@ class MockSyncService implements SyncService {
   final List<QueueItem> _queue = [];
   SyncPolicy? _policy;
   Future<Map<String, String>> Function()? _headersCallback;
+  HeadlessPreSyncValidator? _headlessPreSyncValidator;
+  HeadlessHeadersCallback? _headlessHeadersCallback;
   bool _isPaused = false;
   int _syncCount = 0;
+  LocationSyncBacklog backlog = const LocationSyncBacklog();
 
   final _eventsController = StreamController<HttpEvent>.broadcast();
   final _connectivityController =
@@ -116,7 +119,9 @@ class MockSyncService implements SyncService {
   }
 
   @override
-  void setHeadersCallback(Future<Map<String, String>> Function()? callback) {
+  Future<void> setHeadersCallback(
+    Future<Map<String, String>> Function()? callback,
+  ) async {
     _headersCallback = callback;
   }
 
@@ -126,12 +131,29 @@ class MockSyncService implements SyncService {
   }
 
   @override
-  Future<void> refreshHeaders() async {
+  Future<void> refreshHeaders({bool force = false}) async {
     // Trigger headers callback if set
     if (_headersCallback != null) {
       await _headersCallback!();
     }
   }
+
+  @override
+  Future<void> registerHeadlessPreSyncValidator(
+    HeadlessPreSyncValidator validator,
+  ) async {
+    _headlessPreSyncValidator = validator;
+  }
+
+  @override
+  Future<void> registerHeadlessHeadersCallback(
+    HeadlessHeadersCallback callback,
+  ) async {
+    _headlessHeadersCallback = callback;
+  }
+
+  @override
+  Future<LocationSyncBacklog> getBacklog() async => backlog;
 
   // ============================================================
   // Queue Operations
@@ -221,6 +243,12 @@ class MockSyncService implements SyncService {
 
   /// Current queue length.
   int get queueLength => _queue.length;
+
+  HeadlessPreSyncValidator? get headlessPreSyncValidator =>
+      _headlessPreSyncValidator;
+
+  HeadlessHeadersCallback? get headlessHeadersCallback =>
+      _headlessHeadersCallback;
 
   @override
   StreamSubscription<HttpEvent> onHttp(

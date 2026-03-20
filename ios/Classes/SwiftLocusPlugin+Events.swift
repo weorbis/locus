@@ -26,7 +26,8 @@ extension SwiftLocusPlugin {
       "activity": activity,
       "event": eventName,
       "is_moving": motionDetector.isMoving,
-      "odometer": storage.readOdometer()
+      "odometer": storage.readOdometer(),
+      "extras": configManager.extras
     ]
   }
 
