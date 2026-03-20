@@ -89,6 +89,27 @@ extension SwiftLocusPlugin {
     }
   }
 
+  public func onHeadersRefresh(completion: @escaping ([String: String]?) -> Void) {
+    if let channel = methodChannel {
+      DispatchQueue.main.async {
+        channel.invokeMethod("refreshDynamicHeaders", arguments: nil) { result in
+          let headers = (result as? [String: Any])?.reduce(into: [String: String]()) { partial, entry in
+            partial[entry.key] = "\(entry.value)"
+          }
+          completion(headers)
+        }
+      }
+      return
+    }
+
+    guard headlessHeadersDispatcher.isAvailable else {
+      completion(nil)
+      return
+    }
+
+    headlessHeadersDispatcher.refreshHeaders(completion: completion)
+  }
+
   // MARK: - SchedulerDelegate
   public func onScheduleCheck(shouldBeEnabled: Bool) {
     if shouldBeEnabled {

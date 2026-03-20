@@ -65,7 +65,9 @@ class GeofenceEventProcessor(
                 "timestamp" to Instant.now().toString(),
                 "coords" to loc.toMap(),
                 "event" to "geofence",
-                "is_moving" to motionManager.isMoving
+                "is_moving" to motionManager.isMoving,
+                "odometer" to stateManager.odometerValue,
+                "extras" to config.extras.toMap()
             )
         }
 

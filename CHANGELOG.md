@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.4] - 2026-03-12
+
+### Breaking
+
+- **Dart: Dynamic header APIs are now explicitly async** — `setHeadersCallback()` now returns `Future<void>` and must be awaited before starting tracking or sync flows that depend on fresh headers. `refreshHeaders()` now accepts `force: true` to bypass throttling for explicit recovery paths.
+
+### Added
+
+- **Dart: Headless sync registration APIs** — Added `registerHeadlessPreSyncValidator()` and `registerHeadlessHeadersCallback()` so terminated/background RouteHistory can validate task/auth context and recover headers without opening the app.
+- **Dart: RouteHistory backlog inspection** — Added `getBacklog()` plus the `LocationSyncBacklog` and `LocationSyncBacklogGroup` models, including pending point count, pending batch count, paused state, quarantine count, last success/failure, and grouped summaries by task/session.
+- **Android/iOS: Immutable per-point RouteHistory context** — Persisted location rows now retain route context (`ownerId`, `driverId`, `taskId`, `trackingSessionId`, `startedAt`) so queued RouteHistory batches are drained under the original task/session instead of relying on the app's current global extras at send time.
+
+### Fixed
+
+- **Dart: Explicit header refresh is now deterministic** — Explicit `refreshHeaders()` requests bypass throttling so auth recovery and tracking startup can force an immediate native header refresh.
+- **Dart: Malformed HTTP sync events no longer break listeners** — `HttpEvent` parsing is now guarded so invalid payloads are ignored instead of terminating the stream.
+- **Android/iOS: Custom sync body builder failures preserve queued data** — When a registered sync body builder throws or returns `null`, sync now treats it as a retryable failure and retains queued locations instead of falling back to a partial native body.
+- **Android/iOS: RouteHistory batches are serialized and task-safe** — Native location sync now drains one route batch at a time, groups batches by immutable route context, and quarantines incomplete legacy rows instead of guessing task ownership.
+- **Android/iOS: Native 401 recovery now retries once before pausing sync** — RouteHistory sync attempts one headless headers refresh on `401 Unauthorized`, updates dynamic headers, and retries the same batch once before pausing sync.
+- **Android/iOS: Validator and sync diagnostics improved** — Added clearer diagnostics for skipped sync attempts, builder failures, headless header recovery failures, and queued RouteHistory backlog state to make production delivery issues easier to investigate.
+
 ## [2.1.3] - 2026-03-05
 
 ### Fixed

@@ -63,14 +63,33 @@ class SyncServiceImpl implements SyncService {
       _instance.registerHeadlessSyncBodyBuilder(builder);
 
   @override
-  void setHeadersCallback(Future<Map<String, String>> Function()? callback) =>
+  Future<void> setHeadersCallback(
+    Future<Map<String, String>> Function()? callback,
+  ) =>
       _instance.setHeadersCallback(callback);
 
   @override
   void clearHeadersCallback() => _instance.clearHeadersCallback();
 
   @override
-  Future<void> refreshHeaders() => _instance.refreshHeaders();
+  Future<void> refreshHeaders({bool force = false}) =>
+      _instance.refreshHeaders(force: force);
+
+  @override
+  Future<void> registerHeadlessPreSyncValidator(
+    HeadlessPreSyncValidator validator,
+  ) =>
+      _instance.registerHeadlessPreSyncValidator(validator);
+
+  @override
+  Future<void> registerHeadlessHeadersCallback(
+    HeadlessHeadersCallback callback,
+  ) =>
+      _instance.registerHeadlessHeadersCallback(callback);
+
+  @override
+  Future<LocationSyncBacklog> getBacklog() =>
+      _instance.getLocationSyncBacklog();
 
   // ============================================================
   // Queue Operations

@@ -117,8 +117,6 @@ class LocusStreams {
   }
 
   static Future<void> _onListen() async {
-    _listenerCount += 1;
-    // Start asynchronously to avoid blocking, but use proper async handling
     await _ensureNativeStreamStarted().catchError((error) {
       if (kDebugMode) {
         debugPrint('[Locus] Error starting native stream: $error');
@@ -127,9 +125,6 @@ class LocusStreams {
   }
 
   static Future<void> _onCancel() async {
-    _listenerCount -= 1;
-    if (_listenerCount < 0) _listenerCount = 0;
-    // Stop asynchronously with proper error handling
     await _maybeStopNativeStream().catchError((error) {
       if (kDebugMode) {
         debugPrint('[Locus] Error stopping native stream: $error');
@@ -164,6 +159,9 @@ class LocusStreams {
     final releaseLock = await _acquireLock();
 
     try {
+      // Increment listener count inside the lock to prevent races
+      _listenerCount += 1;
+
       // Double-check inside lock: already running or no listeners
       if (_nativeSubscription != null || _isStarting || _listenerCount <= 0) {
         return;
@@ -193,6 +191,9 @@ class LocusStreams {
           },
         );
       } catch (e) {
+        // Cancel any partially-created subscription to prevent leaks
+        await _nativeSubscription?.cancel();
+        _nativeSubscription = null;
         if (kDebugMode) {
           debugPrint('[Locus] Failed to start native stream: $e');
         }
@@ -386,6 +387,10 @@ class LocusStreams {
     final releaseLock = await _acquireLock();
 
     try {
+      // Decrement listener count inside the lock to prevent races
+      _listenerCount -= 1;
+      if (_listenerCount < 0) _listenerCount = 0;
+
       // Double-check inside lock: should we stop?
       if (_listenerCount > 0 || _nativeSubscription == null || _isStopping) {
         return;
@@ -408,16 +413,15 @@ class LocusStreams {
   /// Starts the native event stream (legacy - now handled automatically).
   @Deprecated('Use events getter instead, streams are managed automatically')
   static Future<void> startNativeStream() async {
-    _listenerCount += 1;
+    // _listenerCount is incremented inside _ensureNativeStreamStarted under lock
     await Future.microtask(() => _ensureNativeStreamStarted());
   }
 
   /// Stops the native event stream.
   static Future<void> stopNativeStream({bool force = false}) async {
     // Non-forced stop should use the standard mechanism
+    // _listenerCount is decremented inside _maybeStopNativeStream under lock
     if (!force) {
-      _listenerCount -= 1;
-      if (_listenerCount < 0) _listenerCount = 0;
       await _maybeStopNativeStream();
       return;
     }

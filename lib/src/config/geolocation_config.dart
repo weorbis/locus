@@ -235,7 +235,7 @@ class Config {
   }
 
   /// The current SDK version.
-  static const String version = '2.1.3';
+  static const String version = '2.1.4';
 
   // Location settings
   /// Desired location accuracy level.

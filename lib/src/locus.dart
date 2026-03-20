@@ -283,6 +283,20 @@ class Locus {
     return _instance.registerHeadlessSyncBodyBuilder(builder);
   }
 
+  /// Registers a headless pre-sync validator used in terminated/background sync.
+  static Future<void> registerHeadlessPreSyncValidator(
+    HeadlessPreSyncValidator validator,
+  ) {
+    return _instance.registerHeadlessPreSyncValidator(validator);
+  }
+
+  /// Registers a headless headers callback used for auth recovery in background sync.
+  static Future<void> registerHeadlessHeadersCallback(
+    HeadlessHeadersCallback callback,
+  ) {
+    return _instance.registerHeadlessHeadersCallback(callback);
+  }
+
   // ============================================================
   // Headless/Background Task Methods
   // ============================================================
@@ -325,10 +339,10 @@ class Locus {
   // ============================================================
 
   /// Sets a callback to provide dynamic HTTP headers.
-  static void setHeadersCallback(
+  static Future<void> setHeadersCallback(
     Future<Map<String, String>> Function()? callback,
   ) {
-    _instance.setHeadersCallback(callback);
+    return _instance.setHeadersCallback(callback);
   }
 
   /// Clears the dynamic headers callback.
@@ -336,9 +350,9 @@ class Locus {
     _instance.clearHeadersCallback();
   }
 
-  /// Manually triggers a header update.
-  static Future<void> refreshHeaders() async {
-    await _instance.refreshHeaders();
+  /// Manually triggers a header update immediately.
+  static Future<void> refreshHeaders({bool force = false}) {
+    return _instance.refreshHeaders(force: force);
   }
 
   // ============================================================

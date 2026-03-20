@@ -121,6 +121,15 @@ class StateManager(context: Context) {
             record["event"]?.let { put("event", it) }
             record["is_moving"]?.let { put("is_moving", it) }
             record["odometer"]?.let { put("odometer", it) }
+            when (val rawExtras = record["extras"]) {
+                is Map<*, *> -> put("extras", rawExtras)
+                else -> (record["extras_json"] as? String)?.takeIf { it.isNotBlank() }?.let { extrasJson ->
+                    try {
+                        put("extras", JSONObject(extrasJson).toMap())
+                    } catch (_: JSONException) {
+                    }
+                }
+            }
         }
     }
 

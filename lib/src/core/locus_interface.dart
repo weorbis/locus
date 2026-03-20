@@ -38,6 +38,12 @@ class SyncBodyContext {
   final JsonMap extras;
 }
 
+typedef HeadlessPreSyncValidator = Future<bool> Function(
+  SyncBodyContext context,
+);
+
+typedef HeadlessHeadersCallback = Future<Map<String, String>> Function();
+
 /// Contract for Locus implementations (method-channel or mock).
 abstract class LocusInterface {
   // ============================================================
@@ -274,9 +280,18 @@ abstract class LocusInterface {
   // ============================================================
   // Dynamic Headers
   // ============================================================
-  void setHeadersCallback(Future<Map<String, String>> Function()? callback);
+  Future<void> setHeadersCallback(
+    Future<Map<String, String>> Function()? callback,
+  );
   void clearHeadersCallback();
-  Future<void> refreshHeaders();
+  Future<void> refreshHeaders({bool force = false});
+  Future<void> registerHeadlessPreSyncValidator(
+    HeadlessPreSyncValidator validator,
+  );
+  Future<void> registerHeadlessHeadersCallback(
+    HeadlessHeadersCallback callback,
+  );
+  Future<LocationSyncBacklog> getLocationSyncBacklog();
 
   // ============================================================
   // Typed Event Subscriptions

@@ -1,4 +1,5 @@
-import 'dart:ui' show PluginUtilities;
+import 'dart:convert';
+import 'dart:ui' show CallbackHandle, PluginUtilities;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -39,6 +40,9 @@ class LocusSync {
   /// Pre-sync validator callback.
   static PreSyncValidator? _preSyncValidator;
 
+  /// Foreground headers callback for native 401 recovery.
+  static Future<Map<String, String>> Function()? _foregroundHeadersCallback;
+
   // ============================================================
   // Standard Sync Methods
   // ============================================================
@@ -54,7 +58,11 @@ class LocusSync {
 
   /// Triggers an immediate sync of pending locations.
   static Future<bool> sync() async {
-    if (_isPaused) return false;
+    if (_isPaused) {
+      debugPrint(
+          '[Locus] WARNING: sync() called while paused. Call Locus.dataSync.resume() after app initialization.');
+      return false;
+    }
     final result = await LocusChannels.methods.invokeMethod('sync');
     return result == true;
   }
@@ -63,7 +71,11 @@ class LocusSync {
   ///
   /// Use this to check if sync can proceed without calling [resume] first.
   static Future<bool> isSyncReady() async {
-    if (_isPaused) return false;
+    if (_isPaused) {
+      debugPrint(
+          '[Locus] WARNING: isSyncReady() called while paused. Call Locus.dataSync.resume() after app initialization.');
+      return false;
+    }
     try {
       final result = await LocusChannels.methods.invokeMethod('getSyncState');
       if (result is Map) {
@@ -125,6 +137,14 @@ class LocusSync {
     _preSyncValidator = null;
   }
 
+  /// Sets the foreground headers callback for native 401 recovery.
+  static void setForegroundHeadersCallback(
+    Future<Map<String, String>> Function()? callback,
+  ) {
+    _setupSyncBodyChannel();
+    _foregroundHeadersCallback = callback;
+  }
+
   /// Validates sync with the registered validator.
   ///
   /// Called by native side before each sync attempt via method channel.
@@ -139,6 +159,19 @@ class LocusSync {
     } catch (e) {
       debugPrint('[Locus] Pre-sync validator threw an error: $e');
       return false; // Skip sync on error
+    }
+  }
+
+  /// Refreshes dynamic headers via the foreground callback.
+  ///
+  /// Called by native side on 401 when method channel is available.
+  static Future<Map<String, String>?> refreshDynamicHeaders() async {
+    if (_foregroundHeadersCallback == null) return null;
+    try {
+      return await _foregroundHeadersCallback!();
+    } catch (e) {
+      debugPrint('[Locus] Error refreshing dynamic headers: $e');
+      return null;
     }
   }
 
@@ -276,6 +309,77 @@ class LocusSync {
     return _hasHeadlessBuilder;
   }
 
+  /// Registers a headless-compatible pre-sync validator.
+  static Future<void> registerHeadlessPreSyncValidator(
+    HeadlessPreSyncValidator validator,
+  ) async {
+    _setupHeadlessValidationChannel();
+
+    final dispatcherHandle = PluginUtilities.getCallbackHandle(
+      _headlessValidationDispatcher,
+    );
+    final callbackHandle = PluginUtilities.getCallbackHandle(validator);
+
+    if (dispatcherHandle == null || callbackHandle == null) {
+      throw StateError(
+        'Failed to register headless pre-sync validator. '
+        'Ensure the callback is top-level or static and annotated with @pragma("vm:entry-point").',
+      );
+    }
+
+    await LocusChannels.methods.invokeMethod(
+      'registerHeadlessValidationCallback',
+      {
+        'dispatcher': dispatcherHandle.toRawHandle(),
+        'callback': callbackHandle.toRawHandle(),
+      },
+    );
+  }
+
+  /// Registers a headless-compatible dynamic headers callback.
+  static Future<void> registerHeadlessHeadersCallback(
+    HeadlessHeadersCallback callback,
+  ) async {
+    _setupHeadlessHeadersChannel();
+
+    final dispatcherHandle = PluginUtilities.getCallbackHandle(
+      _headlessHeadersDispatcher,
+    );
+    final callbackHandle = PluginUtilities.getCallbackHandle(callback);
+
+    if (dispatcherHandle == null || callbackHandle == null) {
+      throw StateError(
+        'Failed to register headless headers callback. '
+        'Ensure the callback is top-level or static and annotated with @pragma("vm:entry-point").',
+      );
+    }
+
+    await LocusChannels.methods.invokeMethod(
+      'registerHeadlessHeadersCallback',
+      {
+        'dispatcher': dispatcherHandle.toRawHandle(),
+        'callback': callbackHandle.toRawHandle(),
+      },
+    );
+  }
+
+  /// Returns the native RouteHistory backlog state.
+  static Future<LocationSyncBacklog> getBacklog() async {
+    final result = await LocusChannels.methods.invokeMethod(
+      'getLocationSyncBacklog',
+    );
+    if (result is Map) {
+      return LocationSyncBacklog.fromMap(Map<String, dynamic>.from(result));
+    }
+    return const LocationSyncBacklog(
+      pendingLocationCount: 0,
+      pendingBatchCount: 0,
+      isPaused: false,
+      quarantinedLocationCount: 0,
+      groups: [],
+    );
+  }
+
   /// Whether a sync body builder (foreground or headless) is available.
   static bool get hasSyncBodyBuilder =>
       _syncBodyBuilder != null || _hasHeadlessBuilder;
@@ -295,6 +399,8 @@ class LocusSync {
   // ============================================================
 
   static bool _channelSetup = false;
+  static bool _headlessValidationChannelSetup = false;
+  static bool _headlessHeadersChannelSetup = false;
 
   /// Sets up the method channel handler for sync body requests from native.
   static void _setupSyncBodyChannel() {
@@ -328,10 +434,88 @@ class LocusSync {
           final context = SyncBodyContext.fromMap(args);
           return validatePreSync(context.locations, context.extras);
 
+        case 'refreshDynamicHeaders':
+          return refreshDynamicHeaders();
+
         default:
           return null;
       }
     });
+  }
+
+  static void _setupHeadlessValidationChannel() {
+    if (_headlessValidationChannelSetup) return;
+    _headlessValidationChannelSetup = true;
+
+    LocusChannels.headlessValidation.setMethodCallHandler((call) async {
+      if (call.method != 'validatePreSync') {
+        return true;
+      }
+
+      final callback =
+          await _resolveTypedCallback<Future<bool> Function(SyncBodyContext)>(
+              call.arguments);
+      if (callback == null) {
+        return true;
+      }
+
+      try {
+        final context = _extractSyncBodyContext(call.arguments);
+        return await callback(context);
+      } catch (e) {
+        debugPrint('Locus: Error in headless pre-sync validator: $e');
+        return false;
+      }
+    });
+  }
+
+  static void _setupHeadlessHeadersChannel() {
+    if (_headlessHeadersChannelSetup) return;
+    _headlessHeadersChannelSetup = true;
+
+    LocusChannels.headlessHeaders.setMethodCallHandler((call) async {
+      if (call.method != 'getHeaders') {
+        return <String, String>{};
+      }
+
+      final callback =
+          await _resolveTypedCallback<Future<Map<String, String>> Function()>(
+              call.arguments);
+      if (callback == null) {
+        return <String, String>{};
+      }
+
+      try {
+        return await callback();
+      } catch (e) {
+        debugPrint('Locus: Error in headless headers callback: $e');
+        return <String, String>{};
+      }
+    });
+  }
+
+  static Future<T?> _resolveTypedCallback<T>(Object? rawArgs) async {
+    final args = Map<String, dynamic>.from(rawArgs as Map? ?? const {});
+    final rawHandle = args['callbackHandle'] as int?;
+    if (rawHandle == null) {
+      return null;
+    }
+    final handle = CallbackHandle.fromRawHandle(rawHandle);
+    return PluginUtilities.getCallbackFromHandle(handle) as T?;
+  }
+
+  static SyncBodyContext _extractSyncBodyContext(Object? rawArgs) {
+    final args = Map<String, dynamic>.from(rawArgs as Map? ?? const {});
+    final payload = args['payload'];
+    if (payload is String) {
+      return SyncBodyContext.fromMap(
+        Map<String, dynamic>.from(jsonDecode(payload) as Map),
+      );
+    }
+    if (payload is Map) {
+      return SyncBodyContext.fromMap(Map<String, dynamic>.from(payload));
+    }
+    return SyncBodyContext.fromMap(args);
   }
 
   // ============================================================
@@ -347,5 +531,17 @@ class LocusSync {
   static void _headlessSyncBodyDispatcher() {
     // Delegate to the unified headless dispatcher
     headlessDispatcher();
+  }
+
+  @pragma('vm:entry-point')
+  static void _headlessValidationDispatcher() {
+    WidgetsFlutterBinding.ensureInitialized();
+    _setupHeadlessValidationChannel();
+  }
+
+  @pragma('vm:entry-point')
+  static void _headlessHeadersDispatcher() {
+    WidgetsFlutterBinding.ensureInitialized();
+    _setupHeadlessHeadersChannel();
   }
 }

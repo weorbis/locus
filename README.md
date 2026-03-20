@@ -12,7 +12,7 @@
 
 <p align="center">
   Reliable background geolocation for Flutter apps. Part of the **WeOrbis** ecosystem.<br>
-  Service-based v2.0.0 API covering tracking, geofencing, sync, privacy, and battery on Android and iOS.<br>
+  Service-based v2 API covering tracking, geofencing, sync, privacy, and battery on Android and iOS.<br>
   Built for production: deterministic APIs, full test suite, and migration tooling from v1.
 </p>
 
@@ -61,7 +61,7 @@ For full documentation, visit the [Locus GitHub repository](https://github.com/w
 
 ```yaml
 dependencies:
-  locus: ^2.0.0
+  locus: ^2.1.4
 ```
 
 ### 2. Basic Setup
@@ -144,9 +144,9 @@ dart run locus:migrate --dry-run
 
 ## Versioning
 
-- Current release: **v2.0.0** (service-based API)
+- Current release: **v2.1.4**
 - Supports Flutter 3.x / Dart 3.x
-- See [CHANGELOG.md](CHANGELOG.md#200---2026-01-07) for details
+- See [CHANGELOG.md](CHANGELOG.md#214---2026-03-12) for release details
 
 ## Tree Shaking
 

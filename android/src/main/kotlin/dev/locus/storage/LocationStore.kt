@@ -25,17 +25,17 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
                 activity_type TEXT,
                 activity_confidence INTEGER,
                 event TEXT,
-                odometer REAL
+                odometer REAL,
+                extras_json TEXT
             )
             """.trimIndent()
         )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Preserve data across schema upgrades.
-        // Add migration steps for each version increment here.
-        // Example: if (oldVersion < 3) { db.execSQL("ALTER TABLE locations ADD COLUMN new_col TEXT") }
-        // Only drop and recreate as last resort.
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE locations ADD COLUMN extras_json TEXT")
+        }
     }
 
     fun insertLocation(
@@ -53,7 +53,7 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
                 (id, timestamp, latitude, longitude, accuracy, speed, heading, altitude, is_moving, activity_type, activity_confidence, event, odometer) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
-                arrayOf(
+                arrayOf<Any?>(
                     UUID.randomUUID().toString(),
                     location.time,
                     location.latitude,
@@ -105,6 +105,9 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
             val isMoving = payload["is_moving"] as? Boolean ?: false
             val event = payload["event"] as? String
             val odometer = payload["odometer"].toDoubleOrZero()
+            val extrasJson = (payload["extras"] as? Map<*, *>)?.let { extras ->
+                org.json.JSONObject(extras).toString()
+            }
 
             val db = writableDatabase
             db.beginTransaction()
@@ -112,10 +115,10 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
                 db.execSQL(
                     """
                     INSERT OR REPLACE INTO locations
-                    (id, timestamp, latitude, longitude, accuracy, speed, heading, altitude, is_moving, activity_type, activity_confidence, event, odometer)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, timestamp, latitude, longitude, accuracy, speed, heading, altitude, is_moving, activity_type, activity_confidence, event, odometer, extras_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """.trimIndent(),
-                    arrayOf(
+                    arrayOf<Any?>(
                         UUID.randomUUID().toString(),
                         timestamp,
                         latitude,
@@ -128,7 +131,8 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
                         activityType,
                         activityConfidence,
                         event,
-                        odometer
+                        odometer,
+                        extrasJson
                     )
                 )
 
@@ -174,6 +178,7 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
                     )
                     cursor.getString(cursor.getColumnIndexOrThrow("activity_type"))?.let { record["activity_type"] = it }
                     cursor.getString(cursor.getColumnIndexOrThrow("event"))?.let { record["event"] = it }
+                    cursor.getString(cursor.getColumnIndexOrThrow("extras_json"))?.let { record["extras_json"] = it }
                     results.add(record)
                 }
             }
@@ -214,6 +219,6 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
 
     companion object {
         private const val DB_NAME = "locus.db"
-        private const val DB_VERSION = 2
+        private const val DB_VERSION = 3
     }
 }

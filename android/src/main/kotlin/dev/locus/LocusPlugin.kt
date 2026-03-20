@@ -25,6 +25,7 @@ import dev.locus.core.ForegroundServiceController
 import dev.locus.service.ForegroundService
 import dev.locus.core.GeofenceEventProcessor
 import dev.locus.core.HeadlessDispatcher
+import dev.locus.core.HeadlessHeadersDispatcher
 import dev.locus.core.HeadlessValidationDispatcher
 import dev.locus.core.LocationEventProcessor
 import dev.locus.core.LocationPayloadBuilder
@@ -98,6 +99,7 @@ class LocusPlugin : FlutterPlugin,
     private var stateManager: StateManager? = null
     private var logManager: LogManager? = null
     private var headlessDispatcher: HeadlessDispatcher? = null
+    private var headlessHeadersDispatcher: HeadlessHeadersDispatcher? = null
     private var headlessValidationDispatcher: HeadlessValidationDispatcher? = null
     private var eventDispatcher: EventDispatcher? = null
     private var systemMonitor: SystemMonitor? = null
@@ -168,7 +170,9 @@ class LocusPlugin : FlutterPlugin,
         
         val headless = HeadlessDispatcher(context, config, preferences)
         headlessDispatcher = headless
-        
+        val headlessHeaders = HeadlessHeadersDispatcher(context, config, preferences)
+        headlessHeadersDispatcher = headlessHeaders
+
         val headlessValidation = HeadlessValidationDispatcher(context, config, preferences)
         headlessValidationDispatcher = headlessValidation
         
@@ -295,6 +299,58 @@ class LocusPlugin : FlutterPlugin,
                         })
                     }
                 }
+
+                override fun onHeadersRefresh(callback: (Map<String, String>?) -> Unit) {
+                    val channel = methodChannel
+                    if (channel != null) {
+                        var responded = false
+                        val timeoutRunnable = Runnable {
+                            if (!responded) {
+                                responded = true
+                                Log.w(TAG, "refreshDynamicHeaders timed out after 10s")
+                                callback(null)
+                            }
+                        }
+                        mainHandler.postDelayed(timeoutRunnable, 10_000L)
+                        mainHandler.post {
+                            channel.invokeMethod("refreshDynamicHeaders", null, object : MethodChannel.Result {
+                                override fun success(result: Any?) {
+                                    if (responded) return
+                                    responded = true
+                                    mainHandler.removeCallbacks(timeoutRunnable)
+                                    @Suppress("UNCHECKED_CAST")
+                                    val headers = (result as? Map<*, *>)?.entries?.mapNotNull { entry ->
+                                        val key = entry.key?.toString() ?: return@mapNotNull null
+                                        val value = entry.value?.toString() ?: return@mapNotNull null
+                                        key to value
+                                    }?.toMap()
+                                    callback(headers)
+                                }
+                                override fun error(code: String, message: String?, details: Any?) {
+                                    if (responded) return
+                                    responded = true
+                                    mainHandler.removeCallbacks(timeoutRunnable)
+                                    Log.e(TAG, "refreshDynamicHeaders error: $code - $message")
+                                    callback(null)
+                                }
+                                override fun notImplemented() {
+                                    if (responded) return
+                                    responded = true
+                                    mainHandler.removeCallbacks(timeoutRunnable)
+                                    callback(null)
+                                }
+                            })
+                        }
+                        return
+                    }
+
+                    val dispatcher = headlessHeadersDispatcher
+                    if (dispatcher != null && dispatcher.isAvailable()) {
+                        dispatcher.refreshHeaders(callback)
+                    } else {
+                        callback(null)
+                    }
+                }
             }
         )
         syncManager = sync
@@ -313,7 +369,7 @@ class LocusPlugin : FlutterPlugin,
 
         val providerMonitor = LocationProviderMonitor(context)
         val trackingEventEmitter = TrackingEventEmitter(events, providerMonitor)
-        val payloadBuilder = LocationPayloadBuilder(motion, state)
+        val payloadBuilder = LocationPayloadBuilder(config, motion, state)
         val locationUpdateProcessor = LocationUpdateProcessor(
             state,
             stats,
@@ -789,6 +845,36 @@ class LocusPlugin : FlutterPlugin,
                         result.error("INVALID_ARGUMENT", "Expected map argument", null)
                     }
                 }
+            }
+            "registerHeadlessHeadersCallback" -> {
+                when (val args = call.arguments) {
+                    is Map<*, *> -> {
+                        val map = args.asMap()
+                        val dispatcher = map?.get("dispatcher") as? Number
+                        val callback = map?.get("callback") as? Number
+                        if (dispatcher != null && callback != null) {
+                            prefs?.edit()
+                                ?.putLong(
+                                    HeadlessHeadersDispatcher.KEY_HEADERS_DISPATCHER,
+                                    dispatcher.toLong(),
+                                )
+                                ?.putLong(
+                                    HeadlessHeadersDispatcher.KEY_HEADERS_CALLBACK,
+                                    callback.toLong(),
+                                )
+                                ?.apply()
+                            result.success(true)
+                        } else {
+                            result.error("INVALID_ARGUMENT", "Expected dispatcher and callback handles", null)
+                        }
+                    }
+                    else -> {
+                        result.error("INVALID_ARGUMENT", "Expected map argument", null)
+                    }
+                }
+            }
+            "getLocationSyncBacklog" -> {
+                result.success(syncManager?.getLocationSyncBacklog() ?: emptyMap<String, Any?>())
             }
             else -> {
                 result.notImplemented()
