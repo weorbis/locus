@@ -324,6 +324,21 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
     await _refreshState();
   }
 
+  Future<void> _updateNotification() async {
+    final odometer = _lastState?.odometer ?? 0;
+    final distance = (odometer / 1000).toStringAsFixed(2);
+    final updated = await Locus.updateNotification(
+      title: 'Locus Tracker',
+      text: 'Distance: $distance km',
+    );
+    if (updated) {
+      _showSnackbar('Notification updated');
+    } else {
+      _showSnackbar('Notification not updated (tracking inactive)',
+          isSuccess: false);
+    }
+  }
+
   Future<void> _getPosition() async {
     try {
       final loc = await Locus.location.getCurrentPosition();
@@ -1077,6 +1092,12 @@ class _LocusExampleAppState extends State<LocusExampleApp> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            _ActionButton(
+              onPressed: _isRunning ? _updateNotification : null,
+              icon: Icons.notifications_active_rounded,
+              label: 'Update Notification',
             ),
           ],
         ),
@@ -2556,7 +2577,7 @@ class _ActionButton extends StatelessWidget {
     this.filled = false,
   });
 
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final IconData icon;
   final String label;
   final Color? color;
@@ -2564,7 +2585,9 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = color ?? Theme.of(context).colorScheme.primary;
+    final effectiveColor = onPressed == null
+        ? Theme.of(context).colorScheme.onSurface.withAlpha(97)
+        : color ?? Theme.of(context).colorScheme.primary;
 
     if (filled) {
       return FilledButton.icon(
@@ -2572,7 +2595,7 @@ class _ActionButton extends StatelessWidget {
         icon: Icon(icon, size: 18),
         label: Text(label),
         style: FilledButton.styleFrom(
-          backgroundColor: effectiveColor,
+          backgroundColor: onPressed == null ? null : effectiveColor,
           padding: const EdgeInsets.symmetric(vertical: 12),
         ),
       );

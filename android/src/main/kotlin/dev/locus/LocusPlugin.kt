@@ -22,6 +22,7 @@ import dev.locus.core.AutoSyncChecker
 import dev.locus.core.ConfigManager
 import dev.locus.core.EventDispatcher
 import dev.locus.core.ForegroundServiceController
+import dev.locus.service.ForegroundService
 import dev.locus.core.GeofenceEventProcessor
 import dev.locus.core.HeadlessDispatcher
 import dev.locus.core.HeadlessHeadersDispatcher
@@ -556,6 +557,21 @@ class LocusPlugin : FlutterPlugin,
             }
             "getState" -> {
                 result.success(locationTracker?.buildState())
+            }
+            "updateNotification" -> {
+                if (locationTracker?.isEnabled() != true) {
+                    result.success(false)
+                    return
+                }
+                val args = call.arguments.asMap()
+                val title = args?.get("title") as? String
+                val text = args?.get("text") as? String
+                val context = androidContext
+                if (context != null) {
+                    result.success(ForegroundService.updateNotification(context, title, text))
+                } else {
+                    result.success(false)
+                }
             }
             "getCurrentPosition" -> {
                 getCurrentPosition(result)

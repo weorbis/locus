@@ -51,6 +51,16 @@ class MethodChannelLocus implements LocusInterface {
   @override
   Future<GeolocationState> getState() => LocusLifecycle.getState();
 
+  @override
+  Future<bool> updateNotification({String? title, String? text}) async {
+    final args = <String, dynamic>{};
+    if (title != null) args['title'] = title;
+    if (text != null) args['text'] = text;
+    final result = await LocusChannels.methods
+        .invokeMethod<bool>('updateNotification', args);
+    return result == true;
+  }
+
   // ============================================================
   // Location Methods
   // ============================================================

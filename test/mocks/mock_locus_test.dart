@@ -41,6 +41,19 @@ void main() {
       expect(mock.methodCalls.contains('stop'), isTrue);
     });
 
+    test('updateNotification() reflects tracking state', () async {
+      expect(await mock.updateNotification(title: 'Trip'), isFalse);
+
+      await mock.start();
+
+      expect(
+        await mock.updateNotification(title: 'Trip', text: '12.3 km'),
+        isTrue,
+      );
+      expect(mock.methodCalls.where((call) => call == 'updateNotification'),
+          hasLength(2));
+    });
+
     test('setMockState updates state', () async {
       mock.setMockState(const GeolocationState(
         enabled: true,

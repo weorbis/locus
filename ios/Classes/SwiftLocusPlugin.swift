@@ -4,6 +4,7 @@ import CoreLocation
 import CoreMotion
 import Network
 import BackgroundTasks
+import UserNotifications
 
 public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, LocationClientDelegate, SyncManagerDelegate, MotionManagerDelegate, SchedulerDelegate, GeofenceManagerDelegate {
   static let methodChannelName = "locus/methods"
@@ -418,6 +419,19 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       let path = networkMonitor?.currentPath
       let isCellular = path?.usesInterfaceType(.cellular) ?? false
       result(isCellular)
+    case "updateNotification":
+      guard isEnabled else {
+        result(false)
+        return
+      }
+      let args = call.arguments as? [String: Any]
+      let title = args?["title"] as? String
+      let text = args?["text"] as? String
+      updateTrackingNotification(title: title, text: text) { updated in
+        DispatchQueue.main.async {
+          result(updated)
+        }
+      }
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -436,6 +450,66 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
     }
     registerBackgroundTasks()
   }
+
+  // MARK: - Notification Support
+
+  private static let trackingNotificationIdentifier = "dev.locus.tracking"
+
+  private func withTrackingNotificationAuthorization(
+    _ completion: @escaping (Bool) -> Void
+  ) {
+    let center = UNUserNotificationCenter.current()
+    center.getNotificationSettings { settings in
+      switch settings.authorizationStatus {
+      case .authorized, .provisional, .ephemeral:
+        completion(true)
+      case .notDetermined:
+        NSLog("[locus] updateNotification: notification permission not yet requested — the host app must call UNUserNotificationCenter.requestAuthorization() before using this API")
+        completion(false)
+      case .denied:
+        NSLog("[locus] updateNotification: notification permission denied by user")
+        completion(false)
+      @unknown default:
+        completion(false)
+      }
+    }
+  }
+
+  func updateTrackingNotification(
+    title: String?,
+    text: String?,
+    completion: @escaping (Bool) -> Void
+  ) {
+    withTrackingNotificationAuthorization { granted in
+      guard granted else {
+        completion(false)
+        return
+      }
+
+      let content = UNMutableNotificationContent()
+      content.title = title ?? "Locus"
+      content.body = text ?? "Tracking location"
+      // Silent update — no repeated sound/vibration
+      content.sound = nil
+
+      let request = UNNotificationRequest(
+        identifier: Self.trackingNotificationIdentifier,
+        content: content,
+        trigger: nil
+      )
+      UNUserNotificationCenter.current().add(request) { error in
+        completion(error == nil)
+      }
+    }
+  }
+
+  private func removeTrackingNotification() {
+    let id = Self.trackingNotificationIdentifier
+    UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
+    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+  }
+
+  // MARK: - Tracking Lifecycle
 
   func startTracking() {
     if isEnabled {
@@ -475,6 +549,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
     trackingStats.onTrackingStop()
     locationClient.stop()
     motionDetector.stop()
+    removeTrackingNotification()
     emitEnabledChange(false)
     stopHeartbeatTimer()
     stopBackgroundRefresh()
