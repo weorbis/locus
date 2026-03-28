@@ -110,3 +110,4 @@ yarn-error.log*
 /.claude
 /.agents
 /.codex
+/.gemini
