@@ -177,10 +177,23 @@ class ForegroundService : Service() {
     }
 
     private fun promoteToForeground(id: Int, notification: Notification) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        } else {
-            startForeground(id, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            } else {
+                startForeground(id, notification)
+            }
+        } catch (e: SecurityException) {
+            // Android 14+ (SDK 34+) throws SecurityException when starting a
+            // foreground service with type "location" if the required runtime
+            // permissions (ACCESS_FINE_LOCATION, FOREGROUND_SERVICE_LOCATION)
+            // are not granted at the exact moment startForeground() executes.
+            // This can happen when the user revokes permission between the
+            // Dart-side check and the native service start, or during a
+            // headless restart after the app was killed.
+            Log.e(TAG, "SecurityException in startForeground: ${e.message}. " +
+                "Location permission may have been revoked. Stopping service.")
+            stopSelf()
         }
     }
 

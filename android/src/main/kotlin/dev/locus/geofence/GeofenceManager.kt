@@ -1,10 +1,12 @@
 package dev.locus.geofence
 
-import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingClient
 import com.google.android.gms.location.GeofencingRequest
@@ -34,12 +36,22 @@ class GeofenceManager(
         fun onGeofencesChanged(addedIds: List<String>, removedIds: List<String>)
     }
 
+    private fun hasLocationPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     fun setMaxMonitoredGeofences(max: Int) {
         maxMonitoredGeofences = max
     }
 
-    @SuppressLint("MissingPermission")
     fun addGeofence(geofenceMap: Map<String, Any>, result: MethodChannel.Result) {
+        if (!hasLocationPermission()) {
+            result.error("PERMISSION_DENIED", "ACCESS_FINE_LOCATION permission not granted", null)
+            return
+        }
         try {
             val geofence = buildGeofence(geofenceMap)
             val identifier = geofenceMap["identifier"] as? String
@@ -71,8 +83,11 @@ class GeofenceManager(
         }
     }
 
-    @SuppressLint("MissingPermission")
     fun addGeofences(geofences: List<Any>, result: MethodChannel.Result) {
+        if (!hasLocationPermission()) {
+            result.error("PERMISSION_DENIED", "ACCESS_FINE_LOCATION permission not granted", null)
+            return
+        }
         try {
             val geofenceList = mutableListOf<Geofence>()
             val stored = readGeofenceStore()
@@ -258,8 +273,11 @@ class GeofenceManager(
         result.success(true)
     }
 
-    @SuppressLint("MissingPermission")
     fun startGeofencesInternal() {
+        if (!hasLocationPermission()) {
+            Log.w("GeofenceManager", "Skipping geofence registration: ACCESS_FINE_LOCATION not granted")
+            return
+        }
         var stored = readGeofenceStore()
 
         if (maxMonitoredGeofences > 0 && stored.length() > maxMonitoredGeofences) {
