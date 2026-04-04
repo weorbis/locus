@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.1] - 2026-04-04
+
+### Fixed
+
+- **Android: ForegroundService SecurityException on SDK 36** — Wrapped `startForeground()` in a `SecurityException` catch block. On Android 14+ (SDK 34+), the OS throws when starting a foreground service with type `location` if runtime permissions were revoked between the Dart-side check and the native service start, or during a headless restart. The service now stops gracefully instead of crashing.
+- **Android: Geofence registration without permission check** — Replaced `@SuppressLint("MissingPermission")` on `addGeofence()`, `addGeofences()`, and `startGeofencesInternal()` with explicit `ContextCompat.checkSelfPermission()` validation. Returns `PERMISSION_DENIED` error (or skips silently for internal calls) instead of letting the system throw an unhandled `PlatformException`.
+- **Android: BootReceiver headless dispatch without permission check** — Added `ACCESS_FINE_LOCATION` runtime permission verification before dispatching the headless service on boot. Prevents `SecurityException` cascades when the user revoked location permission while the app was killed.
+
 ## [2.2.0] - 2026-03-20
 
 ### Added

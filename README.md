@@ -5,15 +5,14 @@
 <h1 align="center">Locus</h1>
 
 <p align="center">
-  <a href="https://pub.dev/packages/locus"><img src="https://img.shields.io/pub/v/locus?style=flat-square&logo=dart" alt="Pub Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License"></a>
   <a href="https://github.com/weorbis/locus/actions"><img src="https://img.shields.io/github/actions/workflow/status/weorbis/locus/pipeline.yml?style=flat-square&logo=github" alt="Build Status"></a>
 </p>
 
 <p align="center">
   Reliable background geolocation for Flutter apps. Part of the **WeOrbis** ecosystem.<br>
-  Service-based v2 API covering tracking, geofencing, sync, privacy, and battery on Android and iOS.<br>
-  Built for production: deterministic APIs, full test suite, and migration tooling from v1.
+  Service-based API covering tracking, geofencing, sync, privacy, and battery on Android and iOS.<br>
+  Built for production: deterministic APIs, a full test suite, and production-ready tooling.
 </p>
 
 ---
@@ -61,7 +60,7 @@ For full documentation, visit the [Locus GitHub repository](https://github.com/w
 
 ```yaml
 dependencies:
-  locus: ^2.2.0
+  locus: ^2.2.1
 ```
 
 ### 2. Basic Setup

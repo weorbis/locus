@@ -4,7 +4,7 @@ PODS:
   - Flutter (1.0.0)
   - integration_test (0.0.1):
     - Flutter
-  - locus (2.2.0):
+  - locus (2.2.1):
     - Flutter
   - permission_handler_apple (9.3.0):
     - Flutter
