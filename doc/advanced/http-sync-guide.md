@@ -196,7 +196,7 @@ await Locus.ready(ConfigPresets.balanced.copyWith(
 ));
 ```
 
-**Retry Schedule Example**:
+**Retry Schedule Example** (with `maxRetry: 5`):
 
 1. Initial attempt fails
 2. Wait 5 seconds → Retry 1
@@ -204,22 +204,25 @@ await Locus.ready(ConfigPresets.balanced.copyWith(
 4. Wait 20 seconds → Retry 3
 5. Wait 40 seconds → Retry 4
 6. Wait 80 seconds (capped to 300s = 5 min) → Retry 5
-7. Give up, keep in queue
+7. Retries exhausted — locations remain in queue, drain advances to next batch group
+
+### Drain Continuation
+
+When batch sync is enabled, the drain processes location batches grouped by route context (task, owner, session). If one batch group exhausts all retries, the drain **continues to the next group** instead of stopping entirely. This ensures a single failing context (e.g., revoked task, invalid endpoint) doesn't block unrelated batches.
+
+The set of exhausted contexts is cleared on each `resumeSync()` call, giving previously failed groups a fresh chance on the next cycle.
 
 ### Retry on Specific Status Codes
 
 By default, retries on:
 
 - **5xx** errors (server errors)
-- **429** (rate limit)
-- **408** (timeout)
-- Network errors
+- **4xx** errors (except 401)
+- Network errors (IOException, timeout, DNS)
 
 Does NOT retry on:
 
-- **401** (unauthorized) - pauses sync
-- **400** (bad request) - discards batch
-- **404** (not found) - discards batch
+- **401** (unauthorized) — pauses sync, attempts one background header refresh before giving up
 
 ### Pause and Resume
 

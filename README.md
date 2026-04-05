@@ -60,7 +60,7 @@ For full documentation, visit the [Locus GitHub repository](https://github.com/w
 
 ```yaml
 dependencies:
-  locus: ^2.2.1
+  locus: ^2.2.2
 ```
 
 ### 2. Basic Setup

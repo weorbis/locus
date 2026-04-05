@@ -15,7 +15,7 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 
-const _version = '2.2.1';
+const _version = '2.2.2';
 
 void main(List<String> args) async {
   final parser = ArgParser()

@@ -101,6 +101,17 @@ class SyncManager(
     @Volatile
     var syncBodyBuilderEnabled = false
 
+    /**
+     * Tracks route contexts that exhausted all retries during the current
+     * drain cycle. [selectNextLocationBatch] skips these so the drain can
+     * advance to the next context group instead of re-selecting the same
+     * failed batch in an infinite loop.
+     *
+     * Cleared at the start of each [resumeSync] call so that previously
+     * failed contexts get a fresh chance on the next cycle.
+     */
+    private val drainExhaustedContexts = mutableSetOf<RouteContext>()
+
     private data class RouteContext(
         val ownerId: String,
         val driverId: String,
@@ -150,6 +161,7 @@ class SyncManager(
     fun resumeSync() {
         Log.i(TAG, "Sync RESUMED by app request - processing any pending locations...")
         isSyncPaused = false
+        drainExhaustedContexts.clear()
         requestLocationSync(config.maxBatchSize)
         syncQueue(0)
     }
@@ -264,6 +276,30 @@ class SyncManager(
         enqueueHttpBatch(batch.payloads, batch.ids, 0)
     }
 
+    /**
+     * Advances the drain after a batch failure.
+     *
+     * When a retry is scheduled, the drain pauses for this batch — the retry
+     * runs independently and restarts the drain on success.
+     *
+     * When retries are exhausted, the batch's [RouteContext] is added to
+     * [drainExhaustedContexts] so [selectNextLocationBatch] skips it, and
+     * the drain continues to the next context group.
+     */
+    private fun advanceDrainAfterFailure(payloads: List<Map<String, Any>>, retryScheduled: Boolean) {
+        if (retryScheduled) {
+            // Retry handles this batch independently. Pause drain — the retry's
+            // eventual completeLocationSync(true) on success will restart it.
+            completeLocationSync(false)
+            return
+        }
+        // Retries exhausted. Mark this context so the drain skips it.
+        payloads.firstOrNull()?.let { extractRouteContext(it) }?.let {
+            drainExhaustedContexts.add(it)
+        }
+        completeLocationSync(true)
+    }
+
     private fun completeLocationSync(continueDrain: Boolean) {
         val shouldContinue = synchronized(locationSyncLock) {
             isLocationSyncInFlight = false
@@ -293,6 +329,8 @@ class SyncManager(
             if (payload.isEmpty()) continue
 
             val context = extractRouteContext(payload) ?: continue
+            // Skip contexts that exhausted all retries in this drain cycle.
+            if (context in drainExhaustedContexts) continue
             if (selectedContext == null) {
                 selectedContext = context
             }
@@ -414,7 +452,7 @@ class SyncManager(
                     )
                     recordSyncFailure("pre_sync_validator_rejected")
                 }
-                completeLocationSync(false)
+                advanceDrainAfterFailure(listOf(locationPayload), retryScheduled = false)
                 return@onPreSyncValidation
             }
 
@@ -431,8 +469,8 @@ class SyncManager(
                                 "sync body builder failed locations=1 extras=${JSONObject(config.extras).toString()}"
                             )
                             recordSyncFailure("sync_body_builder_failed")
-                            scheduleHttpRetry(locationPayload, idsToDelete, attempt + 1)
-                            completeLocationSync(false)
+                            val retryScheduled = scheduleHttpRetry(locationPayload, idsToDelete, attempt + 1)
+                            advanceDrainAfterFailure(listOf(locationPayload), retryScheduled)
                             return@execute
                         }
                         listener.onSyncRequest()
@@ -471,7 +509,7 @@ class SyncManager(
                     )
                     recordSyncFailure("pre_sync_validator_rejected")
                 }
-                completeLocationSync(false)
+                advanceDrainAfterFailure(payloads, retryScheduled = false)
                 return@onPreSyncValidation
             }
 
@@ -488,8 +526,8 @@ class SyncManager(
                                 "sync body builder failed locations=${payloads.size} extras=${JSONObject(config.extras).toString()}"
                             )
                             recordSyncFailure("sync_body_builder_failed")
-                            scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
-                            completeLocationSync(false)
+                            val retryScheduled = scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
+                            advanceDrainAfterFailure(payloads, retryScheduled)
                             return@execute
                         }
                         listener.onSyncRequest()
@@ -696,8 +734,8 @@ class SyncManager(
                 }
                 !ok -> {
                     recordSyncFailure("http_$status")
-                    scheduleHttpRetry(originalPayload, idsToDelete, attempt + 1)
-                    completeLocationSync(false)
+                    val retryScheduled = scheduleHttpRetry(originalPayload, idsToDelete, attempt + 1)
+                    advanceDrainAfterFailure(listOf(originalPayload), retryScheduled)
                 }
                 else -> completeLocationSync(true)
             }
@@ -706,8 +744,8 @@ class SyncManager(
             emitHttpEvent(0, false, e.message)
             log("error", "http error ${sanitizeError(e)}")
             recordSyncFailure("exception:${e.javaClass.simpleName}")
-            scheduleHttpRetry(originalPayload, idsToDelete, attempt + 1)
-            completeLocationSync(false)
+            val retryScheduled = scheduleHttpRetry(originalPayload, idsToDelete, attempt + 1)
+            advanceDrainAfterFailure(listOf(originalPayload), retryScheduled)
         } finally {
             connection?.disconnect()
         }
@@ -780,8 +818,8 @@ class SyncManager(
                 }
                 !ok -> {
                     recordSyncFailure("http_$status")
-                    scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
-                    completeLocationSync(false)
+                    val retryScheduled = scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
+                    advanceDrainAfterFailure(payloads, retryScheduled)
                 }
                 else -> completeLocationSync(true)
             }
@@ -790,8 +828,8 @@ class SyncManager(
             emitHttpEvent(0, false, e.message)
             log("error", "http error ${sanitizeError(e)}")
             recordSyncFailure("exception:${e.javaClass.simpleName}")
-            scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
-            completeLocationSync(false)
+            val retryScheduled = scheduleBatchRetry(payloads, idsToDelete, attempt + 1)
+            advanceDrainAfterFailure(payloads, retryScheduled)
         } finally {
             connection?.disconnect()
         }
@@ -815,24 +853,36 @@ class SyncManager(
         }
     }
 
-    private fun scheduleBatchRetry(payloads: List<Map<String, Any>>, idsToDelete: List<String>, attempt: Int) {
-        if (isReleased || attempt > config.maxRetry || config.httpUrl.isNullOrEmpty()) return
-        
+    /**
+     * Schedules an exponential-backoff retry for a failed batch.
+     *
+     * @return `true` if a retry was scheduled, `false` if retries are exhausted.
+     */
+    private fun scheduleBatchRetry(payloads: List<Map<String, Any>>, idsToDelete: List<String>, attempt: Int): Boolean {
+        if (isReleased || attempt > config.maxRetry || config.httpUrl.isNullOrEmpty()) return false
+
         val delay = calculateRetryDelay(attempt)
         mainScope.launch {
             delay(delay)
             if (!isReleased) enqueueHttpBatch(payloads, idsToDelete, attempt)
         }
+        return true
     }
 
-    private fun scheduleHttpRetry(payload: Map<String, Any>, idsToDelete: List<String>?, attempt: Int) {
-        if (isReleased || attempt > config.maxRetry || config.httpUrl.isNullOrEmpty()) return
-        
+    /**
+     * Schedules an exponential-backoff retry for a single failed location.
+     *
+     * @return `true` if a retry was scheduled, `false` if retries are exhausted.
+     */
+    private fun scheduleHttpRetry(payload: Map<String, Any>, idsToDelete: List<String>?, attempt: Int): Boolean {
+        if (isReleased || attempt > config.maxRetry || config.httpUrl.isNullOrEmpty()) return false
+
         val delay = calculateRetryDelay(attempt)
         mainScope.launch {
             delay(delay)
             if (!isReleased) enqueueHttp(payload, idsToDelete, attempt)
         }
+        return true
     }
 
     private fun scheduleQueueRetry(

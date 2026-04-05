@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.2] - 2026-04-05
+
+### Breaking
+
+- **Android/iOS: `maxRetry` default changed from `0` to `3`** — The previous default of `0` meant HTTP sync failures were never retried, silently stranding queued locations in the native database with no recovery path. The new default retries with exponential backoff (5s → 10s → 20s, capped by `maxRetryDelay`). Consumers that explicitly relied on `maxRetry: 0` to disable retries must now set it explicitly.
+
+### Fixed
+
+- **Android/iOS: Backlog drain stops after first failed batch** — When the sync drain encountered a batch that exhausted all retries (or was rejected by the pre-sync validator / sync body builder), the entire drain loop stopped. Remaining batch groups with different route contexts — which may have been perfectly syncable — were never attempted until the next `resumeSync()` call. The drain now tracks exhausted contexts per cycle and advances to the next context group. The exhausted set is cleared on each `resumeSync()` so previously failed contexts get a fresh chance.
+
 ## [2.2.1] - 2026-04-04
 
 ### Fixed

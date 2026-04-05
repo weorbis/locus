@@ -56,7 +56,7 @@ class ConfigManager(context: Context) {
     /** Alias for httpExtras to match iOS API */
     val extras: Map<String, Any> get() = httpExtras
     var httpTimeoutMs: Int = 10000
-    var maxRetry: Int = 0
+    var maxRetry: Int = 3
     var retryDelayMs: Int = 5000
     var retryDelayMultiplier: Double = 2.0
     var maxRetryDelayMs: Int = 60000

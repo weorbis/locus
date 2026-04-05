@@ -75,6 +75,15 @@ class SyncManager {
         let ids: [String]
     }
 
+    /// Tracks route contexts that exhausted all retries during the current
+    /// drain cycle. `selectNextLocationBatch` skips these so the drain can
+    /// advance to the next context group instead of re-selecting the same
+    /// failed batch in an infinite loop.
+    ///
+    /// Cleared at the start of each `resumeSync` call so that previously
+    /// failed contexts get a fresh chance on the next cycle.
+    private var drainExhaustedContexts = Set<RouteContext>()
+
     private func createURLSession() -> URLSession {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = config.httpTimeout
@@ -159,6 +168,7 @@ class SyncManager {
     func resumeSync() {
         delegate?.onLog(level: "info", message: "Sync RESUMED by app request - processing any pending locations...")
         isSyncPaused = false
+        drainExhaustedContexts.removeAll()
         requestLocationSync(limit: config.maxBatchSize)
         _ = syncQueue(limit: 0)
     }
@@ -289,6 +299,8 @@ class SyncManager {
             guard let context = extractRouteContext(from: payload) else {
                 continue
             }
+            // Skip contexts that exhausted all retries in this drain cycle.
+            guard !drainExhaustedContexts.contains(context) else { continue }
             if selectedContext == nil {
                 selectedContext = context
             }
@@ -451,10 +463,10 @@ class SyncManager {
                     message: "pre-sync validator rejected locations=1 extras=\(self.config.extras)"
                 )
                 self.recordSyncFailure("pre_sync_validator_rejected")
-                self.completeLocationSync(continueDrain: false)
+                self.advanceDrainAfterFailure(payloads: [locationPayload], retryScheduled: false)
                 return
             }
-            
+
             // If sync body builder is enabled, ask Dart to build the body
             if self.syncBodyBuilderEnabled {
                 self.delegate?.buildSyncBody(locations: [locationPayload], extras: self.config.extras) { [weak self] customBody in
@@ -474,8 +486,8 @@ class SyncManager {
                                 message: "sync body builder failed locations=1 extras=\(self.config.extras)"
                             )
                             self.recordSyncFailure("sync_body_builder_failed")
-                            self.scheduleRetry(payload: locationPayload, idsToDelete: idsToDelete, attempt: attempt + 1)
-                            self.completeLocationSync(continueDrain: false)
+                            let retryScheduled = self.scheduleRetry(payload: locationPayload, idsToDelete: idsToDelete, attempt: attempt + 1)
+                            self.advanceDrainAfterFailure(payloads: [locationPayload], retryScheduled: retryScheduled)
                             return
                         }
                         guard let request = self.makeRequest(urlString, body: body) else { return }
@@ -530,10 +542,10 @@ class SyncManager {
                     message: "pre-sync validator rejected locations=\(payloads.count) extras=\(self.config.extras)"
                 )
                 self.recordSyncFailure("pre_sync_validator_rejected")
-                self.completeLocationSync(continueDrain: false)
+                self.advanceDrainAfterFailure(payloads: payloads, retryScheduled: false)
                 return
             }
-            
+
             // If sync body builder is enabled, ask Dart to build the body
             if self.syncBodyBuilderEnabled {
                 self.delegate?.buildSyncBody(locations: payloads, extras: self.config.extras) { [weak self] customBody in
@@ -553,8 +565,8 @@ class SyncManager {
                                 message: "sync body builder failed locations=\(payloads.count) extras=\(self.config.extras)"
                             )
                             self.recordSyncFailure("sync_body_builder_failed")
-                            self.scheduleBatchRetry(payloads: payloads, idsToDelete: idsToDelete, attempt: attempt + 1)
-                            self.completeLocationSync(continueDrain: false)
+                            let retryScheduled = self.scheduleBatchRetry(payloads: payloads, idsToDelete: idsToDelete, attempt: attempt + 1)
+                            self.advanceDrainAfterFailure(payloads: payloads, retryScheduled: retryScheduled)
                             return
                         }
                         guard let request = self.makeRequest(urlString, body: body) else { return }
@@ -672,11 +684,14 @@ class SyncManager {
         if !ok {
             recordSyncFailure("http_\(status)")
             if isBatch, let batch = batchPayloads {
-                scheduleBatchRetry(payloads: batch, idsToDelete: idsToDelete, attempt: attempt + 1)
+                let retryScheduled = scheduleBatchRetry(payloads: batch, idsToDelete: idsToDelete, attempt: attempt + 1)
+                advanceDrainAfterFailure(payloads: batch, retryScheduled: retryScheduled)
             } else if let p = payload {
-                scheduleRetry(payload: p, idsToDelete: idsToDelete, attempt: attempt + 1)
+                let retryScheduled = scheduleRetry(payload: p, idsToDelete: idsToDelete, attempt: attempt + 1)
+                advanceDrainAfterFailure(payloads: [p], retryScheduled: retryScheduled)
+            } else {
+                completeLocationSync(continueDrain: false)
             }
-            completeLocationSync(continueDrain: false)
         } else {
             completeLocationSync(continueDrain: true)
         }
@@ -739,32 +754,55 @@ class SyncManager {
         } ?? completion(false)
     }
     
-    private func scheduleRetry(payload: [String: Any], idsToDelete: [String]?, attempt: Int) {
+    /// - Returns: `true` if a retry was scheduled, `false` if retries are exhausted.
+    @discardableResult
+    private func scheduleRetry(payload: [String: Any], idsToDelete: [String]?, attempt: Int) -> Bool {
         if attempt > config.maxRetry {
-            // Max retries exhausted - emit abandoned event
             emitDeadLetterEvent(payload: payload, reason: "max_retries_exhausted", attempts: attempt)
-            return
+            return false
         }
-        
+
         let delay = calculateDelay(attempt)
         queue.asyncAfter(deadline: .now() + delay) {
             self.enqueueHttp(locationPayload: payload, idsToDelete: idsToDelete, attempt: attempt)
         }
+        return true
     }
-    
-    private func scheduleBatchRetry(payloads: [[String: Any]], idsToDelete: [String]?, attempt: Int) {
+
+    /// - Returns: `true` if a retry was scheduled, `false` if retries are exhausted.
+    @discardableResult
+    private func scheduleBatchRetry(payloads: [[String: Any]], idsToDelete: [String]?, attempt: Int) -> Bool {
         if attempt > config.maxRetry {
-            // Max retries exhausted - emit abandoned event for batch
             for payload in payloads {
                 emitDeadLetterEvent(payload: payload, reason: "max_retries_exhausted", attempts: attempt)
             }
-            return
+            return false
         }
-        
+
         let delay = calculateDelay(attempt)
         queue.asyncAfter(deadline: .now() + delay) {
             self.enqueueHttpBatch(payloads: payloads, idsToDelete: idsToDelete, attempt: attempt)
         }
+        return true
+    }
+
+    /// Advances the drain after a batch failure.
+    ///
+    /// When a retry is scheduled, the drain pauses for this batch — the retry
+    /// runs independently and restarts the drain on success.
+    ///
+    /// When retries are exhausted, the batch's `RouteContext` is added to
+    /// `drainExhaustedContexts` so `selectNextLocationBatch` skips it, and
+    /// the drain continues to the next context group.
+    private func advanceDrainAfterFailure(payloads: [[String: Any]], retryScheduled: Bool) {
+        if retryScheduled {
+            completeLocationSync(continueDrain: false)
+            return
+        }
+        if let first = payloads.first, let context = extractRouteContext(from: first) {
+            drainExhaustedContexts.insert(context)
+        }
+        completeLocationSync(continueDrain: true)
     }
     
     private func scheduleQueueRetry(payload: [String: Any], id: String, type: String?, idempotencyKey: String, attempt: Int) {

@@ -40,7 +40,7 @@ class ConfigManager {
     var httpParams: [String: Any] = [:]
     var extras: [String: Any] = [:]
     var httpTimeout: TimeInterval = 10
-    var maxRetry = 0
+    var maxRetry = 3
     var retryDelay: TimeInterval = 5
     var retryDelayMultiplier: Double = 2.0
     var maxRetryDelay: TimeInterval = 60
