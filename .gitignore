@@ -111,3 +111,5 @@ yarn-error.log*
 /.agents
 /.codex
 /.gemini
+/.agent
+.mcp.json
