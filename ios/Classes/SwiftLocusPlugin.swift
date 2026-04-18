@@ -119,6 +119,13 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
         self?.maybeStartOnBoot()
       }
     }
+    // Reconcile persisted tracking state AFTER startOnBoot handling. If tracking
+    // was active before the process died (swipe-away + OS reap, or force-stop),
+    // re-arm here so locations keep flowing on the new process. maybeStartOnBoot()
+    // is idempotent so it's safe to call both.
+    DispatchQueue.main.async { [weak self] in
+      self?.maybeResumePersistedTracking()
+    }
     registerBackgroundTasks()
   }
 
@@ -131,13 +138,23 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
     NotificationCenter.default.removeObserver(self)
     releaseBackgroundTasks()
     stopHeartbeatTimer()
-    motionDetector.stop()
     scheduler.stop()
     syncManager.release()
     headlessCleanupTimer?.invalidate()
     headlessCleanupTimer = nil
     headlessEngine?.destroyContext()
     headlessEngine = nil
+
+    // Honor stopOnTerminate: if the host configured `stopOnTerminate:false` (the
+    // canonical always-on recipe), we must NOT stop the CLLocationManager here.
+    // CoreLocation + UIBackgroundModes=location + startMonitoringSignificantLocation
+    // Changes can relaunch the process later; stopping updates in deinit would
+    // defeat that. deinit is best-effort on iOS anyway — the OS may kill the process
+    // without running destructors — but when it does run, this path matters.
+    if configManager.stopOnTerminate {
+      motionDetector.stop()
+      locationClient.stop()
+    }
   }
 
   public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
@@ -531,6 +548,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       return
     }
     isEnabled = true
+    UserDefaults.standard.set(true, forKey: ConfigManager.trackingActiveKey)
     trackingStats.onTrackingStart()
     locationClient.start()
     motionDetector.start()
@@ -546,6 +564,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       return
     }
     isEnabled = false
+    UserDefaults.standard.set(false, forKey: ConfigManager.trackingActiveKey)
     trackingStats.onTrackingStop()
     locationClient.stop()
     motionDetector.stop()
@@ -553,6 +572,26 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
     emitEnabledChange(false)
     stopHeartbeatTimer()
     stopBackgroundRefresh()
+  }
+
+  /// Cold-start reconciliation: if the process was killed while tracking was active
+  /// (e.g. the user swiped the app away under `stopOnTerminate:false`, and
+  /// `startMonitoringSignificantLocationChanges` later relaunched us), the persisted
+  /// flag is still `true`. Re-arm tracking so that `Locus.isTracking()` reports
+  /// accurately and locations keep flowing after the new process starts.
+  /// Silent no-op when permissions were revoked or nothing was active.
+  func maybeResumePersistedTracking() {
+    guard UserDefaults.standard.bool(forKey: ConfigManager.trackingActiveKey) else { return }
+    if isEnabled { return }
+    let auth = locationClient.getAuthorizationStatus()
+    guard auth == .authorizedAlways || auth == .authorizedWhenInUse else {
+      // Permission was revoked while we were dead; clear stale flag to avoid retry loops.
+      NSLog("[locus] maybeResumePersistedTracking: tracking flag set but authorization is \(auth.rawValue) — clearing flag")
+      UserDefaults.standard.set(false, forKey: ConfigManager.trackingActiveKey)
+      return
+    }
+    NSLog("[locus] maybeResumePersistedTracking: re-arming tracking after process restart (bg_tracking_active=true)")
+    startTracking()
   }
 
   func buildState() -> [String: Any] {

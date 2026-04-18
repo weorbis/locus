@@ -81,6 +81,13 @@ class ConfigManager {
     static let stopOnTerminateKey = "bg_stop_on_terminate"
     static let enableHeadlessKey = "bg_enable_headless"
     static let lastConfigKey = "bg_last_config"
+
+    /// UserDefaults key recording whether tracking is currently active. Matches the
+    /// Android `ConfigManager.KEY_TRACKING_ACTIVE` constant. Read on process cold start
+    /// to re-arm tracking after the OS reaped a background process (e.g. the user
+    /// swiped the app away and CoreLocation later relaunched it via Significant
+    /// Location Changes).
+    static let trackingActiveKey = "bg_tracking_active"
     
     init() {
         // Load persisted critical flags

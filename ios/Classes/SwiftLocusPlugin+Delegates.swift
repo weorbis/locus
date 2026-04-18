@@ -208,7 +208,14 @@ extension SwiftLocusPlugin {
       lastLocation = location
     }
 
-    if configManager.startOnBoot && !isEnabled {
+    // Re-arm tracking on the first location after a process relaunch if either:
+    //   - startOnBoot is set (legacy trigger), OR
+    //   - tracking was previously active (persisted flag from a prior startTracking).
+    // The persisted-flag branch covers stopOnTerminate:false cases where
+    // startMonitoringSignificantLocationChanges relaunched us — this is the iOS
+    // equivalent of Android's soft-detach survival.
+    if !isEnabled,
+       configManager.startOnBoot || UserDefaults.standard.bool(forKey: ConfigManager.trackingActiveKey) {
       startTracking()
     }
   }
