@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **Android: Tracking stops when app is closed despite `foregroundService: true` (#34)** — `LocusPlugin.onDetachedFromEngine` unconditionally released native resources and tore down the foreground service whenever the Flutter UI detached (swipe-away or normal destroy), regardless of `stopOnTerminate`. This violated the documented "always-on" contract (`stopOnTerminate:false + enableHeadless:true + foregroundService:true`). The detach path now chooses between a *soft* detach (keep the foreground service + native managers alive and reclaim ownership on the next primary attach) and a *hard* detach (full teardown — the previous behavior), based on the live tracking state. `LocationTracker.release()` has been split into `releaseAll()` (hard teardown) and `releaseListeners()` (soft detach) with an idempotent `resumeTracking()` for takeover.
+- **Android: `ForegroundService` did not survive task removal** — Added `onTaskRemoved` override that no-ops instead of inheriting the default stop behavior. Combined with `START_STICKY` and the soft-detach path, tracking now survives the user swiping the app away from recents on Samsung One UI, Xiaomi MIUI, and other OEMs with aggressive task killers.
+- **Android/iOS: `Locus.isTracking()` returns `false` after process relaunch (#34)** — Tracking state was kept in a process-lifetime in-memory field only, so after the OS reaped a background process (or the user force-stopped and reopened), `isTracking()` would return `false` even when the foreground service / significant-location-change subscription was alive. Tracking state is now persisted to `bg_tracking_active` in `SharedPreferences` / `UserDefaults` on every `start`/`stop` and reconciled on `onAttachedToEngine` (Android) and plugin init (iOS): if the flag is set and permissions are intact, tracking is re-armed automatically. iOS also replaces the previous `startOnBoot`-only re-arm condition in the location delegate with a broader check that covers `stopOnTerminate:false` relaunches.
+
 ## [2.2.2] - 2026-04-05
 
 ### Breaking
