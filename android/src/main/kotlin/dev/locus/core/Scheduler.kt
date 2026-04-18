@@ -6,10 +6,18 @@ import java.time.LocalTime
 
 class Scheduler(
     private val config: ConfigManager,
-    private val listener: SchedulerListener?
+    listener: SchedulerListener?
 ) {
     fun interface SchedulerListener {
         fun onScheduleCheck(shouldBeEnabled: Boolean): Boolean
+    }
+
+    @Volatile
+    private var listener: SchedulerListener? = listener
+
+    /** Swaps the listener. Used on primary-plugin takeover after soft detach. */
+    fun setListener(listener: SchedulerListener?) {
+        this.listener = listener
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())

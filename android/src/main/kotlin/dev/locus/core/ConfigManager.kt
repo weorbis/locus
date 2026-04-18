@@ -12,6 +12,17 @@ class ConfigManager(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences(LocusPlugin.PREFS_NAME, Context.MODE_PRIVATE)
 
+    companion object {
+        /**
+         * SharedPreferences key that records whether tracking is currently active.
+         * Set to `true` inside [LocationTracker.startTracking] and `false` inside
+         * [LocationTracker.stopTracking]. Read on cold start to reconcile the
+         * in-memory `enabled` flag with on-disk reality so that [Locus.isTracking]
+         * reports correctly after process relaunch.
+         */
+        const val KEY_TRACKING_ACTIVE = "bg_tracking_active"
+    }
+
     init {
         restorePersistedConfig()
     }
@@ -202,6 +213,22 @@ class ConfigManager(context: Context) {
         } catch (e: JSONException) {
             emptyMap()
         }
+    }
+
+    /**
+     * Persists whether tracking is currently active. Used to reconcile the in-memory
+     * `LocationTracker.enabled` flag with on-disk reality after a process restart:
+     * if the process was killed while tracking was active (e.g. the user swiped the
+     * app away and the OS later reaped the process), the flag stays `true` and
+     * `onAttachedToEngine` re-arms tracking.
+     */
+    fun setTrackingActive(active: Boolean) {
+        prefs.edit().putBoolean(KEY_TRACKING_ACTIVE, active).apply()
+    }
+
+    /** @see setTrackingActive */
+    fun isTrackingActivePersisted(): Boolean {
+        return prefs.getBoolean(KEY_TRACKING_ACTIVE, false)
     }
 
     private fun restorePersistedConfig() {

@@ -28,8 +28,22 @@ class SyncManager(
     private val config: ConfigManager,
     private val locationStore: LocationStore,
     private val queueStore: QueueStore,
-    private val listener: SyncListener
+    listener: SyncListener
 ) {
+    @Volatile
+    private var listener: SyncListener = listener
+
+    /**
+     * Swaps the listener. Used when a new LocusPlugin instance takes over from a
+     * soft-detached primary (UI was destroyed but native tracking kept running).
+     * The listener callbacks hold references to the plugin's MethodChannel, so they
+     * must be re-bound after takeover — otherwise invokeMethod would target the
+     * dead BinaryMessenger of the destroyed engine.
+     */
+    fun setListener(listener: SyncListener) {
+        this.listener = listener
+    }
+
     interface SyncListener {
         fun onHttpEvent(eventData: Map<String, Any>)
         fun onLog(level: String, message: String)

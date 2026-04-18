@@ -30,6 +30,8 @@ class HeartbeatScheduler(
         }
     }
 
+    fun isActive(): Boolean = heartbeatRunnable != null
+
     fun restart(intervalSeconds: Int, onHeartbeat: () -> Unit) {
         stop()
         start(intervalSeconds, onHeartbeat)

@@ -77,6 +77,7 @@ class LocationTracker(
         }
 
         enabled = true
+        config.setTrackingActive(true)
         startHeartbeat()
     }
 
@@ -84,6 +85,7 @@ class LocationTracker(
         if (!enabled) return
 
         enabled = false
+        config.setTrackingActive(false)
         trackingLifecycleController.stop()
         stopHeartbeat()
     }
@@ -132,10 +134,48 @@ class LocationTracker(
     }
 
     /**
-     * Releases all resources. Call when plugin is detached.
+     * Re-asserts the in-memory [enabled] flag after a primary-plugin takeover. Native
+     * subscriptions (FusedLocationProviderClient, ActivityRecognitionClient, foreground
+     * service, heartbeat) already survived the engine detach because the managers were
+     * kept alive; this method only restores the tracker's view of state so that
+     * [buildState] reports accurately and [stopTracking] has something to undo.
      */
-    fun release() {
+    fun resumeTracking() {
+        if (enabled) return
+        enabled = true
+        if (!heartbeatScheduler.isActive()) {
+            startHeartbeat()
+        }
+    }
+
+    /**
+     * Detaches any listener wiring that would leak the current plugin instance but
+     * keeps native subscriptions (location updates, activity recognition, foreground
+     * service) running. Call this when the primary FlutterEngine detaches and
+     * `stopOnTerminate` is false — tracking must survive UI teardown.
+     *
+     * Currently a no-op because the tracker's internal listeners do not reference the
+     * LocusPlugin; it is here for symmetry with [releaseAll] and to give a named
+     * entry point for future changes.
+     */
+    fun releaseListeners() {
+        // No-op for now — managers hold no plugin references.
+    }
+
+    /**
+     * Full teardown: stops tracking and shuts the lifecycle controller down. Call
+     * this on a hard detach (stopOnTerminate=true or process shutdown).
+     */
+    fun releaseAll() {
         stopTracking()
         trackingLifecycleController.shutdown()
+    }
+
+    /**
+     * @deprecated Use [releaseAll] for explicit hard teardown semantics.
+     */
+    @Deprecated("Use releaseAll for hard teardown", ReplaceWith("releaseAll()"))
+    fun release() {
+        releaseAll()
     }
 }

@@ -88,6 +88,16 @@ class LocusPlugin : FlutterPlugin,
 
     private var isPrimary = false
 
+    /**
+     * True when this primary plugin's FlutterEngine detached while `stopOnTerminate`
+     * was false and tracking was active. In that case we keep [primaryInstance]
+     * alive so the foreground service and its managers continue running; on the next
+     * primary-engine attach, the new plugin instance detects this flag and takes
+     * over ownership of the shared managers via [takeOverFrom].
+     */
+    @Volatile
+    private var isSoftDetached = false
+
     private var methodChannel: MethodChannel? = null
     private var eventChannel: EventChannel? = null
     private var androidContext: Context? = null
@@ -118,7 +128,7 @@ class LocusPlugin : FlutterPlugin,
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         androidContext = binding.applicationContext
 
-        // Always set up method/event channels so this engine can handle calls
+        // Always set up method/event channels so this engine can handle calls.
         methodChannel = MethodChannel(binding.binaryMessenger, METHOD_CHANNEL).also {
             it.setMethodCallHandler(this)
         }
@@ -126,19 +136,85 @@ class LocusPlugin : FlutterPlugin,
             it.setStreamHandler(this)
         }
 
-        // Singleton guard: only the first engine creates native resources.
-        // Secondary engines (from flutter_background_service, geolocator, etc.)
-        // get lightweight instances that handle method calls as no-ops.
+        // Three possible paths:
+        //   1) No existing primary      → fresh init (this plugin becomes primary).
+        //   2) Soft-detached primary    → takeover (UI was destroyed with tracking alive).
+        //   3) Live secondary engine    → stay secondary (flutter_background_service etc.).
+        val predecessor: LocusPlugin?
         synchronized(LocusPlugin::class.java) {
-            if (primaryInstance != null) {
-                Log.w(TAG, "LocusPlugin: secondary engine attached - native resources owned by primary instance, skipping init")
-                isPrimary = false
-                return
+            val existing = primaryInstance
+            when {
+                existing == null -> {
+                    predecessor = null
+                    primaryInstance = this
+                    isPrimary = true
+                }
+                existing === this -> {
+                    // Defensive: same instance re-attached (shouldn't happen, but be safe).
+                    predecessor = null
+                    isPrimary = true
+                    isSoftDetached = false
+                }
+                existing.isSoftDetached -> {
+                    predecessor = existing
+                    primaryInstance = this
+                    isPrimary = true
+                }
+                else -> {
+                    Log.w(TAG, "LocusPlugin: secondary engine attached - native resources owned by primary instance, skipping init")
+                    isPrimary = false
+                    return
+                }
             }
-            primaryInstance = this
-            isPrimary = true
         }
 
+        if (predecessor != null) {
+            Log.i(TAG, "LocusPlugin: taking over from soft-detached primary (tracking kept alive during UI teardown)")
+            takeOverFrom(predecessor)
+            predecessor.clearSoftDetachedState()
+        } else if (configManager == null) {
+            // Fresh init (no existing primary to inherit from).
+            initNativeResources()
+            reconcilePersistedTrackingState()
+        }
+
+        if (prefs != null && !isListenerRegistered) {
+            prefs?.registerOnSharedPreferenceChangeListener(this)
+            isListenerRegistered = true
+        }
+    }
+
+    /**
+     * Cold-start reconciliation: if the process was killed while tracking was active
+     * (e.g. swipe-away under a stopOnTerminate:false config followed by OS reap, or
+     * force-stop), the persisted flag is still `true`. Re-arm tracking so that
+     * [Locus.isTracking] reports accurately and locations keep flowing on the new
+     * process. Silent no-op when permissions were revoked or nothing was active.
+     */
+    private fun reconcilePersistedTrackingState() {
+        val config = configManager ?: return
+        val tracker = locationTracker ?: return
+        val client = locationClient ?: return
+
+        if (!config.isTrackingActivePersisted()) return
+        if (tracker.isEnabled()) return
+        if (!client.hasPermission()) {
+            Log.w(TAG, "reconcilePersistedTrackingState: tracking flag is set but location permission is missing — clearing flag")
+            config.setTrackingActive(false)
+            return
+        }
+
+        Log.i(TAG, "reconcilePersistedTrackingState: re-arming tracking after process restart (bg_tracking_active=true)")
+        tracker.startTracking()
+    }
+
+    /**
+     * Creates all native managers for a fresh primary plugin. Called exactly once per
+     * process on first primary attach. A second primary attach after a hard detach
+     * (process still alive, stopOnTerminate=true or nothing was tracking) will also
+     * land here.
+     */
+    private fun initNativeResources() {
         prefs = androidContext?.let { it.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
         // IMPORTANT: Always start with privacy mode disabled on fresh plugin attach.
@@ -158,16 +234,16 @@ class LocusPlugin : FlutterPlugin,
 
         // Log the initial privacy mode state for debugging
         Log.d(TAG, "LocusPlugin initialized - privacyModeEnabled=${privacyModeEnabled} (always false on attach)")
-        
+
         val state = StateManager(context)
         stateManager = state
-        
+
         val stats = TrackingStats(context)
         trackingStats = stats
-        
+
         val logs = LogManager(config, state.logStore)
         logManager = logs
-        
+
         val headless = HeadlessDispatcher(context, config, preferences)
         headlessDispatcher = headless
         val headlessHeaders = HeadlessHeadersDispatcher(context, config, preferences)
@@ -175,33 +251,23 @@ class LocusPlugin : FlutterPlugin,
 
         val headlessValidation = HeadlessValidationDispatcher(context, config, preferences)
         headlessValidationDispatcher = headlessValidation
-        
+
         val events = EventDispatcher(headless)
         eventDispatcher = events
 
-        systemMonitor = SystemMonitor(context, object : SystemMonitor.Listener {
-            override fun onConnectivityChange(payload: Map<String, Any>) {
-                emitConnectivityChange(payload)
-            }
-
-            override fun onPowerSaveChange(enabled: Boolean) {
-                emitPowerSaveChange(enabled)
-            }
-        })
+        systemMonitor = SystemMonitor(context, buildSystemMonitorListener())
 
         backgroundTaskManager = BackgroundTaskManager(context)
-        
+
         val fgController = ForegroundServiceController(context)
         foregroundServiceController = fgController
 
-        val geofence = GeofenceManager(context) { added, removed ->
-            emitGeofencesChange(added, removed)
-        }
+        val geofence = GeofenceManager(context, buildGeofenceListener())
         geofenceManager = geofence
-        
+
         val locClient = LocationClient(context, config)
         locationClient = locClient
-        
+
         val motion = MotionManager(context, config)
         motionManager = motion
 
@@ -210,148 +276,7 @@ class LocusPlugin : FlutterPlugin,
             config,
             state.locationStore,
             state.queueStore,
-            object : SyncManager.SyncListener {
-                override fun onHttpEvent(eventData: Map<String, Any>) {
-                    events.sendEvent(eventData)
-                }
-
-                override fun onLog(level: String, message: String) {
-                    logs.log(level, message)
-                }
-
-                override fun onSyncRequest() {
-                    stats.onSyncRequest()
-                }
-
-                override fun buildSyncBody(
-                    locations: List<Map<String, Any>>,
-                    extras: Map<String, Any>,
-                    callback: (JSONObject?) -> Unit
-                ) {
-                    val channel = methodChannel
-                    if (channel == null) {
-                        callback(null)
-                        return
-                    }
-                    // Must invoke on main thread for Flutter MethodChannel
-                    mainHandler.post {
-                        val args = mapOf(
-                            "locations" to locations,
-                            "extras" to extras
-                        )
-                        channel.invokeMethod("buildSyncBody", args, object : MethodChannel.Result {
-                            override fun success(result: Any?) {
-                                @Suppress("UNCHECKED_CAST")
-                                val body = when (result) {
-                                    is Map<*, *> -> JSONObject(result as Map<String, Any>)
-                                    is String -> try { JSONObject(result) } catch (e: Exception) { null }
-                                    else -> null
-                                }
-                                callback(body)
-                            }
-                            override fun error(code: String, message: String?, details: Any?) {
-                                Log.e(TAG, "buildSyncBody error: $code - $message")
-                                callback(null)
-                            }
-                            override fun notImplemented() {
-                                callback(null)
-                            }
-                        })
-                    }
-                }
-
-                override fun onPreSyncValidation(
-                    locations: List<Map<String, Any>>,
-                    extras: Map<String, Any>,
-                    callback: (Boolean) -> Unit
-                ) {
-                    val channel = methodChannel
-                    if (channel == null) {
-                        // No method channel available (app terminated).
-                        // Use headless validation if a callback is registered, otherwise proceed with sync.
-                        val headlessValidator = headlessValidationDispatcher
-                        if (headlessValidator != null && headlessValidator.isAvailable()) {
-                            Log.d(TAG, "Using headless validation for pre-sync check")
-                            headlessValidator.validate(locations, extras, callback)
-                        } else {
-                            // No headless validation available, proceed with sync
-                            callback(true)
-                        }
-                        return
-                    }
-                    mainHandler.post {
-                        val args = mapOf(
-                            "locations" to locations,
-                            "extras" to extras
-                        )
-                        channel.invokeMethod("validatePreSync", args, object : MethodChannel.Result {
-                            override fun success(result: Any?) {
-                                callback(result as? Boolean ?: true)
-                            }
-                            override fun error(code: String, message: String?, details: Any?) {
-                                Log.e(TAG, "validatePreSync error: $code - $message")
-                                // Proceed on error to avoid blocking sync permanently
-                                callback(true)
-                            }
-                            override fun notImplemented() {
-                                callback(true)
-                            }
-                        })
-                    }
-                }
-
-                override fun onHeadersRefresh(callback: (Map<String, String>?) -> Unit) {
-                    val channel = methodChannel
-                    if (channel != null) {
-                        var responded = false
-                        val timeoutRunnable = Runnable {
-                            if (!responded) {
-                                responded = true
-                                Log.w(TAG, "refreshDynamicHeaders timed out after 10s")
-                                callback(null)
-                            }
-                        }
-                        mainHandler.postDelayed(timeoutRunnable, 10_000L)
-                        mainHandler.post {
-                            channel.invokeMethod("refreshDynamicHeaders", null, object : MethodChannel.Result {
-                                override fun success(result: Any?) {
-                                    if (responded) return
-                                    responded = true
-                                    mainHandler.removeCallbacks(timeoutRunnable)
-                                    @Suppress("UNCHECKED_CAST")
-                                    val headers = (result as? Map<*, *>)?.entries?.mapNotNull { entry ->
-                                        val key = entry.key?.toString() ?: return@mapNotNull null
-                                        val value = entry.value?.toString() ?: return@mapNotNull null
-                                        key to value
-                                    }?.toMap()
-                                    callback(headers)
-                                }
-                                override fun error(code: String, message: String?, details: Any?) {
-                                    if (responded) return
-                                    responded = true
-                                    mainHandler.removeCallbacks(timeoutRunnable)
-                                    Log.e(TAG, "refreshDynamicHeaders error: $code - $message")
-                                    callback(null)
-                                }
-                                override fun notImplemented() {
-                                    if (responded) return
-                                    responded = true
-                                    mainHandler.removeCallbacks(timeoutRunnable)
-                                    callback(null)
-                                }
-                            })
-                        }
-                        return
-                    }
-
-                    val dispatcher = headlessHeadersDispatcher
-                    if (dispatcher != null && dispatcher.isAvailable()) {
-                        dispatcher.refreshHeaders(callback)
-                    } else {
-                        callback(null)
-                    }
-                }
-            }
+            buildSyncListener()
         )
         syncManager = sync
 
@@ -423,56 +348,316 @@ class LocusPlugin : FlutterPlugin,
             events
         )
 
-        scheduler = Scheduler(config) { shouldBeEnabled ->
-            val tracker = locationTracker ?: return@Scheduler shouldBeEnabled
-            when {
-                shouldBeEnabled && !tracker.isEnabled() -> {
-                    tracker.startTracking()
-                    tracker.emitScheduleEvent()
-                    true
-                }
-                !shouldBeEnabled && tracker.isEnabled() -> {
-                    tracker.stopTracking()
-                    false
-                }
-                else -> shouldBeEnabled
-            }
-        }
+        scheduler = Scheduler(config, buildSchedulerListener())
 
         applyStoredConfig()
         systemMonitor?.registerConnectivity()
         systemMonitor?.registerPowerSave()
-
-        if (prefs != null && !isListenerRegistered) {
-            prefs?.registerOnSharedPreferenceChangeListener(this)
-            isListenerRegistered = true
-        }
     }
 
+    /**
+     * Transfers manager references from a soft-detached primary to this new primary,
+     * then rebinds the manager listeners so their callbacks reference this plugin
+     * (rather than the dead engine's MethodChannel / EventSink).
+     */
+    private fun takeOverFrom(old: LocusPlugin) {
+        androidContext = old.androidContext ?: androidContext
+        prefs = old.prefs
+        privacyModeEnabled = old.privacyModeEnabled
+
+        configManager = old.configManager
+        stateManager = old.stateManager
+        logManager = old.logManager
+        headlessDispatcher = old.headlessDispatcher
+        headlessHeadersDispatcher = old.headlessHeadersDispatcher
+        headlessValidationDispatcher = old.headlessValidationDispatcher
+        eventDispatcher = old.eventDispatcher
+        systemMonitor = old.systemMonitor
+        backgroundTaskManager = old.backgroundTaskManager
+        foregroundServiceController = old.foregroundServiceController
+        geofenceManager = old.geofenceManager
+        locationClient = old.locationClient
+        motionManager = old.motionManager
+        syncManager = old.syncManager
+        locationTracker = old.locationTracker
+        scheduler = old.scheduler
+        preferenceEventHandler = old.preferenceEventHandler
+        trackingStats = old.trackingStats
+
+        // Rebind listeners whose callbacks capture methodChannel / emit* methods of
+        // the old plugin. Without this, invokeMethod would target the dead engine.
+        systemMonitor?.setListener(buildSystemMonitorListener())
+        syncManager?.setListener(buildSyncListener())
+        geofenceManager?.setListener(buildGeofenceListener())
+        scheduler?.setListener(buildSchedulerListener())
+    }
+
+    private fun clearSoftDetachedState() {
+        isSoftDetached = false
+        isPrimary = false
+        // Drop refs so GC can reclaim this (old) plugin promptly.
+        configManager = null
+        stateManager = null
+        logManager = null
+        headlessDispatcher = null
+        headlessHeadersDispatcher = null
+        headlessValidationDispatcher = null
+        eventDispatcher = null
+        systemMonitor = null
+        backgroundTaskManager = null
+        foregroundServiceController = null
+        geofenceManager = null
+        locationClient = null
+        motionManager = null
+        syncManager = null
+        locationTracker = null
+        scheduler = null
+        preferenceEventHandler = null
+        trackingStats = null
+        prefs = null
+        methodChannel = null
+        eventChannel = null
+        androidContext = null
+    }
+
+    private fun buildSystemMonitorListener(): SystemMonitor.Listener =
+        object : SystemMonitor.Listener {
+            override fun onConnectivityChange(payload: Map<String, Any>) {
+                emitConnectivityChange(payload)
+            }
+
+            override fun onPowerSaveChange(enabled: Boolean) {
+                emitPowerSaveChange(enabled)
+            }
+        }
+
+    private fun buildGeofenceListener(): GeofenceManager.GeofenceListener =
+        GeofenceManager.GeofenceListener { added, removed ->
+            emitGeofencesChange(added, removed)
+        }
+
+    private fun buildSchedulerListener(): Scheduler.SchedulerListener =
+        Scheduler.SchedulerListener { shouldBeEnabled ->
+            val tracker = locationTracker
+            if (tracker == null) {
+                shouldBeEnabled
+            } else {
+                when {
+                    shouldBeEnabled && !tracker.isEnabled() -> {
+                        tracker.startTracking()
+                        tracker.emitScheduleEvent()
+                        true
+                    }
+                    !shouldBeEnabled && tracker.isEnabled() -> {
+                        tracker.stopTracking()
+                        false
+                    }
+                    else -> shouldBeEnabled
+                }
+            }
+        }
+
+    private fun buildSyncListener(): SyncManager.SyncListener =
+        object : SyncManager.SyncListener {
+            override fun onHttpEvent(eventData: Map<String, Any>) {
+                eventDispatcher?.sendEvent(eventData)
+            }
+
+            override fun onLog(level: String, message: String) {
+                logManager?.log(level, message)
+            }
+
+            override fun onSyncRequest() {
+                trackingStats?.onSyncRequest()
+            }
+
+            override fun buildSyncBody(
+                locations: List<Map<String, Any>>,
+                extras: Map<String, Any>,
+                callback: (JSONObject?) -> Unit
+            ) {
+                val channel = methodChannel
+                if (channel == null) {
+                    callback(null)
+                    return
+                }
+                // Must invoke on main thread for Flutter MethodChannel
+                mainHandler.post {
+                    val args = mapOf(
+                        "locations" to locations,
+                        "extras" to extras
+                    )
+                    channel.invokeMethod("buildSyncBody", args, object : MethodChannel.Result {
+                        override fun success(result: Any?) {
+                            @Suppress("UNCHECKED_CAST")
+                            val body = when (result) {
+                                is Map<*, *> -> JSONObject(result as Map<String, Any>)
+                                is String -> try { JSONObject(result) } catch (e: Exception) { null }
+                                else -> null
+                            }
+                            callback(body)
+                        }
+                        override fun error(code: String, message: String?, details: Any?) {
+                            Log.e(TAG, "buildSyncBody error: $code - $message")
+                            callback(null)
+                        }
+                        override fun notImplemented() {
+                            callback(null)
+                        }
+                    })
+                }
+            }
+
+            override fun onPreSyncValidation(
+                locations: List<Map<String, Any>>,
+                extras: Map<String, Any>,
+                callback: (Boolean) -> Unit
+            ) {
+                val channel = methodChannel
+                if (channel == null) {
+                    // No method channel available (engine detached or app terminated).
+                    // Use headless validation if a callback is registered, otherwise proceed.
+                    val headlessValidator = headlessValidationDispatcher
+                    if (headlessValidator != null && headlessValidator.isAvailable()) {
+                        Log.d(TAG, "Using headless validation for pre-sync check")
+                        headlessValidator.validate(locations, extras, callback)
+                    } else {
+                        callback(true)
+                    }
+                    return
+                }
+                mainHandler.post {
+                    val args = mapOf(
+                        "locations" to locations,
+                        "extras" to extras
+                    )
+                    channel.invokeMethod("validatePreSync", args, object : MethodChannel.Result {
+                        override fun success(result: Any?) {
+                            callback(result as? Boolean ?: true)
+                        }
+                        override fun error(code: String, message: String?, details: Any?) {
+                            Log.e(TAG, "validatePreSync error: $code - $message")
+                            // Proceed on error to avoid blocking sync permanently
+                            callback(true)
+                        }
+                        override fun notImplemented() {
+                            callback(true)
+                        }
+                    })
+                }
+            }
+
+            override fun onHeadersRefresh(callback: (Map<String, String>?) -> Unit) {
+                val channel = methodChannel
+                if (channel != null) {
+                    var responded = false
+                    val timeoutRunnable = Runnable {
+                        if (!responded) {
+                            responded = true
+                            Log.w(TAG, "refreshDynamicHeaders timed out after 10s")
+                            callback(null)
+                        }
+                    }
+                    mainHandler.postDelayed(timeoutRunnable, 10_000L)
+                    mainHandler.post {
+                        channel.invokeMethod("refreshDynamicHeaders", null, object : MethodChannel.Result {
+                            override fun success(result: Any?) {
+                                if (responded) return
+                                responded = true
+                                mainHandler.removeCallbacks(timeoutRunnable)
+                                @Suppress("UNCHECKED_CAST")
+                                val headers = (result as? Map<*, *>)?.entries?.mapNotNull { entry ->
+                                    val key = entry.key?.toString() ?: return@mapNotNull null
+                                    val value = entry.value?.toString() ?: return@mapNotNull null
+                                    key to value
+                                }?.toMap()
+                                callback(headers)
+                            }
+                            override fun error(code: String, message: String?, details: Any?) {
+                                if (responded) return
+                                responded = true
+                                mainHandler.removeCallbacks(timeoutRunnable)
+                                Log.e(TAG, "refreshDynamicHeaders error: $code - $message")
+                                callback(null)
+                            }
+                            override fun notImplemented() {
+                                if (responded) return
+                                responded = true
+                                mainHandler.removeCallbacks(timeoutRunnable)
+                                callback(null)
+                            }
+                        })
+                    }
+                    return
+                }
+
+                val dispatcher = headlessHeadersDispatcher
+                if (dispatcher != null && dispatcher.isAvailable()) {
+                    dispatcher.refreshHeaders(callback)
+                } else {
+                    callback(null)
+                }
+            }
+        }
+
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        // Always clean up this engine's channels
+        // Secondary engines always tear down their own channels and do nothing else.
+        // They must NOT touch shared native resources.
+        if (!isPrimary) {
+            eventChannel?.setStreamHandler(null)
+            methodChannel?.setMethodCallHandler(null)
+            Log.d(TAG, "LocusPlugin: secondary engine detached - skipping native resource cleanup")
+            return
+        }
+
+        // Primary engine detach. Choose soft vs hard teardown based on the documented
+        // always-on contract: when stopOnTerminate=false AND tracking is active, we
+        // MUST keep the foreground service + managers alive so locations keep flowing
+        // while the UI is gone. The next primary attach reclaims ownership via
+        // takeOverFrom() (see onAttachedToEngine).
+        val config = configManager
+        val tracker = locationTracker
+        val shouldSoftDetach = config != null &&
+            !config.stopOnTerminate &&
+            tracker?.isEnabled() == true
+
+        if (shouldSoftDetach) {
+            Log.i(TAG, "LocusPlugin: soft detach - keeping native resources alive (stopOnTerminate=false, tracking active)")
+            // The BinaryMessenger is about to die; clear channel handlers so the framework
+            // doesn't dispatch to us, and null the sink so events route to headless.
+            eventChannel?.setStreamHandler(null)
+            methodChannel?.setMethodCallHandler(null)
+            eventDispatcher?.setEventSink(null)
+            // The prefs listener references `this` and must be unregistered while the
+            // plugin instance is "quiet"; the next primary re-registers its own.
+            if (prefs != null && isListenerRegistered) {
+                prefs?.unregisterOnSharedPreferenceChangeListener(this)
+                isListenerRegistered = false
+            }
+            // Mark this instance as the retained primary so the next attach can take over.
+            isSoftDetached = true
+            // NB: primaryInstance is intentionally NOT cleared — this plugin keeps the
+            // managers alive (via field references) until takeover.
+            tracker?.releaseListeners()
+            return
+        }
+
+        Log.i(TAG, "LocusPlugin: hard detach - releasing native resources")
         eventChannel?.setStreamHandler(null)
         methodChannel?.setMethodCallHandler(null)
 
-        // Only the primary instance should clean up native resources.
-        // Secondary engines (from flutter_background_service etc.) must NOT
-        // tear down shared resources like Activity Recognition PendingIntents,
-        // connectivity listeners, or database connections.
         synchronized(LocusPlugin::class.java) {
-            if (!isPrimary) {
-                Log.d(TAG, "LocusPlugin: secondary engine detached - skipping native resource cleanup")
-                return
+            if (primaryInstance === this) {
+                primaryInstance = null
             }
-            primaryInstance = null
+            isPrimary = false
         }
 
-        configManager?.let { config ->
-            if (config.stopOnTerminate) {
-                locationTracker?.stopTracking()
-            }
+        if (config?.stopOnTerminate == true) {
+            tracker?.stopTracking()
         }
         motionManager?.stop()
-        locationTracker?.release()
+        locationTracker?.releaseAll()
         systemMonitor?.unregisterConnectivity()
         systemMonitor?.unregisterPowerSave()
         scheduler?.stop()
