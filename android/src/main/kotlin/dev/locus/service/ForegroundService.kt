@@ -202,5 +202,22 @@ class ForegroundService : Service() {
         super.onDestroy()
     }
 
+    /**
+     * Called when the user swipes the task away from the recents screen. The default
+     * behavior on many OEMs (notably Samsung One UI and Xiaomi MIUI) is to stop the
+     * associated service; we override with a no-op so that tracking survives task
+     * removal. Combined with [START_STICKY] in [onStartCommand] and the soft-detach
+     * path in `LocusPlugin.onDetachedFromEngine`, this upholds the documented
+     * `stopOnTerminate:false + foregroundService:true` always-on contract.
+     *
+     * Callers that want tracking to stop on swipe-away should configure
+     * `stopOnTerminate:true`, which routes through `stopTracking()` → explicit
+     * `stopService(...)` — the only path that should end this service.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.i(TAG, "onTaskRemoved: task swiped away - keeping foreground service alive")
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 }
