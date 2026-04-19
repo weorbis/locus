@@ -11,23 +11,11 @@ import android.os.PowerManager
 
 class SystemMonitor(
     private val context: Context,
-    listener: Listener?
+    private val listener: Listener?
 ) {
     interface Listener {
         fun onConnectivityChange(payload: Map<String, Any>)
         fun onPowerSaveChange(enabled: Boolean)
-    }
-
-    @Volatile
-    private var listener: Listener? = listener
-
-    /**
-     * Swaps the listener without touching registered system callbacks. Used when a new
-     * LocusPlugin instance takes over from a soft-detached primary (see
-     * LocusPlugin.onAttachedToEngine).
-     */
-    fun setListener(listener: Listener?) {
-        this.listener = listener
     }
 
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager

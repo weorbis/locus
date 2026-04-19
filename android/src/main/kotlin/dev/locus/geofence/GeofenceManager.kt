@@ -20,7 +20,7 @@ import org.json.JSONObject
 
 class GeofenceManager(
     private val context: Context,
-    listener: GeofenceListener?
+    private val listener: GeofenceListener?
 ) {
     private val geofencingClient: GeofencingClient =
         LocationServices.getGeofencingClient(context)
@@ -34,14 +34,6 @@ class GeofenceManager(
 
     fun interface GeofenceListener {
         fun onGeofencesChanged(addedIds: List<String>, removedIds: List<String>)
-    }
-
-    @Volatile
-    private var listener: GeofenceListener? = listener
-
-    /** Swaps the listener. Used on primary-plugin takeover after soft detach. */
-    fun setListener(listener: GeofenceListener?) {
-        this.listener = listener
     }
 
     private fun hasLocationPermission(): Boolean {
