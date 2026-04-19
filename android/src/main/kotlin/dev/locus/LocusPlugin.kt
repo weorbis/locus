@@ -98,6 +98,18 @@ class LocusPlugin : FlutterPlugin,
     @Volatile
     private var isSoftDetached = false
 
+    /**
+     * Set on a new plugin instance when its [onAttachedToEngine] finds a
+     * soft-detached predecessor but cannot yet confirm that this engine is the UI
+     * engine (background isolates created by [HeadlessService] etc. also attach
+     * LocusPlugin via `GeneratedPluginRegistrant`). Takeover is deferred to
+     * [onAttachedToActivity]; if that callback never fires (pure-background engine),
+     * the predecessor keeps ownership of the managers and this plugin stays in a
+     * no-op secondary state until its own engine detaches.
+     */
+    @Volatile
+    private var pendingPredecessor: LocusPlugin? = null
+
     private var methodChannel: MethodChannel? = null
     private var eventChannel: EventChannel? = null
     private var androidContext: Context? = null
@@ -136,29 +148,31 @@ class LocusPlugin : FlutterPlugin,
             it.setStreamHandler(this)
         }
 
-        // Three possible paths:
+        // Four possible paths:
         //   1) No existing primary      → fresh init (this plugin becomes primary).
-        //   2) Soft-detached primary    → takeover (UI was destroyed with tracking alive).
-        //   3) Live secondary engine    → stay secondary (flutter_background_service etc.).
-        val predecessor: LocusPlugin?
+        //   2) Soft-detached predecessor, and this IS the UI engine → defer takeover
+        //      to onAttachedToActivity (only UI engines get an Activity binding;
+        //      background isolates from HeadlessService must never hijack primary).
+        //   3) Same instance re-attached → defensive no-op.
+        //   4) Live secondary engine    → stay secondary (flutter_background_service etc.).
         synchronized(LocusPlugin::class.java) {
             val existing = primaryInstance
             when {
                 existing == null -> {
-                    predecessor = null
                     primaryInstance = this
                     isPrimary = true
                 }
                 existing === this -> {
-                    // Defensive: same instance re-attached (shouldn't happen, but be safe).
-                    predecessor = null
                     isPrimary = true
                     isSoftDetached = false
                 }
                 existing.isSoftDetached -> {
-                    predecessor = existing
-                    primaryInstance = this
-                    isPrimary = true
+                    // Provisional: we don't yet know if this is a UI engine or a
+                    // HeadlessService background isolate. Both call onAttachedToEngine
+                    // identically. Wait for onAttachedToActivity to confirm UI.
+                    pendingPredecessor = existing
+                    isPrimary = false
+                    return
                 }
                 else -> {
                     Log.w(TAG, "LocusPlugin: secondary engine attached - native resources owned by primary instance, skipping init")
@@ -168,15 +182,41 @@ class LocusPlugin : FlutterPlugin,
             }
         }
 
-        if (predecessor != null) {
-            Log.i(TAG, "LocusPlugin: taking over from soft-detached primary (tracking kept alive during UI teardown)")
-            takeOverFrom(predecessor)
-            predecessor.clearSoftDetachedState()
-        } else if (configManager == null) {
-            // Fresh init (no existing primary to inherit from).
+        if (configManager == null) {
             initNativeResources()
             reconcilePersistedTrackingState()
         }
+
+        if (prefs != null && !isListenerRegistered) {
+            prefs?.registerOnSharedPreferenceChangeListener(this)
+            isListenerRegistered = true
+        }
+    }
+
+    /**
+     * Completes a deferred takeover from a soft-detached predecessor. Fires only for
+     * UI FlutterEngines (background isolates created via [FlutterEngine(Context)] do
+     * not receive activity bindings). See [onAttachedToEngine] path #2.
+     */
+    private fun finalizeTakeOver() {
+        val pending = pendingPredecessor ?: return
+        val takeOver: Boolean = synchronized(LocusPlugin::class.java) {
+            if (primaryInstance === pending && pending.isSoftDetached) {
+                primaryInstance = this
+                isPrimary = true
+                pendingPredecessor = null
+                true
+            } else {
+                // Predecessor was reclaimed by another UI attach, or process died.
+                pendingPredecessor = null
+                false
+            }
+        }
+        if (!takeOver) return
+
+        Log.i(TAG, "LocusPlugin: taking over from soft-detached predecessor (UI re-attached)")
+        takeOverFrom(pending)
+        pending.clearSoftDetachedState()
 
         if (prefs != null && !isListenerRegistered) {
             prefs?.registerOnSharedPreferenceChangeListener(this)
@@ -393,6 +433,14 @@ class LocusPlugin : FlutterPlugin,
     }
 
     private fun clearSoftDetachedState() {
+        // Unregister the prefs listener from the old (this) plugin BEFORE the new
+        // primary registers its own. Done here — and not in onDetachedFromEngine's
+        // soft-detach path — so broadcast-receiver writes that arrive between
+        // detach and takeover are delivered to the shared PreferenceEventHandler.
+        if (prefs != null && isListenerRegistered) {
+            prefs?.unregisterOnSharedPreferenceChangeListener(this)
+            isListenerRegistered = false
+        }
         isSoftDetached = false
         isPrimary = false
         // Drop refs so GC can reclaim this (old) plugin promptly.
@@ -628,13 +676,12 @@ class LocusPlugin : FlutterPlugin,
             eventChannel?.setStreamHandler(null)
             methodChannel?.setMethodCallHandler(null)
             eventDispatcher?.setEventSink(null)
-            // The prefs listener references `this` and must be unregistered while the
-            // plugin instance is "quiet"; the next primary re-registers its own.
-            if (prefs != null && isListenerRegistered) {
-                prefs?.unregisterOnSharedPreferenceChangeListener(this)
-                isListenerRegistered = false
-            }
-            // Mark this instance as the retained primary so the next attach can take over.
+            // Keep the prefs listener REGISTERED until takeover completes. Broadcast
+            // receivers (ActivityRecognized, Geofence, NotificationAction) write
+            // transient events to SharedPreferences; unregistering here would drop any
+            // that arrive before the next primary attaches. PreferenceEventHandler
+            // holds no reference to this plugin — it routes through the shared
+            // EventDispatcher (whose headless fallback fires when eventSink is null).
             isSoftDetached = true
             // NB: primaryInstance is intentionally NOT cleared — this plugin keeps the
             // managers alive (via field references) until takeover.
@@ -689,7 +736,12 @@ class LocusPlugin : FlutterPlugin,
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
-        // No-op
+        // Activity binding only fires for UI FlutterEngines, not for background
+        // isolates spawned by HeadlessService. This is our one reliable signal
+        // that we are the UI, so a deferred takeover is safe here.
+        if (pendingPredecessor != null) {
+            finalizeTakeOver()
+        }
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
