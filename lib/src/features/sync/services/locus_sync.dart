@@ -61,8 +61,8 @@ class LocusSync {
   /// soon as the events stream attaches (via `LocusContainer.replayInitialState`
   /// / `SwiftLocusPlugin.onListen`), so late subscribers always see the truth.
   static Stream<SyncPauseState> get pauseChanges {
-    _pauseChangesController ??=
-        StreamController<SyncPauseState>.broadcast(onListen: _ensurePauseBridge);
+    _pauseChangesController ??= StreamController<SyncPauseState>.broadcast(
+        onListen: _ensurePauseBridge);
     _ensurePauseBridge();
     return _pauseChangesController!.stream;
   }
