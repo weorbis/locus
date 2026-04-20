@@ -49,6 +49,7 @@ export 'features/sync/models/connectivity_change_event.dart';
 export 'features/sync/models/http_event.dart';
 export 'features/sync/models/location_sync_backlog.dart';
 export 'features/sync/models/queue_item.dart';
+export 'features/sync/models/sync_pause_state.dart';
 
 // Tracking feature models
 export 'features/tracking/models/tracking_profile.dart';

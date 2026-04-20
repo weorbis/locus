@@ -13,6 +13,7 @@ import 'package:locus/src/features/tracking/services/locus_profiles.dart';
 import 'package:locus/src/features/geofencing/services/locus_workflows.dart';
 import 'package:locus/src/core/locus_features.dart';
 import 'package:locus/src/features/geofencing/services/locus_geofencing.dart';
+import 'package:locus/src/features/sync/services/locus_sync.dart';
 
 /// Lifecycle management of the Locus SDK.
 class LocusLifecycle {
@@ -139,6 +140,9 @@ class LocusLifecycle {
 
     // Reset LocusStreams static state
     LocusStreams.reset();
+
+    // Tear down sync pause bridge so a subsequent ready() re-attaches cleanly.
+    await LocusSync.resetPauseState();
 
     // Reset lifecycle static state
     stopLifecycleObserving();

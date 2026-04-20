@@ -65,6 +65,25 @@ abstract class SyncService {
   /// When paused, no HTTP sync requests will be sent until [resume] is called.
   bool get isPaused;
 
+  /// Why sync is paused, as last reported by native. Null when unpaused.
+  ///
+  /// Values:
+  ///   * `"app"` — explicit [pause] call (in-memory; does not persist across
+  ///     process restart).
+  ///   * `"http_401"` — backend returned 401; persists across restart via
+  ///     `ConfigManager.setSyncPauseReason` until [resume] is called or a
+  ///     subsequent 2xx response clears it.
+  ///   * `"http_403"` — same semantics as 401.
+  String? get pauseReason;
+
+  /// Broadcast stream that fires on every pause-state transition (pause/resume,
+  /// 401/403 auto-pause, 2xx recovery, and the initial replay when a Dart
+  /// listener first attaches).
+  ///
+  /// Subscribe from UI code to render "sync paused" / "re-authentication
+  /// required" indicators reactively without polling [isPaused].
+  Stream<SyncPauseState> get pauseChanges;
+
   /// Triggers an immediate sync of pending locations.
   Future<bool> now();
 

@@ -132,6 +132,102 @@ void main() {
     expect(result, isTrue);
     expect(mock.calls, contains('sync'));
   });
+
+  group('Reactive pause-state stream', () {
+    late MockLocus mockLocus;
+    late SyncServiceImpl service;
+
+    setUp(() {
+      mockLocus = MockLocus();
+      service = SyncServiceImpl(() => mockLocus);
+    });
+
+    tearDown(() async {
+      await mockLocus.dispose();
+    });
+
+    test(
+        'pause() emits a SyncPauseState(isPaused: true, reason: "app") on '
+        'pauseChanges and updates pauseReason synchronously', () async {
+      final events = <SyncPauseState>[];
+      final sub = service.pauseChanges.listen(events.add);
+
+      expect(service.isPaused, isFalse);
+      expect(service.pauseReason, isNull);
+
+      await service.pause();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(service.isPaused, isTrue);
+      expect(service.pauseReason, 'app');
+      expect(events, hasLength(1));
+      expect(events.single.isPaused, isTrue);
+      expect(events.single.reason, 'app');
+      expect(events.single.isAuthFailure, isFalse);
+
+      await sub.cancel();
+    });
+
+    test(
+        'resume() emits a SyncPauseState(isPaused: false) and clears the '
+        'reason', () async {
+      await service.pause();
+      final events = <SyncPauseState>[];
+      final sub = service.pauseChanges.listen(events.add);
+
+      await service.resume();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(service.isPaused, isFalse);
+      expect(service.pauseReason, isNull);
+      expect(events, hasLength(1));
+      expect(events.single.isPaused, isFalse);
+      expect(events.single.reason, isNull);
+
+      await sub.cancel();
+    });
+
+    test(
+        'simulated native 401 auto-pause propagates via emitSyncPauseChange — '
+        'UI subscribers observe isAuthFailure without having called pause()',
+        () async {
+      final events = <SyncPauseState>[];
+      final sub = service.pauseChanges.listen(events.add);
+
+      // Simulate the native side receiving a 401 mid-session and pushing the
+      // new state over the event channel. The Dart cache must update without
+      // the host app doing anything.
+      mockLocus.emitSyncPauseChange(
+        const SyncPauseState(isPaused: true, reason: 'http_401'),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(service.isPaused, isTrue);
+      expect(service.pauseReason, 'http_401');
+      expect(events.last.isAuthFailure, isTrue,
+          reason: 'isAuthFailure must distinguish 401/403 from "app" pauses');
+
+      await sub.cancel();
+    });
+
+    test(
+        'repeated pause() calls are idempotent — only one event fires and '
+        'state does not churn', () async {
+      final events = <SyncPauseState>[];
+      final sub = service.pauseChanges.listen(events.add);
+
+      await service.pause();
+      await service.pause();
+      await service.pause();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(events, hasLength(1),
+          reason:
+              'Duplicate pause() should be a no-op and emit exactly once to avoid UI flicker');
+
+      await sub.cancel();
+    });
+  });
 }
 
 /// Stateful mock that simulates the native SyncManager's pause state. The
@@ -166,6 +262,11 @@ class _StatefulSyncMock {
           'lastSuccessAt': null,
           'lastFailureReason': nativePaused ? 'http_401' : null,
           'groups': <Map<String, Object?>>[],
+        };
+      case 'getSyncPauseState':
+        return <String, Object?>{
+          'isPaused': nativePaused,
+          'reason': nativePaused ? 'http_401' : null,
         };
       case 'ready':
       case 'setConfig':

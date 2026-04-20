@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show CallbackHandle, PluginUtilities;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:locus/src/models.dart';
+import 'package:locus/src/shared/events.dart';
 import 'package:locus/src/core/locus_headless.dart' show headlessDispatcher;
 import 'package:locus/src/core/locus_interface.dart';
 import 'package:locus/src/core/locus_channels.dart';
+import 'package:locus/src/core/locus_streams.dart';
 import 'package:locus/src/services/sync_service.dart';
 
 /// Sync operations.
@@ -32,12 +35,66 @@ class LocusSync {
   /// or by an explicit [pause] call from the host app. Domain gating belongs in
   /// [setPreSyncValidator], not here.
   ///
-  /// This Dart-side flag mirrors the last-seen pause state for UX
-  /// short-circuiting; the native side is the source of truth for scheduling.
+  /// This field is kept in sync with native via the `syncPauseChange` event on
+  /// the main events stream — the native side is the single source of truth;
+  /// this is just a cached projection for synchronous reads.
   static bool _isPaused = false;
+  static String? _pauseReason;
+  static StreamController<SyncPauseState>? _pauseChangesController;
+  // ignore: cancel_subscriptions - lives for the lifetime of the plugin;
+  // released explicitly in resetPauseState() called by Locus.destroy().
+  static StreamSubscription<GeolocationEvent<dynamic>>? _pauseEventSubscription;
 
-  /// Whether sync is currently paused.
+  /// Whether sync is currently paused, as of the most recent `syncPauseChange`
+  /// event from native. The getter is synchronous so UI code can bind to it
+  /// directly; use [pauseChanges] for reactive updates.
   static bool get isPaused => _isPaused;
+
+  /// Why sync is paused, mirroring the `reason` emitted by native on the last
+  /// transition. Null when unpaused. Values: `"app"` (explicit [pause]),
+  /// `"http_401"`, `"http_403"`.
+  static String? get pauseReason => _pauseReason;
+
+  /// Broadcast stream that emits whenever the native pause state changes.
+  /// Subscribe from UI to render a pause/auth-expired indicator without polling.
+  /// A single initial event carrying the current state is emitted by native as
+  /// soon as the events stream attaches (via `LocusContainer.replayInitialState`
+  /// / `SwiftLocusPlugin.onListen`), so late subscribers always see the truth.
+  static Stream<SyncPauseState> get pauseChanges {
+    _pauseChangesController ??=
+        StreamController<SyncPauseState>.broadcast(onListen: _ensurePauseBridge);
+    _ensurePauseBridge();
+    return _pauseChangesController!.stream;
+  }
+
+  /// Subscribes (once) to the main events stream, filters for `syncPauseChange`,
+  /// updates the cached projection, and forwards to [pauseChanges] subscribers.
+  /// Idempotent — safe to call from multiple entry points (pause, resume,
+  /// pauseChanges getter).
+  static void _ensurePauseBridge() {
+    if (_pauseEventSubscription != null) return;
+    _pauseEventSubscription = LocusStreams.events
+        .where((e) => e.type == EventType.syncPauseChange)
+        .listen((event) {
+      final state = event.data;
+      if (state is! SyncPauseState) return;
+      _isPaused = state.isPaused;
+      _pauseReason = state.reason;
+      _pauseChangesController?.add(state);
+    });
+  }
+
+  /// Tears down pause-state infrastructure. Called by `Locus.destroy()` via
+  /// `LocusLifecycle.destroy` so static state doesn't leak across host-app
+  /// test setUp/tearDown cycles.
+  static Future<void> resetPauseState() async {
+    await _pauseEventSubscription?.cancel();
+    _pauseEventSubscription = null;
+    await _pauseChangesController?.close();
+    _pauseChangesController = null;
+    _isPaused = false;
+    _pauseReason = null;
+  }
 
   /// Pre-sync validator callback.
   static PreSyncValidator? _preSyncValidator;

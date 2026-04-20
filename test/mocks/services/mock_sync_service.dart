@@ -68,7 +68,12 @@ class MockSyncService implements SyncService {
 
   @override
   Future<bool> resume() async {
-    _isPaused = false;
+    if (_isPaused) {
+      _isPaused = false;
+      _pauseReason = null;
+      _pauseChangesController
+          .add(const SyncPauseState(isPaused: false, reason: null));
+    }
     return true;
   }
 
@@ -76,8 +81,21 @@ class MockSyncService implements SyncService {
   bool get isPaused => _isPaused;
 
   @override
+  String? get pauseReason => _pauseReason;
+
+  @override
+  Stream<SyncPauseState> get pauseChanges => _pauseChangesController.stream;
+
+  final _pauseChangesController = StreamController<SyncPauseState>.broadcast();
+  String? _pauseReason;
+
+  @override
   Future<void> pause() async {
+    if (_isPaused) return;
     _isPaused = true;
+    _pauseReason = 'app';
+    _pauseChangesController
+        .add(const SyncPauseState(isPaused: true, reason: 'app'));
   }
 
   @override

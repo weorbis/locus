@@ -129,6 +129,39 @@ class SyncManager {
         isSyncPaused = true
         config.setSyncPauseReason(reason)
         delegate?.onLog(level: "error", message: "http \(status) - sync paused (persisted as \(reason))")
+        emitPauseChange(isPaused: true, reason: reason)
+    }
+
+    /// Emits a syncPauseChange event so the Dart side can keep its cache and any
+    /// reactive UI in sync without polling. `reason` is nil when unpaused, "app"
+    /// for explicit `pause()` calls, or the HTTP status string ("http_401" /
+    /// "http_403") written by pauseForAuthFailure.
+    private func emitPauseChange(isPaused: Bool, reason: String?) {
+        var data: [String: Any] = ["isPaused": isPaused]
+        if let reason = reason {
+            data["reason"] = reason
+        }
+        delegate?.onHttpEvent(["type": "syncPauseChange", "data": data])
+    }
+
+    /// Current pause state — used by Dart cache priming and replay-on-attach.
+    func getSyncPauseState() -> [String: Any?] {
+        return ["isPaused": isSyncPaused, "reason": currentPauseReason() as Any?]
+    }
+
+    /// Re-emits the current pause state. Called when a Dart listener first
+    /// attaches so a process that cold-started in a persisted-paused state
+    /// still informs the newly-attached UI.
+    func replaySyncPauseState() {
+        emitPauseChange(isPaused: isSyncPaused, reason: currentPauseReason())
+    }
+
+    /// Resolves the reason that corresponds to the current in-memory paused state.
+    /// Persisted auth reasons take precedence; an explicit `pause()` call is
+    /// reported as "app". Returns nil when unpaused.
+    private func currentPauseReason() -> String? {
+        guard isSyncPaused else { return nil }
+        return config.getSyncPauseReason() ?? "app"
     }
     
     deinit {
@@ -192,15 +225,19 @@ class SyncManager {
     }
 
     func pause() {
+        guard !isSyncPaused else { return }
         isSyncPaused = true
         delegate?.onLog(level: "info", message: "Sync PAUSED by app request")
+        emitPauseChange(isPaused: true, reason: "app")
     }
 
     func resumeSync() {
         delegate?.onLog(level: "info", message: "Sync RESUMED by app request - processing any pending locations...")
+        let wasPaused = isSyncPaused
         isSyncPaused = false
         config.setSyncPauseReason(nil)
         drainExhaustedContexts.removeAll()
+        if wasPaused { emitPauseChange(isPaused: false, reason: nil) }
         requestLocationSync(limit: config.maxBatchSize)
         _ = syncQueue(limit: 0)
     }
@@ -417,7 +454,13 @@ class SyncManager {
         UserDefaults.standard.removeObject(forKey: "bg_last_location_sync_failure_reason")
         // Any 2xx proves auth is valid — clear the persisted auth-failure marker
         // defensively in case resumeSync() wasn't explicitly called after token refresh.
+        // Only notify Dart if the persisted reason actually changed (avoids churn
+        // on every successful batch).
+        let hadPersistedReason = config.getSyncPauseReason() != nil
         config.setSyncPauseReason(nil)
+        if hadPersistedReason && !isSyncPaused {
+            emitPauseChange(isPaused: false, reason: nil)
+        }
     }
 
     private func recordSyncFailure(_ reason: String) {

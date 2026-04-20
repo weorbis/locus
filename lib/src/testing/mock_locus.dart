@@ -192,6 +192,13 @@ class MockLocus implements LocusInterface {
     _emitEvent(EventType.http, event);
   }
 
+  /// Emits a mock sync pause state change.
+  void emitSyncPauseChange(SyncPauseState state) {
+    _isSyncPaused = state.isPaused;
+    _pauseReason = state.reason;
+    _emitEvent(EventType.syncPauseChange, state);
+  }
+
   /// Emits a mock heartbeat.
   void emitHeartbeat(Location location) {
     _heartbeatController.add(location);
@@ -635,7 +642,12 @@ class MockLocus implements LocusInterface {
   @override
   Future<bool> resume() async {
     _methodCalls.add('resumeSync');
-    _isSyncPaused = false;
+    if (_isSyncPaused) {
+      _isSyncPaused = false;
+      _pauseReason = null;
+      _emitEvent(EventType.syncPauseChange,
+          const SyncPauseState(isPaused: false, reason: null));
+    }
     return true;
   }
 
@@ -643,15 +655,34 @@ class MockLocus implements LocusInterface {
   // Sync Pause/Validation (Mock)
   // ============================================================
   bool _isSyncPaused = false;
+  String? _pauseReason;
   PreSyncValidator? _preSyncValidator;
 
   @override
   bool get isSyncPaused => _isSyncPaused;
 
+  /// The current mock pause reason (mirrors [LocusSync.pauseReason] contract).
+  @override
+  String? get syncPauseReason => _pauseReason;
+
+  /// Convenience getter matching [SyncService.pauseReason] — same value as
+  /// [syncPauseReason].
+  String? get pauseReason => _pauseReason;
+
+  @override
+  Stream<SyncPauseState> get syncPauseChanges => _eventsController.stream
+      .where((e) => e.type == EventType.syncPauseChange)
+      .map((e) => e.data as SyncPauseState);
+
   @override
   Future<void> pauseSync() async {
     _methodCalls.add('pauseSync');
-    _isSyncPaused = true;
+    if (!_isSyncPaused) {
+      _isSyncPaused = true;
+      _pauseReason = 'app';
+      _emitEvent(EventType.syncPauseChange,
+          const SyncPauseState(isPaused: true, reason: 'app'));
+    }
   }
 
   @override

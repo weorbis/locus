@@ -72,6 +72,25 @@ Sync is **active by default** as soon as you set `Config.url`. You do not need t
 
 For domain-level gating ("don't sync until a shift has started", "drop sync if no `driver_id`") use `Locus.dataSync.setPreSyncValidator(...)` — the validator rejects individual batches without blocking the transport, keeping items in the queue until the validator approves.
 
+### Observing pause state in UI
+
+The Dart-side `isPaused` value is kept in sync with native via the `syncPauseChange` event, which the native `SyncManager` fires on every transition (explicit `pause()`, 401/403 auto-pause, `resume()`, 2xx recovery, and an initial replay when a Dart listener first attaches). This means:
+
+```dart
+// Synchronous read — always reflects the latest event from native:
+final paused = Locus.dataSync.isPaused;
+final reason = Locus.dataSync.pauseReason; // 'app' | 'http_401' | 'http_403' | null
+
+// Reactive UI binding — subscribe once, render from the stream:
+Locus.dataSync.pauseChanges.listen((state) {
+  if (state.isAuthFailure) {
+    showReAuthBanner();
+  }
+});
+```
+
+The `SyncPauseState` carries both the boolean and the reason, so the UI can differentiate a user-initiated pause ("Sync paused", actionable resume button) from an auth failure ("Authentication expired — please sign in", push to login).
+
 ## Error handling
 
 - Surface errors via `Locus.dataSync.httpEvents`; log status and body.

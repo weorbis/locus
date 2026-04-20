@@ -148,6 +148,50 @@ class SyncManager(
         isSyncPaused = true
         config.setSyncPauseReason(reason)
         Log.w(TAG, "http $status - sync paused (persisted as $reason)")
+        emitPauseChange(true, reason)
+    }
+
+    /**
+     * Emits a syncPauseChange event so the Dart side can keep its cache and any
+     * reactive UI in sync without polling. `reason` is `null` when unpaused;
+     * `"app"` for explicit [pause] calls; otherwise the HTTP status string
+     * ("http_401" / "http_403") written by [pauseForAuthFailure].
+     */
+    private fun emitPauseChange(isPaused: Boolean, reason: String?) {
+        val event = mutableMapOf<String, Any?>(
+            "type" to "syncPauseChange",
+            "data" to mapOf<String, Any?>(
+                "isPaused" to isPaused,
+                "reason" to reason
+            )
+        )
+        @Suppress("UNCHECKED_CAST")
+        listener.onHttpEvent(event as Map<String, Any>)
+    }
+
+    /** Current pause state — used by Dart cache priming and replay-on-attach. */
+    fun getSyncPauseState(): Map<String, Any?> = mapOf(
+        "isPaused" to isSyncPaused,
+        "reason" to currentPauseReason()
+    )
+
+    /**
+     * Re-emits the current pause state. Called by [LocusContainer.replayInitialState]
+     * when a Dart listener first attaches so a process that cold-started in a
+     * persisted-paused state still informs the newly-attached UI.
+     */
+    fun replaySyncPauseState() {
+        emitPauseChange(isSyncPaused, currentPauseReason())
+    }
+
+    /**
+     * Resolves the reason string that corresponds to the current in-memory paused
+     * state. Persisted auth reasons (http_401/http_403) take precedence; otherwise
+     * an explicit [pause] call is reported as "app". Returns null when unpaused.
+     */
+    private fun currentPauseReason(): String? {
+        if (!isSyncPaused) return null
+        return config.getSyncPauseReason() ?: "app"
     }
 
     fun release() {
@@ -179,15 +223,19 @@ class SyncManager(
     }
 
     fun pause() {
+        if (isSyncPaused) return
         isSyncPaused = true
         Log.i(TAG, "Sync PAUSED by app request")
+        emitPauseChange(true, "app")
     }
 
     fun resumeSync() {
         Log.i(TAG, "Sync RESUMED by app request - processing any pending locations...")
+        val wasPaused = isSyncPaused
         isSyncPaused = false
         config.setSyncPauseReason(null)
         drainExhaustedContexts.clear()
+        if (wasPaused) emitPauseChange(false, null)
         requestLocationSync(config.maxBatchSize)
         syncQueue(0)
     }
@@ -447,7 +495,13 @@ class SyncManager(
             .apply()
         // Any 2xx proves auth is valid — clear the persisted auth-failure marker
         // defensively in case resumeSync() wasn't explicitly called after token refresh.
+        // Only notify Dart if the persisted reason actually changed (avoids churn on
+        // every successful batch).
+        val hadPersistedReason = config.getSyncPauseReason() != null
         config.setSyncPauseReason(null)
+        if (hadPersistedReason && !isSyncPaused) {
+            emitPauseChange(false, null)
+        }
     }
 
     private fun recordSyncFailure(reason: String) {

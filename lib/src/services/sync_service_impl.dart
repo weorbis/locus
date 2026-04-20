@@ -27,6 +27,12 @@ class SyncServiceImpl implements SyncService {
   bool get isPaused => _instance.isSyncPaused;
 
   @override
+  String? get pauseReason => _instance.syncPauseReason;
+
+  @override
+  Stream<SyncPauseState> get pauseChanges => _instance.syncPauseChanges;
+
+  @override
   Future<bool> now() => _instance.sync();
 
   @override

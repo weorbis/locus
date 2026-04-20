@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Dart: `Locus.dataSync.pauseChanges` stream and `pauseReason` getter (#35)** — Reactive pause-state observation backed by a new native `syncPauseChange` event emitted on every transition (explicit pause/resume, 401/403 auto-pause, 2xx recovery, and an initial replay when a Dart listener first attaches via `LocusContainer.replayInitialState` / `SwiftLocusPlugin.onListen`). The Dart-side `isPaused` cache is no longer a lie — it mirrors the native source of truth automatically. UI code can now render "re-authentication required" banners reactively from `SyncPauseState.isAuthFailure` without polling `getLocationSyncBacklog`.
+
 ### Changed
 
 - **Android/iOS/Dart: Sync is now active by default when `Config.url` is set (#35)** — Previously, both the native `SyncManager` and the Dart-side `LocusSync._isPaused` cache initialized to `true`, requiring every host app to call `Locus.dataSync.resume()` after `Locus.ready()` or else see zero HTTP traffic. The example app did not call `resume()` in its `_configure()` path, so anyone copying the example verbatim (including the reporter of #35) would stream locations in Dart but never hit the backend. The paused-by-default stance was a blunt guard against domain-context races — a concern now owned by `setPreSyncValidator` and the existing 401 header-refresh recovery path. Pause is now reserved for transport-level outcomes: `Locus.dataSync.pause()` (in-memory, explicit) and HTTP 401/403 responses (persistent — see below).
