@@ -75,19 +75,19 @@ class SyncManager(
     private val locationSyncLock = Any()
 
     /**
-     * Sync is PAUSED by default on startup.
+     * Sync starts ACTIVE when Config.url is set. Pause is reserved for transport-level
+     * auth failures (HTTP 401/403): those persist across process restarts via
+     * ConfigManager.setSyncPauseReason to prevent retry storms from a stale token
+     * surviving a process kill.
      *
-     * This prevents race conditions where sync fires before the app has established
-     * required context (auth tokens, task IDs, etc.) after app restart.
+     * Explicit [pause] by the host app stays in-memory only — "pause for now" intent
+     * should not leak into the next process.
      *
-     * The app MUST call resumeSync() after initialization is complete.
-     * This is typically done after:
-     * 1. Locus.ready() is called
-     * 2. Auth tokens are refreshed
-     * 3. Tracking context is restored (task ID, owner ID, etc.)
+     * Domain gating (shift not started, missing task context) belongs in
+     * setPreSyncValidator, which rejects batches without blocking the transport.
      */
     @Volatile
-    private var isSyncPaused = true
+    private var isSyncPaused: Boolean = isPersistedAuthPause(config.getSyncPauseReason())
 
     @Volatile
     private var isReleased = false
@@ -126,7 +126,28 @@ class SyncManager(
     )
 
     init {
-        Log.i(TAG, "SyncManager initialized - sync PAUSED by default (call resumeSync() when app is ready)")
+        val persistedReason = config.getSyncPauseReason()
+        if (persistedReason != null && isPersistedAuthPause(persistedReason)) {
+            Log.w(
+                TAG,
+                "SyncManager initialized - sync PAUSED (reason=$persistedReason). " +
+                    "Call Locus.dataSync.resume() after refreshing auth."
+            )
+        } else {
+            Log.i(TAG, "SyncManager initialized - sync active.")
+        }
+    }
+
+    /**
+     * Pauses sync due to a transport-level auth failure and persists the reason so the
+     * pause survives process restart. Host must call [resumeSync] (typically after
+     * refreshing credentials) to clear this.
+     */
+    private fun pauseForAuthFailure(status: Int) {
+        val reason = "http_$status"
+        isSyncPaused = true
+        config.setSyncPauseReason(reason)
+        Log.w(TAG, "http $status - sync paused (persisted as $reason)")
     }
 
     fun release() {
@@ -143,7 +164,11 @@ class SyncManager(
             return
         }
         if (isSyncPaused) {
-            log("debug", "syncNow skipped: Sync is paused (401 received). Call resumeSync() after token refresh.")
+            log(
+                "debug",
+                "syncNow skipped: sync is paused (reason=${config.getSyncPauseReason() ?: "app"}). " +
+                    "Call resumeSync() after resolving."
+            )
             return
         }
         if (config.batchSync) {
@@ -161,6 +186,7 @@ class SyncManager(
     fun resumeSync() {
         Log.i(TAG, "Sync RESUMED by app request - processing any pending locations...")
         isSyncPaused = false
+        config.setSyncPauseReason(null)
         drainExhaustedContexts.clear()
         requestLocationSync(config.maxBatchSize)
         syncQueue(0)
@@ -419,6 +445,9 @@ class SyncManager(
             .putLong(KEY_LAST_LOCATION_SYNC_SUCCESS_AT, System.currentTimeMillis())
             .remove(KEY_LAST_LOCATION_SYNC_FAILURE_REASON)
             .apply()
+        // Any 2xx proves auth is valid — clear the persisted auth-failure marker
+        // defensively in case resumeSync() wasn't explicitly called after token refresh.
+        config.setSyncPauseReason(null)
     }
 
     private fun recordSyncFailure(reason: String) {
@@ -611,10 +640,7 @@ class SyncManager(
                 log("info", "http $status")
 
                 when {
-                    status == 401 -> {
-                        isSyncPaused = true
-                        log("error", "http 401 - sync paused")
-                    }
+                    status == 401 || status == 403 -> pauseForAuthFailure(status)
                     !ok -> scheduleQueueRetry(payload, id, type, idempotencyKey, attempt + 1)
                 }
             } catch (e: Exception) {
@@ -726,10 +752,9 @@ class SyncManager(
             log(if (ok) "info" else "error", "http $status${if (ok) "" else " $responseText"}")
 
             when {
-                status == 401 -> {
-                    recordSyncFailure("http_401")
-                    isSyncPaused = true
-                    log("error", "http 401 - sync paused")
+                status == 401 || status == 403 -> {
+                    recordSyncFailure("http_$status")
+                    pauseForAuthFailure(status)
                     completeLocationSync(false)
                 }
                 !ok -> {
@@ -810,10 +835,9 @@ class SyncManager(
             log(if (ok) "info" else "error", "http $status${if (ok) "" else " $responseText"}")
 
             when {
-                status == 401 -> {
-                    recordSyncFailure("http_401")
-                    isSyncPaused = true
-                    log("error", "http 401 - sync paused")
+                status == 401 || status == 403 -> {
+                    recordSyncFailure("http_$status")
+                    pauseForAuthFailure(status)
                     completeLocationSync(false)
                 }
                 !ok -> {
@@ -846,9 +870,8 @@ class SyncManager(
             }
 
             recordSyncFailure("http_401")
-            isSyncPaused = true
             emitHttpEvent(401, false, "unauthorized")
-            log("error", "http 401 - sync paused")
+            pauseForAuthFailure(401)
             completeLocationSync(false)
         }
     }
@@ -1012,6 +1035,14 @@ class SyncManager(
             "bg_last_location_sync_success_at"
         private const val KEY_LAST_LOCATION_SYNC_FAILURE_REASON =
             "bg_last_location_sync_failure_reason"
+
+        internal const val REASON_HTTP_401 = "http_401"
+        internal const val REASON_HTTP_403 = "http_403"
+        private val AUTH_FAILURE_REASONS = setOf(REASON_HTTP_401, REASON_HTTP_403)
+
+        /** True when the persisted reason is an auth-class failure the host must resolve. */
+        internal fun isPersistedAuthPause(reason: String?): Boolean =
+            reason != null && reason in AUTH_FAILURE_REASONS
 
         private fun sanitizeError(e: Exception): String =
             e.javaClass.simpleName + if (e.message?.contains("://") == true) " (network)" else ": ${e.message}"
