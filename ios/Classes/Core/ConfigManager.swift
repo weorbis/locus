@@ -88,7 +88,26 @@ class ConfigManager {
     /// swiped the app away and CoreLocation later relaunched it via Significant
     /// Location Changes).
     static let trackingActiveKey = "bg_tracking_active"
-    
+
+    /// UserDefaults key recording why sync is currently paused. Mirrors the Android
+    /// `ConfigManager.KEY_SYNC_PAUSE_REASON` constant. Persists across process restarts
+    /// so transport-level auth failures (401/403) survive relaunch and prevent retry
+    /// storms on cold start. `nil` means sync is active; value is the HTTP status as a
+    /// string ("http_401", "http_403"). Cleared on any 2xx or resumeSync().
+    static let syncPauseReasonKey = "bg_sync_pause_reason"
+
+    func setSyncPauseReason(_ reason: String?) {
+        if let reason = reason {
+            UserDefaults.standard.set(reason, forKey: ConfigManager.syncPauseReasonKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: ConfigManager.syncPauseReasonKey)
+        }
+    }
+
+    func getSyncPauseReason() -> String? {
+        return UserDefaults.standard.string(forKey: ConfigManager.syncPauseReasonKey)
+    }
+
     init() {
         // Load persisted critical flags
         if let config = UserDefaults.standard.dictionary(forKey: ConfigManager.lastConfigKey) {

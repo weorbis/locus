@@ -21,6 +21,15 @@ class ConfigManager(context: Context) {
          * reports correctly after process relaunch.
          */
         const val KEY_TRACKING_ACTIVE = "bg_tracking_active"
+
+        /**
+         * SharedPreferences key recording why sync is currently paused. Persists across
+         * process restarts so a transport-level auth failure (401/403) survives relaunch
+         * and prevents retry storms on cold start. `null` means sync is active; value is
+         * the HTTP status code as a string (e.g. "http_401", "http_403"). Cleared on any
+         * successful 2xx response or explicit resumeSync() call.
+         */
+        const val KEY_SYNC_PAUSE_REASON = "bg_sync_pause_reason"
     }
 
     init {
@@ -229,6 +238,23 @@ class ConfigManager(context: Context) {
     /** @see setTrackingActive */
     fun isTrackingActivePersisted(): Boolean {
         return prefs.getBoolean(KEY_TRACKING_ACTIVE, false)
+    }
+
+    /**
+     * Persists the sync pause reason. Pass `null` to clear (sync active again).
+     * Pass a reason string (e.g. "http_401") to mark sync as paused across restarts.
+     * Only transport-level auth failures write here; user-initiated pause() does not
+     * persist so "pause for now" intent doesn't leak into the next process.
+     */
+    fun setSyncPauseReason(reason: String?) {
+        prefs.edit().apply {
+            if (reason == null) remove(KEY_SYNC_PAUSE_REASON) else putString(KEY_SYNC_PAUSE_REASON, reason)
+        }.apply()
+    }
+
+    /** @see setSyncPauseReason */
+    fun getSyncPauseReason(): String? {
+        return prefs.getString(KEY_SYNC_PAUSE_REASON, null)
     }
 
     private fun restorePersistedConfig() {
