@@ -118,7 +118,8 @@ void main() {
       'sync() calls', () async {
     // Start from a "native-paused" state (as if the last process ended with 401).
     mock.nativePaused = true;
-    await Locus.dataSync.pause(); // also set Dart cache so this test is realistic
+    await Locus.dataSync
+        .pause(); // also set Dart cache so this test is realistic
     mock.calls.clear();
 
     await Locus.dataSync.resume();

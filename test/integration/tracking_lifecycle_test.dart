@@ -57,7 +57,8 @@ void main() {
     expect(await Locus.isTracking(), isFalse);
   });
 
-  test('Locus.start → isTracking true → Locus.stop → isTracking false', () async {
+  test('Locus.start → isTracking true → Locus.stop → isTracking false',
+      () async {
     expect(await Locus.isTracking(), isFalse);
 
     await Locus.start();
@@ -75,7 +76,8 @@ void main() {
 
   test(
       'isTracking returns true on a simulated cold-restart if native re-armed '
-      'tracking from bg_tracking_active (#34 reconciliation contract)', () async {
+      'tracking from bg_tracking_active (#34 reconciliation contract)',
+      () async {
     // Before "process restart":
     await Locus.start();
     expect(await Locus.isTracking(), isTrue);
