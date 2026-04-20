@@ -27,12 +27,14 @@ class LocusSync {
 
   /// Whether sync is currently paused.
   ///
-  /// Sync starts PAUSED by default to prevent race conditions where sync
-  /// fires before the app has established required context (auth tokens,
-  /// task IDs, etc.) after app restart.
+  /// Sync starts ACTIVE when Config.url is set. Pause is a transport-level state
+  /// driven by the native side (401/403 auto-pause with cross-restart persistence)
+  /// or by an explicit [pause] call from the host app. Domain gating belongs in
+  /// [setPreSyncValidator], not here.
   ///
-  /// Call [resume] after app initialization is complete.
-  static bool _isPaused = true;
+  /// This Dart-side flag mirrors the last-seen pause state for UX
+  /// short-circuiting; the native side is the source of truth for scheduling.
+  static bool _isPaused = false;
 
   /// Whether sync is currently paused.
   static bool get isPaused => _isPaused;
@@ -60,7 +62,7 @@ class LocusSync {
   static Future<bool> sync() async {
     if (_isPaused) {
       debugPrint(
-          '[Locus] WARNING: sync() called while paused. Call Locus.dataSync.resume() after app initialization.');
+          '[Locus] sync() skipped: sync is paused. Call Locus.dataSync.resume() to clear (e.g. after refreshing auth).');
       return false;
     }
     final result = await LocusChannels.methods.invokeMethod('sync');
@@ -73,7 +75,7 @@ class LocusSync {
   static Future<bool> isSyncReady() async {
     if (_isPaused) {
       debugPrint(
-          '[Locus] WARNING: isSyncReady() called while paused. Call Locus.dataSync.resume() after app initialization.');
+          '[Locus] isSyncReady() skipped: sync is paused. Call Locus.dataSync.resume() to clear.');
       return false;
     }
     try {
@@ -88,25 +90,17 @@ class LocusSync {
     return false;
   }
 
-  /// Resumes syncing after app initialization or token refresh.
-  ///
-  /// **IMPORTANT**: Sync is paused by default on app startup. You MUST call
-  /// this method after your app has completed initialization:
+  /// Resumes syncing after a transport-level pause (typically after refreshing
+  /// auth credentials following a 401/403) or after an explicit [pause] call.
   ///
   /// ```dart
-  /// // 1. Initialize Locus
-  /// await Locus.ready(config);
-  ///
-  /// // 2. Set up auth and context
-  /// await refreshAuthToken();
-  /// await restoreTrackingContext();
-  ///
-  /// // 3. Now it's safe to sync
+  /// // After refreshing the auth token stored by your app:
   /// await Locus.dataSync.resume();
   /// ```
   ///
-  /// Calling this before context is established can result in 400 errors
-  /// from the server due to missing required fields.
+  /// Sync is active by default when `Config.url` is set — you do NOT need to
+  /// call [resume] during normal initialization. Only call it to recover from
+  /// a persisted auth-failure pause or an earlier [pause] call.
   static Future<bool> resume() async {
     _isPaused = false;
     final result = await LocusChannels.methods.invokeMethod('resumeSync');

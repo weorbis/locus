@@ -635,6 +635,7 @@ class MockLocus implements LocusInterface {
   @override
   Future<bool> resume() async {
     _methodCalls.add('resumeSync');
+    _isSyncPaused = false;
     return true;
   }
 
