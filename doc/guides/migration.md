@@ -289,6 +289,26 @@ void main() {
 }
 ```
 
+### Sync no longer paused by default
+
+Prior versions of Locus started sync in a paused state; host apps had to call `Locus.dataSync.resume()` after `Locus.ready()` or no HTTP traffic would ever reach the backend. From the next release, sync is **active by default** when `Config.url` is set.
+
+**If your app previously relied on the paused default** (e.g. as a way to block sync until a separate `task_id` was established), replace the implicit behavior with one of:
+
+```dart
+// Option A — explicit pause at startup (matches the old behavior exactly):
+await Locus.ready(config);
+await Locus.dataSync.pause();
+
+// Option B (preferred) — reject individual batches via the pre-sync validator,
+// which keeps items queued without blocking the transport layer:
+Locus.dataSync.setPreSyncValidator((locations, extras) async {
+  return extras['task_id'] != null;
+});
+```
+
+`Locus.dataSync.resume()` is still the right call after refreshing auth credentials in response to a 401/403 — auth-failure pauses are automatic and persist across process restarts until you explicitly resume.
+
 ### Stream Subscriptions
 
 Callback-style listeners must be converted to stream subscriptions:
