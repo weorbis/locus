@@ -22,8 +22,6 @@ void main() {
 
     group('now', () {
       test('should trigger immediate sync', () async {
-        // Must resume first since sync is paused by default
-        await service.resume();
         final result = await service.now();
 
         expect(result, isA<bool>());

@@ -44,17 +44,29 @@ class SyncManager {
     }
     private var isMonitorRunning = false
     
-    // Thread-safe sync pause state
-    // IMPORTANT: Sync starts PAUSED by default to prevent race conditions where
-    // sync fires before the app has established required context (auth tokens,
-    // task IDs, etc.) after app restart.
-    // The app MUST call resumeSync() after initialization is complete.
+    // Thread-safe sync pause state.
+    // Sync starts ACTIVE when Config.url is set. Pause is reserved for transport-level
+    // auth failures (HTTP 401/403): those persist across process restarts via
+    // ConfigManager.setSyncPauseReason so a stale token doesn't retry-storm on cold
+    // start. Explicit pause() by the host app is in-memory only.
+    // Domain gating belongs in setPreSyncValidator, not here.
     private let syncStateQueue = DispatchQueue(label: "dev.locus.syncstate")
     private let locationDrainStateQueue = DispatchQueue(label: "dev.locus.locationdrain")
-    private var _isSyncPaused = true
+    private var _isSyncPaused = false
     private var isSyncPaused: Bool {
         get { syncStateQueue.sync { _isSyncPaused } }
         set { syncStateQueue.sync { _isSyncPaused = newValue } }
+    }
+
+    static let reasonHttp401 = "http_401"
+    static let reasonHttp403 = "http_403"
+    private static let authFailureReasons: Set<String> = [reasonHttp401, reasonHttp403]
+
+    /// True when the persisted reason represents an auth-class failure the host must
+    /// resolve (by refreshing credentials and calling resumeSync()).
+    static func isPersistedAuthPause(_ reason: String?) -> Bool {
+        guard let reason = reason else { return false }
+        return authFailureReasons.contains(reason)
     }
 
     private var _isLocationSyncInFlight = false
@@ -97,8 +109,59 @@ class SyncManager {
         self.config = config
         self.storage = storage
         self.urlSession = createURLSession()
+
+        let persistedReason = config.getSyncPauseReason()
+        if SyncManager.isPersistedAuthPause(persistedReason) {
+            self._isSyncPaused = true
+            NSLog("[Locus] SyncManager initialized - sync PAUSED (reason=\(persistedReason ?? "?")). Call Locus.dataSync.resume() after refreshing auth.")
+        } else {
+            NSLog("[Locus] SyncManager initialized - sync active.")
+        }
+
         startNetworkMonitor()
-        NSLog("[Locus] SyncManager initialized - sync PAUSED by default (call resumeSync() when app is ready)")
+    }
+
+    /// Pauses sync due to a transport-level auth failure and persists the reason so
+    /// the pause survives process restart. Host must call resumeSync() (typically
+    /// after refreshing credentials) to clear this.
+    private func pauseForAuthFailure(status: Int) {
+        let reason = "http_\(status)"
+        isSyncPaused = true
+        config.setSyncPauseReason(reason)
+        delegate?.onLog(level: "error", message: "http \(status) - sync paused (persisted as \(reason))")
+        emitPauseChange(isPaused: true, reason: reason)
+    }
+
+    /// Emits a syncPauseChange event so the Dart side can keep its cache and any
+    /// reactive UI in sync without polling. `reason` is nil when unpaused, "app"
+    /// for explicit `pause()` calls, or the HTTP status string ("http_401" /
+    /// "http_403") written by pauseForAuthFailure.
+    private func emitPauseChange(isPaused: Bool, reason: String?) {
+        var data: [String: Any] = ["isPaused": isPaused]
+        if let reason = reason {
+            data["reason"] = reason
+        }
+        delegate?.onHttpEvent(["type": "syncPauseChange", "data": data])
+    }
+
+    /// Current pause state — used by Dart cache priming and replay-on-attach.
+    func getSyncPauseState() -> [String: Any?] {
+        return ["isPaused": isSyncPaused, "reason": currentPauseReason() as Any?]
+    }
+
+    /// Re-emits the current pause state. Called when a Dart listener first
+    /// attaches so a process that cold-started in a persisted-paused state
+    /// still informs the newly-attached UI.
+    func replaySyncPauseState() {
+        emitPauseChange(isPaused: isSyncPaused, reason: currentPauseReason())
+    }
+
+    /// Resolves the reason that corresponds to the current in-memory paused state.
+    /// Persisted auth reasons take precedence; an explicit `pause()` call is
+    /// reported as "app". Returns nil when unpaused.
+    private func currentPauseReason() -> String? {
+        guard isSyncPaused else { return nil }
+        return config.getSyncPauseReason() ?? "app"
     }
     
     deinit {
@@ -146,7 +209,8 @@ class SyncManager {
             return
         }
         guard !isSyncPaused else {
-            delegate?.onLog(level: "debug", message: "syncNow skipped: Sync is paused (401 received). Call resumeSync() after token refresh.")
+            let reason = config.getSyncPauseReason() ?? "app"
+            delegate?.onLog(level: "debug", message: "syncNow skipped: sync is paused (reason=\(reason)). Call resumeSync() after resolving.")
             return
         }
 
@@ -161,14 +225,19 @@ class SyncManager {
     }
 
     func pause() {
+        guard !isSyncPaused else { return }
         isSyncPaused = true
         delegate?.onLog(level: "info", message: "Sync PAUSED by app request")
+        emitPauseChange(isPaused: true, reason: "app")
     }
 
     func resumeSync() {
         delegate?.onLog(level: "info", message: "Sync RESUMED by app request - processing any pending locations...")
+        let wasPaused = isSyncPaused
         isSyncPaused = false
+        config.setSyncPauseReason(nil)
         drainExhaustedContexts.removeAll()
+        if wasPaused { emitPauseChange(isPaused: false, reason: nil) }
         requestLocationSync(limit: config.maxBatchSize)
         _ = syncQueue(limit: 0)
     }
@@ -383,6 +452,15 @@ class SyncManager {
     private func recordSyncSuccess() {
         UserDefaults.standard.set(Date().timeIntervalSince1970 * 1000, forKey: "bg_last_location_sync_success_at")
         UserDefaults.standard.removeObject(forKey: "bg_last_location_sync_failure_reason")
+        // Any 2xx proves auth is valid — clear the persisted auth-failure marker
+        // defensively in case resumeSync() wasn't explicitly called after token refresh.
+        // Only notify Dart if the persisted reason actually changed (avoids churn
+        // on every successful batch).
+        let hadPersistedReason = config.getSyncPauseReason() != nil
+        config.setSyncPauseReason(nil)
+        if hadPersistedReason && !isSyncPaused {
+            emitPauseChange(isPaused: false, reason: nil)
+        }
     }
 
     private func recordSyncFailure(_ reason: String) {
@@ -650,7 +728,6 @@ class SyncManager {
                 }
 
                 self.recordSyncFailure("http_401")
-                self.isSyncPaused = true
                 self.delegate?.onHttpEvent([
                     "type": "http",
                     "data": [
@@ -659,9 +736,24 @@ class SyncManager {
                         "responseText": responseText
                     ]
                 ])
-                self.delegate?.onLog(level: "error", message: "http 401 - sync paused")
+                self.pauseForAuthFailure(status: 401)
                 self.completeLocationSync(continueDrain: false)
             }
+            return
+        }
+
+        if status == 403 {
+            recordSyncFailure("http_403")
+            delegate?.onHttpEvent([
+                "type": "http",
+                "data": [
+                    "status": 403,
+                    "ok": false,
+                    "responseText": responseText
+                ]
+            ])
+            pauseForAuthFailure(status: 403)
+            completeLocationSync(continueDrain: false)
             return
         }
 
@@ -726,9 +818,8 @@ class SyncManager {
         delegate?.onHttpEvent(event)
         delegate?.onLog(level: ok ? "info" : "error", message: "http \(status) \(ok ? "" : responseText)")
 
-        if status == 401 {
-            isSyncPaused = true
-            delegate?.onLog(level: "error", message: "http 401 - sync paused (queue)")
+        if status == 401 || status == 403 {
+            pauseForAuthFailure(status: status)
             return
         }
 

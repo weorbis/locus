@@ -160,6 +160,9 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
   public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
     eventSink = events
     emitConnectivityChange(ProcessInfo.processInfo.isLowPowerModeEnabled, emitPowerSave: true)
+    // Replay the current pause state so a freshly-attached Dart listener sees a
+    // persisted 401/403 pause without having to poll getSyncPauseState.
+    syncManager.replaySyncPauseState()
     return nil
   }
 
@@ -390,6 +393,8 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       result(true)
     case "getLocationSyncBacklog":
       result(syncManager.getLocationSyncBacklog())
+    case "getSyncPauseState":
+      result(syncManager.getSyncPauseState())
     case "startBackgroundTask":
       result(startBackgroundTask())
     case "stopBackgroundTask":

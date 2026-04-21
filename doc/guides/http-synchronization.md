@@ -65,15 +65,39 @@ await Locus.dataSync.setSyncBodyBuilder(buildBody);
 
 ## Sync Control
 
-- **Pause/Resume**: `await Locus.dataSync.pause()` / `resume()` to prevent syncs during state restoration.
-- **Validation**: Use `Locus.dataSync.setPreSyncValidator(...)` to approve/reject syncs based on app state (e.g. valid user ID).
+Sync is **active by default** as soon as you set `Config.url`. You do not need to call `resume()` during normal initialization. Pause is reserved for two cases:
+
+- **Explicit pause** — `await Locus.dataSync.pause()` halts sync in-memory. Use this for app-specific state restoration (e.g. a temporary maintenance mode). This pause does **not** persist across process restarts — the next cold start begins with sync active again. Call `await Locus.dataSync.resume()` to clear.
+- **Transport auth pause** — a `401` or `403` response from the backend automatically pauses sync **and persists the reason** via `ConfigManager` so the pause survives a process kill. This prevents retry storms from a stale token after the OS reaps the process. To clear, refresh credentials (or confirm the user has permission) and call `await Locus.dataSync.resume()`. Any successful `2xx` response also clears the persisted reason defensively.
+
+For domain-level gating ("don't sync until a shift has started", "drop sync if no `driver_id`") use `Locus.dataSync.setPreSyncValidator(...)` — the validator rejects individual batches without blocking the transport, keeping items in the queue until the validator approves.
+
+### Observing pause state in UI
+
+The Dart-side `isPaused` value is kept in sync with native via the `syncPauseChange` event, which the native `SyncManager` fires on every transition (explicit `pause()`, 401/403 auto-pause, `resume()`, 2xx recovery, and an initial replay when a Dart listener first attaches). This means:
+
+```dart
+// Synchronous read — always reflects the latest event from native:
+final paused = Locus.dataSync.isPaused;
+final reason = Locus.dataSync.pauseReason; // 'app' | 'http_401' | 'http_403' | null
+
+// Reactive UI binding — subscribe once, render from the stream:
+Locus.dataSync.pauseChanges.listen((state) {
+  if (state.isAuthFailure) {
+    showReAuthBanner();
+  }
+});
+```
+
+The `SyncPauseState` carries both the boolean and the reason, so the UI can differentiate a user-initiated pause ("Sync paused", actionable resume button) from an auth failure ("Authentication expired — please sign in", push to login).
 
 ## Error handling
 
 - Surface errors via `Locus.dataSync.httpEvents`; log status and body.
-- 401/403: refresh tokens; `await Locus.dataSync.pause()` until renewed.
-- Timeouts/DNS: rely on retries; avoid tight retry loops.
-- Use server-side idempotency to prevent duplicates after retries.
+- **401**: the native side attempts one in-line header refresh via `setHeadersCallback`. If the refresh yields a fresh `Authorization` header, the original request retries automatically. If not, sync pauses persistently — refresh credentials in your app and call `resume()` to clear.
+- **403**: treated identically to 401 (persistent pause) because refreshing credentials cannot fix a permission denial — your app must resolve the underlying authorization problem before calling `resume()`.
+- **Timeouts/DNS**: retry with backoff via the built-in retry policy; avoid tight retry loops in host code.
+- Use server-side idempotency keys to prevent duplicates after retries.
 
 ## Testing checklist
 

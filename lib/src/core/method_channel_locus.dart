@@ -283,6 +283,12 @@ class MethodChannelLocus implements LocusInterface {
   bool get isSyncPaused => LocusSync.isPaused;
 
   @override
+  String? get syncPauseReason => LocusSync.pauseReason;
+
+  @override
+  Stream<SyncPauseState> get syncPauseChanges => LocusSync.pauseChanges;
+
+  @override
   Future<void> pauseSync() async {
     await LocusSync.pause();
   }

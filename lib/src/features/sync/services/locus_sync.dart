@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show CallbackHandle, PluginUtilities;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:locus/src/models.dart';
+import 'package:locus/src/shared/events.dart';
 import 'package:locus/src/core/locus_headless.dart' show headlessDispatcher;
 import 'package:locus/src/core/locus_interface.dart';
 import 'package:locus/src/core/locus_channels.dart';
+import 'package:locus/src/core/locus_streams.dart';
 import 'package:locus/src/services/sync_service.dart';
 
 /// Sync operations.
@@ -27,15 +30,71 @@ class LocusSync {
 
   /// Whether sync is currently paused.
   ///
-  /// Sync starts PAUSED by default to prevent race conditions where sync
-  /// fires before the app has established required context (auth tokens,
-  /// task IDs, etc.) after app restart.
+  /// Sync starts ACTIVE when Config.url is set. Pause is a transport-level state
+  /// driven by the native side (401/403 auto-pause with cross-restart persistence)
+  /// or by an explicit [pause] call from the host app. Domain gating belongs in
+  /// [setPreSyncValidator], not here.
   ///
-  /// Call [resume] after app initialization is complete.
-  static bool _isPaused = true;
+  /// This field is kept in sync with native via the `syncPauseChange` event on
+  /// the main events stream — the native side is the single source of truth;
+  /// this is just a cached projection for synchronous reads.
+  static bool _isPaused = false;
+  static String? _pauseReason;
+  static StreamController<SyncPauseState>? _pauseChangesController;
+  // ignore: cancel_subscriptions - lives for the lifetime of the plugin;
+  // released explicitly in resetPauseState() called by Locus.destroy().
+  static StreamSubscription<GeolocationEvent<dynamic>>? _pauseEventSubscription;
 
-  /// Whether sync is currently paused.
+  /// Whether sync is currently paused, as of the most recent `syncPauseChange`
+  /// event from native. The getter is synchronous so UI code can bind to it
+  /// directly; use [pauseChanges] for reactive updates.
   static bool get isPaused => _isPaused;
+
+  /// Why sync is paused, mirroring the `reason` emitted by native on the last
+  /// transition. Null when unpaused. Values: `"app"` (explicit [pause]),
+  /// `"http_401"`, `"http_403"`.
+  static String? get pauseReason => _pauseReason;
+
+  /// Broadcast stream that emits whenever the native pause state changes.
+  /// Subscribe from UI to render a pause/auth-expired indicator without polling.
+  /// A single initial event carrying the current state is emitted by native as
+  /// soon as the events stream attaches (via `LocusContainer.replayInitialState`
+  /// / `SwiftLocusPlugin.onListen`), so late subscribers always see the truth.
+  static Stream<SyncPauseState> get pauseChanges {
+    _pauseChangesController ??= StreamController<SyncPauseState>.broadcast(
+        onListen: _ensurePauseBridge);
+    _ensurePauseBridge();
+    return _pauseChangesController!.stream;
+  }
+
+  /// Subscribes (once) to the main events stream, filters for `syncPauseChange`,
+  /// updates the cached projection, and forwards to [pauseChanges] subscribers.
+  /// Idempotent — safe to call from multiple entry points (pause, resume,
+  /// pauseChanges getter).
+  static void _ensurePauseBridge() {
+    if (_pauseEventSubscription != null) return;
+    _pauseEventSubscription = LocusStreams.events
+        .where((e) => e.type == EventType.syncPauseChange)
+        .listen((event) {
+      final state = event.data;
+      if (state is! SyncPauseState) return;
+      _isPaused = state.isPaused;
+      _pauseReason = state.reason;
+      _pauseChangesController?.add(state);
+    });
+  }
+
+  /// Tears down pause-state infrastructure. Called by `Locus.destroy()` via
+  /// `LocusLifecycle.destroy` so static state doesn't leak across host-app
+  /// test setUp/tearDown cycles.
+  static Future<void> resetPauseState() async {
+    await _pauseEventSubscription?.cancel();
+    _pauseEventSubscription = null;
+    await _pauseChangesController?.close();
+    _pauseChangesController = null;
+    _isPaused = false;
+    _pauseReason = null;
+  }
 
   /// Pre-sync validator callback.
   static PreSyncValidator? _preSyncValidator;
@@ -60,7 +119,7 @@ class LocusSync {
   static Future<bool> sync() async {
     if (_isPaused) {
       debugPrint(
-          '[Locus] WARNING: sync() called while paused. Call Locus.dataSync.resume() after app initialization.');
+          '[Locus] sync() skipped: sync is paused. Call Locus.dataSync.resume() to clear (e.g. after refreshing auth).');
       return false;
     }
     final result = await LocusChannels.methods.invokeMethod('sync');
@@ -73,7 +132,7 @@ class LocusSync {
   static Future<bool> isSyncReady() async {
     if (_isPaused) {
       debugPrint(
-          '[Locus] WARNING: isSyncReady() called while paused. Call Locus.dataSync.resume() after app initialization.');
+          '[Locus] isSyncReady() skipped: sync is paused. Call Locus.dataSync.resume() to clear.');
       return false;
     }
     try {
@@ -88,25 +147,17 @@ class LocusSync {
     return false;
   }
 
-  /// Resumes syncing after app initialization or token refresh.
-  ///
-  /// **IMPORTANT**: Sync is paused by default on app startup. You MUST call
-  /// this method after your app has completed initialization:
+  /// Resumes syncing after a transport-level pause (typically after refreshing
+  /// auth credentials following a 401/403) or after an explicit [pause] call.
   ///
   /// ```dart
-  /// // 1. Initialize Locus
-  /// await Locus.ready(config);
-  ///
-  /// // 2. Set up auth and context
-  /// await refreshAuthToken();
-  /// await restoreTrackingContext();
-  ///
-  /// // 3. Now it's safe to sync
+  /// // After refreshing the auth token stored by your app:
   /// await Locus.dataSync.resume();
   /// ```
   ///
-  /// Calling this before context is established can result in 400 errors
-  /// from the server due to missing required fields.
+  /// Sync is active by default when `Config.url` is set — you do NOT need to
+  /// call [resume] during normal initialization. Only call it to recover from
+  /// a persisted auth-failure pause or an earlier [pause] call.
   static Future<bool> resume() async {
     _isPaused = false;
     final result = await LocusChannels.methods.invokeMethod('resumeSync');

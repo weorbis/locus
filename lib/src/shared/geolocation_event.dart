@@ -44,6 +44,8 @@ class GeolocationEvent<T> {
         return EventType.notificationAction;
       case 'http':
         return EventType.http;
+      case 'syncPauseChange':
+        return EventType.syncPauseChange;
       case 'error':
         return EventType.error;
       default:
@@ -112,6 +114,13 @@ class GeolocationEvent<T> {
         return GeolocationEvent<HttpEvent>(
           type: type,
           data: HttpEvent.fromMap(
+            payload is Map ? Map<String, dynamic>.from(payload) : const {},
+          ),
+        );
+      case EventType.syncPauseChange:
+        return GeolocationEvent<SyncPauseState>(
+          type: type,
+          data: SyncPauseState.fromMap(
             payload is Map ? Map<String, dynamic>.from(payload) : const {},
           ),
         );

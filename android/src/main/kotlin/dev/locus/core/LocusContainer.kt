@@ -505,6 +505,7 @@ internal class LocusContainer private constructor(private val context: Context) 
             "getLocationSyncBacklog" -> result.success(
                 syncManager.getLocationSyncBacklog() ?: emptyMap<String, Any?>(),
             )
+            "getSyncPauseState" -> result.success(syncManager.getSyncPauseState())
             else -> result.notImplemented()
         }
     }
@@ -532,6 +533,10 @@ internal class LocusContainer private constructor(private val context: Context) 
     fun replayInitialState() {
         systemMonitor.readConnectivityEvent().let { emitEvent("connectivitychange", it) }
         systemMonitor.readPowerSaveState().let { emitEvent("powersavechange", it) }
+        // Replay the current pause state so newly-attached Dart listeners don't have
+        // to poll: if we cold-started in a persisted 401/403 pause, this is how the
+        // UI learns about it.
+        syncManager.replaySyncPauseState()
     }
 
     private fun emitPermissionError(code: String, message: String, details: Map<String, Any>? = null) {

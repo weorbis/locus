@@ -168,6 +168,12 @@ abstract class LocusInterface {
   /// Whether sync is currently paused.
   bool get isSyncPaused;
 
+  /// Current pause reason: null when unpaused; "app" / "http_401" / "http_403".
+  String? get syncPauseReason;
+
+  /// Stream of pause-state transitions. See [SyncService.pauseChanges].
+  Stream<SyncPauseState> get syncPauseChanges;
+
   /// Pauses all sync operations.
   ///
   /// When paused, locations will continue to be collected and stored,
