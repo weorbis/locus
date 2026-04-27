@@ -919,7 +919,14 @@ class SyncManager(
             if (recovered) {
                 val newHeaders = java.util.concurrent.ConcurrentHashMap<String, Any>(headers)
                 config.httpHeaders = newHeaders
-                retry()
+                // Headers callbacks are delivered on the main thread (method
+                // channel result for the bridge path; mainHandler.post for the
+                // headless path — see HeadlessHeadersDispatcher.refreshHeaders).
+                // The retry calls performHttp(Batch)Request directly which
+                // does blocking I/O via HttpURLConnection, so it must run on
+                // the sync executor or Android raises NetworkOnMainThread-
+                // Exception and the recovery batch is silently dropped.
+                executor.execute { retry() }
                 return@onHeadersRefresh
             }
 
