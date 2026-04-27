@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:locus/src/features/sync/services/sync_health_monitor.dart';
 import 'package:locus/src/observability/locus_metrics.dart';
 import 'package:locus/src/observability/reliability_event.dart';
 
@@ -17,12 +18,25 @@ class LocusReliabilityRegistry {
   final _InMemoryLocusMetrics _metrics = _InMemoryLocusMetrics();
   StreamController<LocusReliabilityEvent> _eventController =
       StreamController<LocusReliabilityEvent>.broadcast();
+  SyncHealthMonitor? _syncHealthMonitor;
 
   /// Public stream of reliability events.
   Stream<LocusReliabilityEvent> get reliability => _eventController.stream;
 
   /// Public read-only metrics view.
   LocusMetrics get metrics => _metrics;
+
+  /// Currently installed sync health monitor, if any. Internal callers may
+  /// use it to call [SyncHealthMonitor.evaluate] from a heartbeat tick.
+  SyncHealthMonitor? get syncHealthMonitor => _syncHealthMonitor;
+
+  /// Installs a [SyncHealthMonitor]. Detaches and replaces any previously
+  /// installed monitor.
+  Future<void> installSyncHealthMonitor(SyncHealthMonitor monitor) async {
+    final previous = _syncHealthMonitor;
+    _syncHealthMonitor = monitor;
+    await previous?.detach();
+  }
 
   /// Emit a reliability event to subscribers. Safe to call at any time:
   /// after [resetForTests] closes the controller, the next call will see a
@@ -73,6 +87,9 @@ class LocusReliabilityRegistry {
   /// Closes the existing event stream and creates a fresh one.
   Future<void> resetForTests() async {
     await _metrics.reset();
+    final monitor = _syncHealthMonitor;
+    _syncHealthMonitor = null;
+    await monitor?.detach();
     if (!_eventController.isClosed) {
       await _eventController.close();
     }

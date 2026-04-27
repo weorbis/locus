@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:locus/src/config/config.dart';
+import 'package:locus/src/features/sync/services/sync_health_monitor.dart';
 import 'package:locus/src/observability/locus_logger.dart';
+import 'package:locus/src/observability/locus_reliability_registry.dart';
 import 'package:locus/src/shared/events.dart';
 import 'package:locus/src/models.dart';
 import 'package:locus/src/services.dart';
@@ -16,6 +18,12 @@ import 'package:locus/src/core/locus_interface.dart';
 
 final _log = locusLogger('method_channel');
 
+/// Default thresholds for the auto-installed [SyncHealthMonitor]. Match the
+/// defaults documented in the location-pipeline-resilience design doc and
+/// can be overridden in a future Config field.
+const Duration _kDefaultStalledThreshold = Duration(minutes: 1);
+const Duration _kDefaultUnrecoverableThreshold = Duration(minutes: 30);
+
 /// Method-channel backed implementation of [LocusInterface].
 class MethodChannelLocus implements LocusInterface {
   /// Creates a new MethodChannelLocus instance.
@@ -27,6 +35,16 @@ class MethodChannelLocus implements LocusInterface {
     // registration is fire-and-forget; errors are logged inside the helper.
     LocusStreams.setPolygonGeofenceService(_polygonGeofenceService);
     unawaited(LocusStreams.setPrivacyZoneService(_privacyZoneService));
+
+    // Auto-install a SyncHealthMonitor that watches HTTP sync events and
+    // emits SyncStalled/SyncUnrecoverable to LocusReliabilityRegistry. The
+    // monitor stays attached for the lifetime of the SDK instance.
+    final monitor = SyncHealthMonitor(
+      stalledThreshold: _kDefaultStalledThreshold,
+      unrecoverableThreshold: _kDefaultUnrecoverableThreshold,
+    );
+    monitor.attachTo(httpStream);
+    unawaited(LocusReliabilityRegistry.instance.installSyncHealthMonitor(monitor));
   }
 
   // ============================================================
