@@ -1,8 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
 import 'package:locus/src/features/geofencing/models/polygon_geofence.dart';
+import 'package:locus/src/observability/locus_logger.dart';
+
+final _log = locusLogger('polygon_geofence');
 
 /// Callback for polygon geofence persistence.
 typedef PolygonGeofencePersistCallback = Future<void> Function(
@@ -70,8 +71,9 @@ class PolygonGeofenceService {
     }
 
     if (_polygons.containsKey(polygon.identifier)) {
-      debugPrint(
-          '[PolygonGeofenceService] Polygon already exists: ${polygon.identifier}');
+      _log.eventInfo('polygon_already_exists', {
+        'identifier': polygon.identifier,
+      });
       return false;
     }
 
@@ -79,8 +81,10 @@ class PolygonGeofenceService {
     _insideState[polygon.identifier] = false;
     await _persist();
 
-    debugPrint('[PolygonGeofenceService] Added polygon: ${polygon.identifier} '
-        '(${polygon.vertices.length} vertices)');
+    _log.eventInfo('polygon_added', {
+      'identifier': polygon.identifier,
+      'vertex_count': polygon.vertices.length,
+    });
     return true;
   }
 
@@ -104,16 +108,20 @@ class PolygonGeofenceService {
 
       if (added > 0) {
         await _persist();
-        debugPrint('[PolygonGeofenceService] Added $added polygon geofences');
+        _log.eventInfo('polygons_batch_added', {'count': added});
       }
-    } catch (e) {
+    } catch (e, stack) {
       // Rollback: Remove all added polygons on persistence error
       for (final key in addedKeys) {
         _polygons.remove(key);
         _insideState.remove(key);
       }
-      debugPrint(
-          '[PolygonGeofenceService] Persistence error, rolled back $added geofences: $e');
+      _log.eventSevere(
+        'polygons_persist_failed',
+        {'rolled_back': added},
+        e,
+        stack,
+      );
       rethrow;
     }
 
@@ -129,7 +137,7 @@ class PolygonGeofenceService {
 
     if (removed != null) {
       await _persist();
-      debugPrint('[PolygonGeofenceService] Removed polygon: $identifier');
+      _log.eventInfo('polygon_removed', {'identifier': identifier});
       return true;
     }
 
@@ -141,7 +149,7 @@ class PolygonGeofenceService {
     _polygons.clear();
     _insideState.clear();
     await _persist();
-    debugPrint('[PolygonGeofenceService] Removed all polygon geofences');
+    _log.eventInfo('polygons_all_removed');
   }
 
   /// Gets a polygon geofence by identifier.
@@ -169,8 +177,7 @@ class PolygonGeofenceService {
     _polygons[polygon.identifier] = polygon;
     await _persist();
 
-    debugPrint(
-        '[PolygonGeofenceService] Updated polygon: ${polygon.identifier}');
+    _log.eventInfo('polygon_updated', {'identifier': polygon.identifier});
     return true;
   }
 
@@ -222,7 +229,7 @@ class PolygonGeofenceService {
             timestamp: now,
             triggerLocation: triggerPoint,
           ));
-          debugPrint('[PolygonGeofenceService] ENTER: ${polygon.identifier}');
+          _log.eventInfo('polygon_enter', {'identifier': polygon.identifier});
         }
       } else if (wasInside && !isNowInside) {
         // Exited polygon
@@ -235,7 +242,7 @@ class PolygonGeofenceService {
             timestamp: now,
             triggerLocation: triggerPoint,
           ));
-          debugPrint('[PolygonGeofenceService] EXIT: ${polygon.identifier}');
+          _log.eventInfo('polygon_exit', {'identifier': polygon.identifier});
         }
       }
     }
@@ -253,7 +260,7 @@ class PolygonGeofenceService {
     for (final key in _insideState.keys) {
       _insideState[key] = false;
     }
-    debugPrint('[PolygonGeofenceService] Reset inside state');
+    _log.eventFine('polygon_state_reset');
   }
 
   /// Initializes the service with persisted polygons.
@@ -268,8 +275,7 @@ class PolygonGeofenceService {
       }
     }
 
-    debugPrint(
-        '[PolygonGeofenceService] Restored ${_polygons.length} polygon geofences');
+    _log.eventInfo('polygons_restored', {'count': _polygons.length});
   }
 
   Future<void> _persist() async {

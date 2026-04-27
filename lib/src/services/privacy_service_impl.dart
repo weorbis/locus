@@ -3,13 +3,14 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
 import 'package:locus/src/models.dart';
+import 'package:locus/src/observability/locus_logger.dart';
 import 'package:locus/src/core/locus_interface.dart';
 import 'package:locus/src/services/privacy_service.dart';
 import 'package:locus/src/features/privacy/services/privacy_zone_service.dart'
     show PrivacyZoneEvent;
+
+final _log = locusLogger('privacy_service');
 
 /// Implementation of [PrivacyService] using method channel.
 class PrivacyServiceImpl implements PrivacyService {
@@ -53,9 +54,13 @@ class PrivacyServiceImpl implements PrivacyService {
       void Function(PrivacyZoneEvent) callback) {
     return _instance.privacyZoneEvents.listen(
       callback,
-      onError: (error, stackTrace) {
-        debugPrint(
-            '[PrivacyService] Error in privacyZoneEvents stream: $error');
+      onError: (Object error, StackTrace stackTrace) {
+        _log.eventSevere(
+          'privacy_zone_events_stream_error',
+          const {},
+          error,
+          stackTrace,
+        );
       },
     );
   }

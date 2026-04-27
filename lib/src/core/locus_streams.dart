@@ -1,13 +1,15 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:locus/src/shared/events.dart';
 import 'package:locus/src/models.dart';
+import 'package:locus/src/observability/locus_logger.dart';
 import 'package:locus/src/core/event_mapper.dart';
 import 'package:locus/src/features/location/services/spoof_detection.dart';
 import 'package:locus/src/features/diagnostics/services/error_recovery.dart';
 import 'package:locus/src/features/geofencing/services/polygon_geofence_service.dart';
 import 'package:locus/src/features/privacy/services/privacy_zone_service.dart';
 import 'package:locus/src/core/locus_channels.dart';
+
+final _log = locusLogger('streams');
 
 /// Stream management for geolocation events.
 class LocusStreams {
@@ -53,10 +55,9 @@ class LocusStreams {
   static void enableSpoofDetection(SpoofDetectionConfig config) {
     _spoofDetector = SpoofDetector(config);
     _spoofDetectionEnabled = true;
-    if (kDebugMode) {
-      debugPrint(
-          '[Locus] Spoof detection enabled, blocking: ${config.blockMockLocations}');
-    }
+    _log.eventInfo('spoof_detection_enabled', {
+      'block_mock_locations': config.blockMockLocations,
+    });
   }
 
   /// Disables spoof detection.
@@ -73,10 +74,9 @@ class LocusStreams {
   /// When set, location events will trigger polygon enter/exit detection.
   static void setPolygonGeofenceService(PolygonGeofenceService? service) {
     _polygonGeofenceService = service;
-    if (kDebugMode) {
-      debugPrint(
-          '[Locus] Polygon geofence service ${service != null ? 'registered' : 'cleared'}');
-    }
+    _log.eventFine('polygon_geofence_service_set', {
+      'state': service != null ? 'registered' : 'cleared',
+    });
   }
 
   /// Sets the privacy zone service for filtering location events.
@@ -85,10 +85,9 @@ class LocusStreams {
     await _privacyZoneSubscription?.cancel();
     _privacyZoneSubscription = null;
     _privacyZoneService = service;
-    if (kDebugMode) {
-      debugPrint(
-          '[Locus] Privacy zone service ${service != null ? 'registered' : 'cleared'}');
-    }
+    _log.eventFine('privacy_zone_service_set', {
+      'state': service != null ? 'registered' : 'cleared',
+    });
 
     await _syncNativePrivacyMode();
 
@@ -108,27 +107,21 @@ class LocusStreams {
     try {
       await LocusChannels.methods
           .invokeMethod('setPrivacyMode', hasEnabledPrivacyZones);
-    } catch (error) {
-      if (kDebugMode) {
-        debugPrint('[Locus] Failed to set privacy mode on native side: $error');
-      }
-      // Non-critical, continue without propagating error
+    } catch (error, stack) {
+      // Non-critical: log and continue without propagating.
+      _log.eventWarning('native_privacy_mode_sync_failed', const {}, error, stack);
     }
   }
 
   static Future<void> _onListen() async {
-    await _ensureNativeStreamStarted().catchError((error) {
-      if (kDebugMode) {
-        debugPrint('[Locus] Error starting native stream: $error');
-      }
+    await _ensureNativeStreamStarted().catchError((Object error, StackTrace stack) {
+      _log.eventSevere('native_stream_start_failed', const {}, error, stack);
     });
   }
 
   static Future<void> _onCancel() async {
-    await _maybeStopNativeStream().catchError((error) {
-      if (kDebugMode) {
-        debugPrint('[Locus] Error stopping native stream: $error');
-      }
+    await _maybeStopNativeStream().catchError((Object error, StackTrace stack) {
+      _log.eventWarning('native_stream_stop_failed', const {}, error, stack);
     });
   }
 
@@ -177,26 +170,20 @@ class LocusStreams {
               final mapped = EventMapper.mapToEvent(event);
               _processEvent(mapped);
             } catch (e, stack) {
-              if (kDebugMode) {
-                debugPrint('[Locus] Event mapping error: $e');
-              }
+              _log.eventSevere('event_mapping_failed', const {}, e, stack);
               await _handleStreamError(e, stack, 'event_mapping');
             }
           },
           onError: (Object error, StackTrace stackTrace) async {
-            if (kDebugMode) {
-              debugPrint('[Locus] Stream error: $error');
-            }
+            _log.eventSevere('stream_error', const {}, error, stackTrace);
             await _handleStreamError(error, stackTrace, 'stream');
           },
         );
-      } catch (e) {
+      } catch (e, stack) {
         // Cancel any partially-created subscription to prevent leaks
         await _nativeSubscription?.cancel();
         _nativeSubscription = null;
-        if (kDebugMode) {
-          debugPrint('[Locus] Failed to start native stream: $e');
-        }
+        _log.eventSevere('native_stream_subscribe_failed', const {}, e, stack);
       } finally {
         _isStarting = false;
       }
@@ -223,16 +210,14 @@ class LocusStreams {
         if (spoofResult != null) {
           if (spoofResult.wasBlocked) {
             _blockedEventsController?.add(spoofResult);
-            if (kDebugMode) {
-              debugPrint(
-                  '[Locus] Blocked spoofed location: ${spoofResult.factors}');
-            }
+            _log.eventWarning('spoof_blocked', {
+              'factors': spoofResult.factors.toString(),
+            });
             return; // Don't process further
           }
-          if (kDebugMode) {
-            debugPrint(
-                '[Locus] Spoofed location detected (not blocked): ${spoofResult.factors}');
-          }
+          _log.eventInfo('spoof_detected_unblocked', {
+            'factors': spoofResult.factors.toString(),
+          });
           location = location.copyWith(isMock: true);
         }
       }
@@ -244,17 +229,13 @@ class LocusStreams {
         final result = _privacyZoneService!.processLocation(location);
 
         if (result.wasExcluded) {
-          if (kDebugMode) {
-            debugPrint('[Locus] Location excluded by privacy zone');
-          }
+          _log.eventFine('privacy_zone_excluded');
           return; // Don't emit excluded locations
         }
 
         if (result.wasObfuscated && result.processedLocation != null) {
           processedLocation = result.processedLocation!;
-          if (kDebugMode) {
-            debugPrint('[Locus] Location obfuscated by privacy zone');
-          }
+          _log.eventFine('privacy_zone_obfuscated');
         }
       }
 
@@ -301,18 +282,19 @@ class LocusStreams {
 
       // Handle error with proper async chain for immediate recovery
       await errorManager.handleError(locusError).then((action) {
-        if (kDebugMode) {
-          debugPrint('[Locus] Error recovery action: $action');
-        }
+        _log.eventInfo('error_recovery_action', {'action': action.name});
 
         // If action is not 'ignore', propagate to listeners
         if (action != RecoveryAction.ignore) {
           _eventController?.addError(error, stackTrace);
         }
-      }).catchError((recoveryError) {
-        if (kDebugMode) {
-          debugPrint('[Locus] Error during error recovery: $recoveryError');
-        }
+      }).catchError((Object recoveryError, StackTrace recoveryStack) {
+        _log.eventSevere(
+          'error_recovery_failed',
+          const {},
+          recoveryError,
+          recoveryStack,
+        );
         // Propagate original error if recovery fails
         _eventController?.addError(error, stackTrace);
       });

@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:locus/src/config/config.dart';
 import 'package:locus/src/models.dart';
+import 'package:locus/src/observability/locus_logger.dart';
 import 'package:locus/src/shared/location_utils.dart';
 import 'package:locus/src/core/locus_channels.dart';
 import 'package:locus/src/features/battery/services/locus_adaptive.dart';
@@ -14,6 +14,8 @@ import 'package:locus/src/features/geofencing/services/locus_workflows.dart';
 import 'package:locus/src/core/locus_features.dart';
 import 'package:locus/src/features/geofencing/services/locus_geofencing.dart';
 import 'package:locus/src/features/sync/services/locus_sync.dart';
+
+final _log = locusLogger('lifecycle');
 
 /// Lifecycle management of the Locus SDK.
 class LocusLifecycle {
@@ -31,25 +33,21 @@ class LocusLifecycle {
 
       // Log warnings
       for (final warning in validationResult.warnings) {
-        if (kDebugMode) {
-          debugPrint(
-              '[Locus] Config warning: ${warning.field} - ${warning.message}');
-          if (warning.suggestion != null) {
-            debugPrint('[Locus]   Suggestion: ${warning.suggestion}');
-          }
-        }
+        _log.eventWarning('config_warning', {
+          'field': warning.field,
+          'message': warning.message,
+          if (warning.suggestion != null) 'suggestion': warning.suggestion,
+        });
       }
 
       // Throw on errors
       if (!validationResult.isValid) {
         for (final error in validationResult.errors) {
-          if (kDebugMode) {
-            debugPrint(
-                '[Locus] Config error: ${error.field} - ${error.message}');
-            if (error.suggestion != null) {
-              debugPrint('[Locus]   Suggestion: ${error.suggestion}');
-            }
-          }
+          _log.eventSevere('config_error', {
+            'field': error.field,
+            'message': error.message,
+            if (error.suggestion != null) 'suggestion': error.suggestion,
+          });
         }
         throw ConfigValidationException(validationResult.errors);
       }
@@ -80,10 +78,9 @@ class LocusLifecycle {
     if (result is Map) {
       return GeolocationState.fromMap(Map<String, dynamic>.from(result));
     }
-    if (kDebugMode) {
-      debugPrint(
-          '[Locus] start failed: unexpected result ${result.runtimeType}');
-    }
+    _log.eventWarning('start_unexpected_result', {
+      'runtime_type': result.runtimeType.toString(),
+    });
     return const GeolocationState(enabled: false, isMoving: false);
   }
 
@@ -194,12 +191,14 @@ class LocusLifecycle {
       }
       return false;
     } catch (e, stack) {
-      // Only log verbose stack trace for unexpected errors
-      if (e.toString().contains('MissingPluginException')) {
-        // Expected in test environments - silently return false
-      } else if (kDebugMode) {
-        debugPrint('[Locus] Error checking geofence status: $e');
-        debugPrint('[Locus] Stack trace: $stack');
+      // Expected in test environments — silently return false on missing plugin.
+      if (!e.toString().contains('MissingPluginException')) {
+        _log.eventSevere(
+          'geofence_status_check_failed',
+          const {},
+          e,
+          stack,
+        );
       }
       return false;
     }

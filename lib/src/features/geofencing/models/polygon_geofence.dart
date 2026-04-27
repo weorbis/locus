@@ -1,8 +1,9 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
-
+import 'package:locus/src/observability/locus_logger.dart';
 import 'package:locus/src/shared/models/json_map.dart';
+
+final _log = locusLogger('polygon_geofence.model');
 
 /// A geographic coordinate point (vertex) for polygon geofences.
 class GeoPoint {
@@ -75,11 +76,12 @@ class PolygonGeofence {
     final verticesRaw = map['vertices'];
 
     if (identifier is! String || identifier.isEmpty) {
-      debugPrint('[PolygonGeofence] Warning: Invalid or missing identifier');
+      _log.eventWarning('polygon_invalid_identifier');
     }
     if (verticesRaw is! List || verticesRaw.length < 3) {
-      debugPrint(
-          '[PolygonGeofence] Warning: Invalid vertices (need at least 3)');
+      _log.eventWarning('polygon_invalid_vertices', {
+        'count': verticesRaw is List ? verticesRaw.length : 0,
+      });
     }
 
     final vertices = <GeoPoint>[];

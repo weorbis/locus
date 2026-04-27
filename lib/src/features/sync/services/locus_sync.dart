@@ -5,12 +5,15 @@ import 'dart:ui' show CallbackHandle, PluginUtilities;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:locus/src/models.dart';
+import 'package:locus/src/observability/locus_logger.dart';
 import 'package:locus/src/shared/events.dart';
 import 'package:locus/src/core/locus_headless.dart' show headlessDispatcher;
 import 'package:locus/src/core/locus_interface.dart';
 import 'package:locus/src/core/locus_channels.dart';
 import 'package:locus/src/core/locus_streams.dart';
 import 'package:locus/src/services/sync_service.dart';
+
+final _log = locusLogger('sync');
 
 /// Sync operations.
 class LocusSync {
@@ -118,8 +121,9 @@ class LocusSync {
   /// Triggers an immediate sync of pending locations.
   static Future<bool> sync() async {
     if (_isPaused) {
-      debugPrint(
-          '[Locus] sync() skipped: sync is paused. Call Locus.dataSync.resume() to clear (e.g. after refreshing auth).');
+      _log.eventInfo('sync_skipped_paused', const {
+        'hint': 'Call Locus.dataSync.resume() to clear (e.g. after refreshing auth).',
+      });
       return false;
     }
     final result = await LocusChannels.methods.invokeMethod('sync');
@@ -131,8 +135,7 @@ class LocusSync {
   /// Use this to check if sync can proceed without calling [resume] first.
   static Future<bool> isSyncReady() async {
     if (_isPaused) {
-      debugPrint(
-          '[Locus] isSyncReady() skipped: sync is paused. Call Locus.dataSync.resume() to clear.');
+      _log.eventFine('is_sync_ready_paused');
       return false;
     }
     try {
@@ -207,8 +210,8 @@ class LocusSync {
     if (_preSyncValidator == null) return true;
     try {
       return await _preSyncValidator!(locations, extras);
-    } catch (e) {
-      debugPrint('[Locus] Pre-sync validator threw an error: $e');
+    } catch (e, stack) {
+      _log.eventSevere('pre_sync_validator_threw', const {}, e, stack);
       return false; // Skip sync on error
     }
   }
@@ -220,8 +223,8 @@ class LocusSync {
     if (_foregroundHeadersCallback == null) return null;
     try {
       return await _foregroundHeadersCallback!();
-    } catch (e) {
-      debugPrint('[Locus] Error refreshing dynamic headers: $e');
+    } catch (e, stack) {
+      _log.eventSevere('refresh_dynamic_headers_failed', const {}, e, stack);
       return null;
     }
   }
@@ -293,17 +296,16 @@ class LocusSync {
       );
       // Only set the builder after successful native call
       _syncBodyBuilder = builder;
-    } on PlatformException catch (e) {
-      debugPrint(
-        '[Locus] ERROR: Failed to set sync body builder on native side: $e',
-      );
+    } on PlatformException catch (e, stack) {
+      _log.eventSevere('set_sync_body_builder_native_failed', {
+        'code': e.code,
+        if (e.message != null) 'message': e.message,
+      }, e, stack);
       // Ensure builder is not set on error
       _syncBodyBuilder = null;
       rethrow;
-    } catch (e) {
-      debugPrint(
-        '[Locus] ERROR: Unexpected error setting sync body builder: $e',
-      );
+    } catch (e, stack) {
+      _log.eventSevere('set_sync_body_builder_failed', const {}, e, stack);
       _syncBodyBuilder = null;
       rethrow;
     }
@@ -331,22 +333,11 @@ class LocusSync {
     final callbackHandle = PluginUtilities.getCallbackHandle(builder);
 
     if (dispatcherHandle == null || callbackHandle == null) {
-      debugPrint(
-        '[Locus] ERROR: Failed to register headless sync body builder.',
-      );
-      debugPrint('[Locus]   Could not obtain callback handles.');
-      debugPrint(
-        '[Locus]   Ensure your builder is a top-level or static function, not a closure.',
-      );
-      debugPrint('[Locus]   Example:');
-      debugPrint('[Locus]     @pragma("vm:entry-point")');
-      debugPrint(
-        '[Locus]     Future<Map<String, dynamic>> buildSyncBody(SyncBodyContext ctx) async {',
-      );
-      debugPrint(
-        '[Locus]       return {"locations": ctx.locations.map((l) => l.toJson()).toList()};',
-      );
-      debugPrint('[Locus]     }');
+      _log.eventSevere('headless_sync_body_register_failed', const {
+        'reason': 'callback_handle_null',
+        'hint':
+            'Builder must be a top-level or static function annotated with @pragma("vm:entry-point").',
+      });
       return false;
     }
 
@@ -474,8 +465,8 @@ class LocusSync {
               context.extras,
             );
             return body;
-          } catch (e) {
-            debugPrint('Locus: Error in sync body builder: $e');
+          } catch (e, stack) {
+            _log.eventSevere('sync_body_builder_threw', const {}, e, stack);
             return null;
           }
 
@@ -513,8 +504,8 @@ class LocusSync {
       try {
         final context = _extractSyncBodyContext(call.arguments);
         return await callback(context);
-      } catch (e) {
-        debugPrint('Locus: Error in headless pre-sync validator: $e');
+      } catch (e, stack) {
+        _log.eventSevere('headless_pre_sync_validator_threw', const {}, e, stack);
         return false;
       }
     });
@@ -538,8 +529,8 @@ class LocusSync {
 
       try {
         return await callback();
-      } catch (e) {
-        debugPrint('Locus: Error in headless headers callback: $e');
+      } catch (e, stack) {
+        _log.eventSevere('headless_headers_callback_threw', const {}, e, stack);
         return <String, String>{};
       }
     });

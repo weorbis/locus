@@ -1,12 +1,14 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:locus/src/features/battery/battery.dart';
 import 'package:locus/src/config/config.dart';
+import 'package:locus/src/observability/locus_logger.dart';
 import 'package:locus/src/shared/events.dart';
 import 'package:locus/src/core/locus_config.dart';
 import 'package:locus/src/core/locus_lifecycle.dart';
 import 'package:locus/src/core/locus_streams.dart';
 import 'package:locus/src/core/locus_channels.dart';
+
+final _log = locusLogger('adaptive');
 
 /// Adaptive Tracking Logic.
 class LocusAdaptive {
@@ -100,7 +102,12 @@ class LocusAdaptive {
 
       // Update config
       if (_stopped) return;
-      debugPrint('[Locus] Applying adaptive settings: $settings');
+      _log.eventInfo('adaptive_settings_applied', {
+        'desired_accuracy': settings.desiredAccuracy.name,
+        'distance_filter_m': settings.distanceFilter,
+        'heartbeat_interval_s': settings.heartbeatInterval,
+        'gps_enabled': settings.gpsEnabled,
+      });
       await LocusConfig.setConfig(Config(
         desiredAccuracy: settings.desiredAccuracy,
         distanceFilter: settings.distanceFilter,
@@ -108,10 +115,10 @@ class LocusAdaptive {
         // Also update heartbeat interval itself if using heartbeat mechanism
         heartbeatInterval: settings.heartbeatInterval,
       ));
-    } catch (e) {
+    } catch (e, stack) {
       // Only log for unexpected errors, not MissingPluginException in tests
       if (!e.toString().contains('MissingPluginException')) {
-        debugPrint('[Locus] Adaptive tracking error: $e');
+        _log.eventSevere('adaptive_tracking_error', const {}, e, stack);
       }
     } finally {
       _isEvaluatingAdaptiveSettings = false;

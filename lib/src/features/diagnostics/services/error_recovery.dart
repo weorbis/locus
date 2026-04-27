@@ -6,8 +6,10 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:locus/src/models.dart';
+import 'package:locus/src/observability/locus_logger.dart';
+
+final _log = locusLogger('error_recovery');
 
 /// Configuration for error handling and recovery.
 ///
@@ -417,8 +419,12 @@ class ErrorRecoveryManager {
 
     // Log if configured
     if (_config.logErrors) {
-      debugPrint('[Locus] Error: ${error.type.name} - ${error.message} '
-          '(attempt ${retryCount + 1}/${_config.maxRetries})');
+      _log.eventWarning('error_recovery_attempt', {
+        'type': error.type.name,
+        'message': error.message,
+        'attempt': retryCount + 1,
+        'max_retries': _config.maxRetries,
+      });
     }
 
     // Let user decide

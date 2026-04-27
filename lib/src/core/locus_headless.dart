@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show CallbackHandle, PluginUtilities;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:locus/src/models.dart';
+import 'package:locus/src/observability/locus_logger.dart';
 import 'package:locus/src/core/locus_channels.dart';
 import 'package:locus/src/core/locus_interface.dart';
+
+final _log = locusLogger('headless');
 
 /// Callback type for headless background events.
 typedef HeadlessEventCallback = Future<void> Function(HeadlessEvent event);
@@ -59,10 +61,8 @@ Future<void> _handleHeadlessEvent(dynamic call) async {
       await callback(
           HeadlessEvent.fromMap(Map<String, dynamic>.from(rawEvent)));
     }
-  } catch (error) {
-    if (kDebugMode) {
-      debugPrint('Locus headless error: $error');
-    }
+  } catch (error, stack) {
+    _log.eventSevere('headless_event_dispatch_failed', const {}, error, stack);
   }
 }
 
@@ -78,9 +78,7 @@ Future<dynamic> _handleHeadlessBuildSyncBody(dynamic call) async {
   final callback = PluginUtilities.getCallbackFromHandle(handle);
 
   if (callback == null) {
-    if (kDebugMode) {
-      debugPrint('Locus: Could not resolve headless sync body callback');
-    }
+    _log.eventWarning('headless_sync_body_callback_unresolved');
     return null;
   }
 
@@ -89,10 +87,8 @@ Future<dynamic> _handleHeadlessBuildSyncBody(dynamic call) async {
     final typedCallback = callback as Future<JsonMap> Function(SyncBodyContext);
     final result = await typedCallback(context);
     return result;
-  } catch (e) {
-    if (kDebugMode) {
-      debugPrint('Locus: Error in headless sync body builder: $e');
-    }
+  } catch (e, stack) {
+    _log.eventSevere('headless_sync_body_builder_failed', const {}, e, stack);
     return null;
   }
 }
@@ -114,16 +110,11 @@ class LocusHeadless {
     final callbackHandle = PluginUtilities.getCallbackHandle(callback);
 
     if (dispatcherHandle == null || callbackHandle == null) {
-      if (kDebugMode) {
-        debugPrint('[Locus] ERROR: Failed to register headless task.');
-        debugPrint('[Locus]   Could not obtain callback handles.');
-        debugPrint(
-            '[Locus]   Ensure your callback is a top-level or static function, not a closure.');
-        debugPrint('[Locus]   Example:');
-        debugPrint('[Locus]     @pragma("vm:entry-point")');
-        debugPrint(
-            '[Locus]     Future<void> myHeadlessTask(HeadlessEvent event) async { ... }');
-      }
+      _log.eventSevere('headless_register_failed', const {
+        'reason': 'callback_handle_null',
+        'hint':
+            'Callback must be a top-level or static function annotated with @pragma("vm:entry-point").',
+      });
       return false;
     }
 
@@ -136,12 +127,10 @@ class LocusHeadless {
     );
 
     if (result != true) {
-      if (kDebugMode) {
-        debugPrint(
-            '[Locus] WARNING: Native headless registration returned false.');
-        debugPrint(
-            '[Locus]   The native plugin may not support headless mode on this platform.');
-      }
+      _log.eventWarning('headless_register_native_returned_false', const {
+        'hint':
+            'The native plugin may not support headless mode on this platform.',
+      });
     }
 
     return result == true;

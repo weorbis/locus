@@ -2,10 +2,12 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:locus/src/config/config.dart';
+import 'package:locus/src/observability/locus_logger.dart';
 import 'package:locus/src/shared/events.dart';
 import 'package:locus/src/models.dart';
+
+final _log = locusLogger('tracking_profile_manager');
 
 /// Event emitted when a tracking profile changes.
 class ProfileChangeEvent {
@@ -81,8 +83,10 @@ class TrackingProfileManager {
 
   Future<void> setProfile(TrackingProfile profile, {String? reason}) async {
     if (_isDisposed) {
-      debugPrint(
-          'TrackingProfileManager: Cannot set profile, manager is disposed');
+      _log.eventWarning('set_profile_after_dispose', {
+        'profile': profile.name,
+        if (reason != null) 'reason': reason,
+      });
       return;
     }
 
@@ -262,7 +266,12 @@ class TrackingProfileManager {
       rule.profile,
       reason: 'Automation: ${rule.type.name}',
     ).catchError((Object e, StackTrace stack) {
-      debugPrint('TrackingProfileManager: Failed to switch profile: $e');
+      _log.eventSevere(
+        'profile_switch_failed',
+        {'target_profile': rule.profile.name, 'rule_type': rule.type.name},
+        e,
+        stack,
+      );
       // Emit error to stream for observability (if not disposed)
       if (!_isDisposed) {
         _errorController.add(ProfileSwitchError(

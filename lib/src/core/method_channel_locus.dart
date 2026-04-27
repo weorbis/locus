@@ -1,8 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
 import 'package:locus/src/config/config.dart';
+import 'package:locus/src/observability/locus_logger.dart';
 import 'package:locus/src/shared/events.dart';
 import 'package:locus/src/models.dart';
 import 'package:locus/src/services.dart';
@@ -14,6 +13,8 @@ import 'package:locus/src/core/locus_lifecycle.dart';
 import 'package:locus/src/core/locus_scheduler.dart';
 import 'package:locus/src/core/locus_streams.dart';
 import 'package:locus/src/core/locus_interface.dart';
+
+final _log = locusLogger('method_channel');
 
 /// Method-channel backed implementation of [LocusInterface].
 class MethodChannelLocus implements LocusInterface {
@@ -554,11 +555,9 @@ class MethodChannelLocus implements LocusInterface {
 
   Future<void> _updateDynamicHeaders({bool force = false}) async {
     if (_headersCallback == null) {
-      if (kDebugMode) {
-        debugPrint(
-          '[Locus] refreshHeaders called but no headersCallback is set. Use setHeadersCallback() first.',
-        );
-      }
+      _log.eventWarning('refresh_headers_no_callback', const {
+        'hint': 'Call setHeadersCallback() before refreshHeaders().',
+      });
       return;
     }
 
@@ -573,10 +572,8 @@ class MethodChannelLocus implements LocusInterface {
     try {
       final headers = await _headersCallback!();
       await LocusChannels.methods.invokeMethod('setDynamicHeaders', headers);
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[Locus] Error refreshing headers: $e');
-      }
+    } catch (e, stack) {
+      _log.eventSevere('refresh_headers_failed', const {}, e, stack);
     }
   }
 

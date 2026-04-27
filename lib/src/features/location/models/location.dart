@@ -1,9 +1,11 @@
-import 'package:flutter/foundation.dart';
 import 'package:locus/src/shared/models/activity.dart';
 import 'package:locus/src/shared/models/battery.dart';
 import 'package:locus/src/shared/models/coords.dart';
 import 'package:locus/src/features/geofencing/models/geofence.dart';
+import 'package:locus/src/observability/locus_logger.dart';
 import 'package:locus/src/shared/models/json_map.dart';
+
+final _log = locusLogger('location.model');
 
 class Location {
   const Location({
@@ -37,10 +39,7 @@ class Location {
         strict: false, // Don't throw on missing data for backward compat
       );
     } on InvalidCoordsException catch (e) {
-      assert(() {
-        debugPrint('[Locus] Invalid coords in location: $e');
-        return true;
-      }());
+      _log.eventWarning('invalid_coords_in_location', {'error': e.toString()});
       // If range validation fails, use default invalid coords
       coords = const Coords(
         latitude: 0.0,
