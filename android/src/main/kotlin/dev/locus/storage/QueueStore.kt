@@ -13,8 +13,14 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
         // Durability: WAL keeps the journal independent of the main DB, and
         // synchronous=FULL fsyncs both files on commit. Together they survive
         // process kills between commit and checkpoint without data loss.
-        db.execSQL("PRAGMA journal_mode=WAL")
-        db.execSQL("PRAGMA synchronous=FULL")
+        //
+        // Use rawQuery instead of execSQL: Samsung's hardened SQLite (seen on
+        // SM A346E / Android 16) treats `PRAGMA journal_mode=WAL` as a query
+        // because it returns the resulting mode, and rejects it from execSQL
+        // with "Queries can be performed using SQLiteDatabase query or
+        // rawQuery methods only." rawQuery works on AOSP and Samsung alike.
+        db.rawQuery("PRAGMA journal_mode=WAL", null).use { it.moveToFirst() }
+        db.rawQuery("PRAGMA synchronous=FULL", null).use { it.moveToFirst() }
     }
 
     override fun onCreate(db: SQLiteDatabase) {
