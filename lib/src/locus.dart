@@ -3,6 +3,9 @@ library;
 import 'dart:async';
 
 import 'package:locus/src/config/config.dart';
+import 'package:locus/src/observability/locus_metrics.dart';
+import 'package:locus/src/observability/locus_reliability_registry.dart';
+import 'package:locus/src/observability/reliability_event.dart';
 import 'package:locus/src/shared/events.dart';
 import 'package:locus/src/models.dart';
 import 'package:locus/src/services.dart';
@@ -16,6 +19,12 @@ export 'package:locus/src/core/locus_interface.dart'
 // Export location history types
 export 'package:locus/src/features/location/models/location_history.dart'
     show LocationQuery, LocationSummary, FrequentLocation;
+
+// Export observability types so embedders can pattern-match on events and
+// read metrics snapshots without reaching into internal paths.
+export 'package:locus/src/observability/locus_metrics.dart'
+    show LocusMetrics, LocusMetricsSnapshot;
+export 'package:locus/src/observability/reliability_event.dart';
 
 /// Main class for interacting with background geolocation services.
 ///
@@ -130,6 +139,27 @@ class Locus {
 
   /// Stream of all geolocation events.
   static Stream<GeolocationEvent<dynamic>> get events => _instance.events;
+
+  // ============================================================
+  // Observability — reliability events + metrics
+  // ============================================================
+
+  /// Stream of reliability events: queue evictions, quarantine activity,
+  /// sync stalls, and persistence failures.
+  ///
+  /// Subscribe early in the app's lifecycle and forward events into your
+  /// telemetry pipeline (Sentry, structured logs, dashboards). The stream is
+  /// a broadcast — late subscribers do not see prior events.
+  static Stream<LocusReliabilityEvent> get reliability =>
+      LocusReliabilityRegistry.instance.reliability;
+
+  /// Counters that answer "how reliable has the SDK been since install?".
+  ///
+  /// Use [LocusMetrics.snapshot] to read the current values. Counters are
+  /// process-local; persistence across app launches is not yet provided by
+  /// the default in-memory implementation.
+  static LocusMetrics get metrics =>
+      LocusReliabilityRegistry.instance.metrics;
 
   // ============================================================
   // Lifecycle Methods
