@@ -502,6 +502,16 @@ class SyncManager(
         if (hadPersistedReason && !isSyncPaused) {
             emitPauseChange(false, null)
         }
+        // Any 2xx also proves the network/auth path to the backend is healthy
+        // for *some* context, so contexts that previously hit max-retry deserve
+        // a fresh shot. Without this, a transient backend outage that flips
+        // contexts into `drainExhaustedContexts` strands every other context's
+        // backlog until the next explicit `resumeSync()` call (which most apps
+        // only fire on cold start or after auth recovery). Clearing on success
+        // makes the drain self-healing.
+        synchronized(locationSyncLock) {
+            drainExhaustedContexts.clear()
+        }
     }
 
     private fun recordSyncFailure(reason: String) {
