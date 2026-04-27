@@ -37,10 +37,41 @@ class SQLiteStorage {
             return
         }
         let dbUrl = documentsUrl.appendingPathComponent(dbName)
-        
+
         if sqlite3_open(dbUrl.path, &db) != SQLITE_OK {
             db = nil
+            return
         }
+        // Durability: WAL keeps the journal independent of the main DB, and
+        // synchronous=FULL fsyncs both files on commit. Together they survive
+        // process kills between commit and checkpoint without data loss.
+        sqlite3_exec(db, "PRAGMA journal_mode=WAL;", nil, nil, nil)
+        sqlite3_exec(db, "PRAGMA synchronous=FULL;", nil, nil, nil)
+        // Wait up to 5s on contention rather than failing fast with SQLITE_BUSY.
+        sqlite3_busy_timeout(db, 5_000)
+    }
+
+    /// Bound the WAL file size after a write. PASSIVE never blocks readers and
+    /// is a no-op when no work is needed; durability is provided by
+    /// synchronous=FULL on the original commit.
+    /// Caller must already hold `queue`.
+    private func walCheckpointOnQueue() {
+        guard let db = self.db else { return }
+        sqlite3_exec(db, "PRAGMA wal_checkpoint(PASSIVE);", nil, nil, nil)
+    }
+
+    /// Step a prepared statement, retrying on SQLITE_BUSY until the busy
+    /// timeout fires. Returns the final result code.
+    /// Caller must already hold `queue`.
+    @discardableResult
+    private func stepWithBusyRetry(_ statement: OpaquePointer?) -> Int32 {
+        var rc = sqlite3_step(statement)
+        var attempts = 0
+        while rc == SQLITE_BUSY && attempts < 5 {
+            attempts += 1
+            rc = sqlite3_step(statement)
+        }
+        return rc
     }
     
     private func createTables() {
@@ -186,22 +217,23 @@ class SQLiteStorage {
     func insertLocation(_ payload: [String: Any], completion: (() -> Void)? = nil) {
         queue.async { [weak self] in
             guard let self = self, let db = self.db else { return }
-            
+
             let uuid = payload["uuid"] as? String ?? UUID().uuidString
             let timestamp = payload["timestamp"] as? String ?? ISO8601DateFormatter().string(from: Date())
             guard let jsonData = try? JSONSerialization.data(withJSONObject: payload),
                   let jsonString = String(data: jsonData, encoding: .utf8) else { return }
-            
+
             let sql = "INSERT OR REPLACE INTO locations (uuid, payload, timestamp) VALUES (?, ?, ?)"
             var statement: OpaquePointer?
-            
+
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                 sqlite3_bind_text(statement, 1, uuid, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_bind_text(statement, 2, jsonString, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_bind_text(statement, 3, timestamp, -1, SQLiteStorage.SQLITE_TRANSIENT)
-                sqlite3_step(statement)
+                self.stepWithBusyRetry(statement)
             }
             sqlite3_finalize(statement)
+            self.walCheckpointOnQueue()
 
             if let completion {
                 DispatchQueue.main.async {
@@ -240,48 +272,51 @@ class SQLiteStorage {
     
     func removeLocations(_ uuids: [String]) {
         guard !uuids.isEmpty else { return }
-        
+
         queue.async { [weak self] in
             guard let self = self, let db = self.db else { return }
-            
+
             let placeholders = uuids.map { _ in "?" }.joined(separator: ", ")
             let sql = "DELETE FROM locations WHERE uuid IN (\(placeholders))"
-            
+
             var statement: OpaquePointer?
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                 for (index, uuid) in uuids.enumerated() {
                     sqlite3_bind_text(statement, Int32(index + 1), uuid, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 }
-                sqlite3_step(statement)
+                self.stepWithBusyRetry(statement)
             }
             sqlite3_finalize(statement)
+            self.walCheckpointOnQueue()
         }
     }
-    
+
     func clearLocations() {
         queue.async { [weak self] in
-            self?._executeStatementOnQueue("DELETE FROM locations")
+            guard let self = self else { return }
+            self._executeStatementOnQueue("DELETE FROM locations")
+            self.walCheckpointOnQueue()
         }
     }
-    
+
     func pruneLocations(maxDays: Int, maxRecords: Int) {
         queue.async { [weak self] in
             guard let self = self, let db = self.db else { return }
-            
+
             // Prune by age
             if maxDays > 0 {
                 let cutoff = Date().addingTimeInterval(TimeInterval(-maxDays * 24 * 60 * 60))
                 let cutoffString = ISO8601DateFormatter().string(from: cutoff)
-                
+
                 let sql = "DELETE FROM locations WHERE timestamp < ?"
                 var statement: OpaquePointer?
                 if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                     sqlite3_bind_text(statement, 1, cutoffString, -1, SQLiteStorage.SQLITE_TRANSIENT)
-                    sqlite3_step(statement)
+                    self.stepWithBusyRetry(statement)
                 }
                 sqlite3_finalize(statement)
             }
-            
+
             // Prune by count
             if maxRecords > 0 {
                 let sql = """
@@ -292,10 +327,11 @@ class SQLiteStorage {
                 var statement: OpaquePointer?
                 if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                     sqlite3_bind_int(statement, 1, Int32(maxRecords))
-                    sqlite3_step(statement)
+                    self.stepWithBusyRetry(statement)
                 }
                 sqlite3_finalize(statement)
             }
+            self.walCheckpointOnQueue()
         }
     }
     
@@ -388,25 +424,25 @@ class SQLiteStorage {
     func insertQueueItem(_ item: [String: Any]) {
         queue.async { [weak self] in
             guard let self = self, let db = self.db else { return }
-            
+
             let id = item["id"] as? String ?? UUID().uuidString
             let type = item["type"] as? String
             let idempotencyKey = item["idempotencyKey"] as? String
             let retryCount = item["retryCount"] as? Int ?? 0
             let nextRetryAt = item["nextRetryAt"] as? String
             let createdAt = item["created"] as? String ?? ISO8601DateFormatter().string(from: Date())
-            
+
             guard let payloadData = item["payload"],
                   let jsonData = try? JSONSerialization.data(withJSONObject: payloadData),
                   let jsonString = String(data: jsonData, encoding: .utf8) else { return }
-            
+
             let sql = """
-                INSERT OR REPLACE INTO queue 
-                (id, payload, type, idempotency_key, retry_count, next_retry_at, created_at) 
+                INSERT OR REPLACE INTO queue
+                (id, payload, type, idempotency_key, retry_count, next_retry_at, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """
             var statement: OpaquePointer?
-            
+
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                 sqlite3_bind_text(statement, 1, id, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_bind_text(statement, 2, jsonString, -1, SQLiteStorage.SQLITE_TRANSIENT)
@@ -427,9 +463,10 @@ class SQLiteStorage {
                     sqlite3_bind_null(statement, 6)
                 }
                 sqlite3_bind_text(statement, 7, createdAt, -1, SQLiteStorage.SQLITE_TRANSIENT)
-                sqlite3_step(statement)
+                self.stepWithBusyRetry(statement)
             }
             sqlite3_finalize(statement)
+            self.walCheckpointOnQueue()
         }
     }
     
@@ -479,44 +516,48 @@ class SQLiteStorage {
     
     func removeQueueItems(_ ids: [String]) {
         guard !ids.isEmpty else { return }
-        
+
         queue.async { [weak self] in
             guard let self = self, let db = self.db else { return }
-            
+
             let placeholders = ids.map { _ in "?" }.joined(separator: ", ")
             let sql = "DELETE FROM queue WHERE id IN (\(placeholders))"
-            
+
             var statement: OpaquePointer?
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                 for (index, id) in ids.enumerated() {
                     sqlite3_bind_text(statement, Int32(index + 1), id, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 }
-                sqlite3_step(statement)
+                self.stepWithBusyRetry(statement)
             }
             sqlite3_finalize(statement)
+            self.walCheckpointOnQueue()
         }
     }
-    
+
     func updateQueueItem(_ id: String, retryCount: Int, nextRetryAt: String) {
         queue.async { [weak self] in
             guard let self = self, let db = self.db else { return }
-            
+
             let sql = "UPDATE queue SET retry_count = ?, next_retry_at = ? WHERE id = ?"
             var statement: OpaquePointer?
-            
+
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                 sqlite3_bind_int(statement, 1, Int32(retryCount))
                 sqlite3_bind_text(statement, 2, nextRetryAt, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_bind_text(statement, 3, id, -1, SQLiteStorage.SQLITE_TRANSIENT)
-                sqlite3_step(statement)
+                self.stepWithBusyRetry(statement)
             }
             sqlite3_finalize(statement)
+            self.walCheckpointOnQueue()
         }
     }
-    
+
     func clearQueue() {
         queue.async { [weak self] in
-            self?._executeStatementOnQueue("DELETE FROM queue")
+            guard let self = self else { return }
+            self._executeStatementOnQueue("DELETE FROM queue")
+            self.walCheckpointOnQueue()
         }
     }
     

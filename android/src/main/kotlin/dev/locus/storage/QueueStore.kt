@@ -9,6 +9,14 @@ import java.util.UUID
 
 class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
 
+    override fun onConfigure(db: SQLiteDatabase) {
+        // Durability: WAL keeps the journal independent of the main DB, and
+        // synchronous=FULL fsyncs both files on commit. Together they survive
+        // process kills between commit and checkpoint without data loss.
+        db.execSQL("PRAGMA journal_mode=WAL")
+        db.execSQL("PRAGMA synchronous=FULL")
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -62,6 +70,7 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
             } finally {
                 db.endTransaction()
             }
+            checkpoint(db)
         } catch (e: Exception) {
             android.util.Log.e("QueueStore", "Failed to insert queue payload: ${e.message}", e)
         }
@@ -110,10 +119,12 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
 
     fun updateRetry(id: String, retryCount: Int, nextRetryAt: Long) {
         try {
-            writableDatabase.execSQL(
+            val db = writableDatabase
+            db.execSQL(
                 "UPDATE queue SET retry_count = ?, next_retry_at = ? WHERE id = ?",
                 arrayOf(retryCount, nextRetryAt, id)
             )
+            checkpoint(db)
         } catch (e: Exception) {
             android.util.Log.e("QueueStore", "Failed to update retry: ${e.message}", e)
         }
@@ -123,8 +134,10 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
         if (ids.isNullOrEmpty()) return
 
         try {
+            val db = writableDatabase
             val placeholders = ids.joinToString(",") { "?" }
-            writableDatabase.delete("queue", "id IN ($placeholders)", ids.toTypedArray())
+            db.delete("queue", "id IN ($placeholders)", ids.toTypedArray())
+            checkpoint(db)
         } catch (e: Exception) {
             android.util.Log.e("QueueStore", "Failed to delete queue items: ${e.message}", e)
         }
@@ -132,7 +145,9 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
 
     fun clear() {
         try {
-            writableDatabase.execSQL("DELETE FROM queue")
+            val db = writableDatabase
+            db.execSQL("DELETE FROM queue")
+            checkpoint(db)
         } catch (e: Exception) {
             android.util.Log.e("QueueStore", "Failed to clear queue: ${e.message}", e)
         }
@@ -152,6 +167,19 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
             """.trimIndent(),
             arrayOf(maxRecords)
         )
+    }
+
+    /**
+     * Bound the WAL file size after a write transaction. PASSIVE never blocks
+     * readers and is a no-op if no work is needed; the DB stays durable either
+     * way thanks to synchronous=FULL.
+     */
+    private fun checkpoint(db: SQLiteDatabase) {
+        try {
+            db.rawQuery("PRAGMA wal_checkpoint(PASSIVE)", null).use { it.moveToFirst() }
+        } catch (e: Exception) {
+            android.util.Log.w("QueueStore", "wal_checkpoint failed: ${e.message}")
+        }
     }
 
     companion object {

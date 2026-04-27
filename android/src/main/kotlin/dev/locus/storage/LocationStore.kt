@@ -9,6 +9,14 @@ import java.util.UUID
 
 class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
 
+    override fun onConfigure(db: SQLiteDatabase) {
+        // Durability: WAL keeps the journal independent of the main DB, and
+        // synchronous=FULL fsyncs both files on commit. Together they survive
+        // process kills between commit and checkpoint without data loss.
+        db.execSQL("PRAGMA journal_mode=WAL")
+        db.execSQL("PRAGMA synchronous=FULL")
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -47,10 +55,11 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
         odometer: Double
     ) {
         try {
-            writableDatabase.execSQL(
+            val db = writableDatabase
+            db.execSQL(
                 """
-                INSERT OR REPLACE INTO locations 
-                (id, timestamp, latitude, longitude, accuracy, speed, heading, altitude, is_moving, activity_type, activity_confidence, event, odometer) 
+                INSERT OR REPLACE INTO locations
+                (id, timestamp, latitude, longitude, accuracy, speed, heading, altitude, is_moving, activity_type, activity_confidence, event, odometer)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
                 arrayOf<Any?>(
@@ -69,6 +78,7 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
                     odometer
                 )
             )
+            checkpoint(db)
         } catch (e: Exception) {
             android.util.Log.e("LocationStore", "Failed to insert location: ${e.message}", e)
         }
@@ -76,7 +86,9 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
 
     fun clear() {
         try {
-            writableDatabase.execSQL("DELETE FROM locations")
+            val db = writableDatabase
+            db.execSQL("DELETE FROM locations")
+            checkpoint(db)
         } catch (e: Exception) {
             android.util.Log.e("LocationStore", "Failed to clear locations: ${e.message}", e)
         }
@@ -142,6 +154,7 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
             } finally {
                 db.endTransaction()
             }
+            checkpoint(db)
         } catch (e: Exception) {
             android.util.Log.e("LocationStore", "Failed to insert payload: ${e.message}", e)
         }
@@ -192,8 +205,10 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
         if (ids.isNullOrEmpty()) return
 
         try {
+            val db = writableDatabase
             val placeholders = ids.joinToString(",") { "?" }
-            writableDatabase.delete("locations", "id IN ($placeholders)", ids.toTypedArray())
+            db.delete("locations", "id IN ($placeholders)", ids.toTypedArray())
+            checkpoint(db)
         } catch (e: Exception) {
             android.util.Log.e("LocationStore", "Failed to delete locations: ${e.message}", e)
         }
@@ -216,6 +231,19 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
     }
 
     private fun Any?.toDoubleOrZero(): Double = (this as? Number)?.toDouble() ?: 0.0
+
+    /**
+     * Bound the WAL file size after a write transaction. PASSIVE never blocks
+     * readers and is a no-op if no work is needed; the DB stays durable either
+     * way thanks to synchronous=FULL.
+     */
+    private fun checkpoint(db: SQLiteDatabase) {
+        try {
+            db.rawQuery("PRAGMA wal_checkpoint(PASSIVE)", null).use { it.moveToFirst() }
+        } catch (e: Exception) {
+            android.util.Log.w("LocationStore", "wal_checkpoint failed: ${e.message}")
+        }
+    }
 
     companion object {
         private const val DB_NAME = "locus.db"
