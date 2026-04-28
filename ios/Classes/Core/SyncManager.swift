@@ -461,6 +461,13 @@ class SyncManager {
         if hadPersistedReason && !isSyncPaused {
             emitPauseChange(isPaused: false, reason: nil)
         }
+        // Any 2xx also proves the network/auth path is healthy for *some*
+        // context, so contexts that previously hit max-retry deserve a fresh
+        // shot. Without this, a transient backend outage that flips contexts
+        // into `drainExhaustedContexts` strands every other context's backlog
+        // until the next explicit `resumeSync()` call. Clearing on success
+        // makes the drain self-healing.
+        drainExhaustedContexts.removeAll()
     }
 
     private func recordSyncFailure(_ reason: String) {
