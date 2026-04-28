@@ -25,6 +25,11 @@ export 'package:locus/src/features/location/models/location_history.dart'
 export 'package:locus/src/observability/locus_metrics.dart'
     show LocusMetrics, LocusMetricsSnapshot;
 export 'package:locus/src/observability/reliability_event.dart';
+// LocusReliabilityRegistry is exported so embedders can drive the stream from
+// integration tests and reset it between cases. Production code should reach
+// for the typed `Locus.reliability` / `Locus.metrics` accessors instead.
+export 'package:locus/src/observability/locus_reliability_registry.dart'
+    show LocusReliabilityRegistry;
 
 /// Main class for interacting with background geolocation services.
 ///
