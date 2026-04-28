@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:locus/src/config/config.dart';
+import 'package:locus/src/features/sync/services/heartbeat_emitter.dart';
 import 'package:locus/src/features/sync/services/sync_health_monitor.dart';
 import 'package:locus/src/features/sync/services/sync_metrics_recorder.dart';
 import 'package:locus/src/observability/locus_logger.dart';
@@ -24,6 +25,14 @@ final _log = locusLogger('method_channel');
 /// can be overridden in a future Config field.
 const Duration _kDefaultStalledThreshold = Duration(minutes: 1);
 const Duration _kDefaultUnrecoverableThreshold = Duration(minutes: 30);
+
+/// Default heartbeat interval for the auto-installed [HeartbeatEmitter].
+///
+/// 5 minutes is a battery-friendly cadence that still gives "no heartbeat in
+/// last 10 min" alarms time to fire on the dashboard side. The
+/// [HeartbeatEmitter] type's own constructor default stays at 60 seconds for
+/// tests and power users who construct one manually.
+const Duration _kDefaultHeartbeatInterval = Duration(minutes: 5);
 
 /// Method-channel backed implementation of [LocusInterface].
 class MethodChannelLocus implements LocusInterface {
@@ -55,7 +64,26 @@ class MethodChannelLocus implements LocusInterface {
     // subscription stays alive.
     final recorder = SyncMetricsRecorder()..attachTo(httpStream);
     unawaited(LocusReliabilityRegistry.instance.installSyncMetricsRecorder(recorder));
+
+    // Auto-start the silent-stop heartbeat. Embedders subscribe to the
+    // structured `tracking_heartbeat` log and alarm on its absence. The
+    // emitter also re-evaluates SyncHealthMonitor on each tick so the
+    // unrecoverable threshold can fire during long quiet periods (no new
+    // sync attempts arriving). Quarantine gauge is refreshed inside the
+    // tick from the same backlog read.
+    _heartbeatEmitter = HeartbeatEmitter(
+      backlogReader: getLocationSyncBacklog,
+      pauseReasonReader: () => syncPauseReason,
+      interval: _kDefaultHeartbeatInterval,
+    )..start();
   }
+
+  late final HeartbeatEmitter _heartbeatEmitter;
+
+  /// Stops the auto-installed heartbeat. Exposed for embedders that need
+  /// fine-grained control over background activity (test harnesses, suspend
+  /// flows). Production callers normally rely on the SDK lifecycle.
+  Future<void> stopHeartbeat() => _heartbeatEmitter.stop();
 
   // ============================================================
   // Event Stream

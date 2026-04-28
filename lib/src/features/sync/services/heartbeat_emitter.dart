@@ -83,6 +83,13 @@ class HeartbeatEmitter {
 
     final pauseReason = _pauseReasonReader?.call();
 
+    // Refresh the quarantine gauge from the live backlog so
+    // Locus.metrics.pointsQuarantinedNow stays in step with reality. The
+    // gauge is read-after-write per design — replace, don't accumulate.
+    if (backlog != null) {
+      _registry.setQuarantinedNow(backlog.quarantinedLocationCount);
+    }
+
     _log.eventInfo('tracking_heartbeat', <String, Object?>{
       'points_captured': snapshot.pointsCaptured,
       'points_sent': snapshot.pointsSent,
