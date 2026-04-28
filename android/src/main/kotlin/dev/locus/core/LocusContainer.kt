@@ -359,6 +359,13 @@ internal class LocusContainer private constructor(private val context: Context) 
                 )
             }
             "getCurrentPosition" -> getCurrentPosition(result)
+            "hasPreciseLocationPermission" -> {
+                val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                result.success(granted)
+            }
             "setConfig", "reset" -> {
                 locationTracker.applyConfig(call.arguments.asMap())
                 result.success(true)

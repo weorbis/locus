@@ -201,6 +201,29 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
     case "getCurrentPosition":
       pendingLocationResult = result
       locationClient.requestLocation()
+    case "hasPreciseLocationPermission":
+      // Precise location requires both an authorized status (when-in-use OR
+      // always) AND, on iOS 14+, the user-facing "Precise Location" toggle
+      // being on. Authorization and accuracy are process-wide on iOS, so a
+      // transient CLLocationManager instance returns the same value as
+      // LocationClient's manager — no need to expose internals.
+      let probe = CLLocationManager()
+      let authStatus: CLAuthorizationStatus
+      if #available(iOS 14.0, *) {
+        authStatus = probe.authorizationStatus
+      } else {
+        authStatus = CLLocationManager.authorizationStatus()
+      }
+      let authorized = authStatus == .authorizedWhenInUse
+        || authStatus == .authorizedAlways
+      let precise: Bool
+      if #available(iOS 14.0, *) {
+        precise = probe.accuracyAuthorization == .fullAccuracy
+      } else {
+        // Pre-iOS 14 has no reduced-accuracy concept; "authorized" implies precise.
+        precise = true
+      }
+      result(authorized && precise)
     case "setConfig":
       if let config = call.arguments as? [String: Any] {
         applyConfig(config)

@@ -279,6 +279,11 @@ abstract class LocusInterface {
   // ============================================================
   Future<bool> requestPermission();
 
+  /// True only when *precise* location is granted to the host. See
+  /// `Locus.hasPreciseLocationPermission` for the rationale on why this is
+  /// distinct from the broader "locationAlways granted" check.
+  Future<bool> hasPreciseLocationPermission();
+
   // ============================================================
   // State-Agnostic Streams
   // ============================================================

@@ -479,6 +479,11 @@ class MethodChannelLocus implements LocusInterface {
     return LocusLocation.requestPermission();
   }
 
+  @override
+  Future<bool> hasPreciseLocationPermission() {
+    return LocusLocation.hasPreciseLocationPermission();
+  }
+
   // ============================================================
   // State-Agnostic Streams
   // ============================================================

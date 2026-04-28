@@ -385,6 +385,22 @@ class Locus {
     return _instance.requestPermission();
   }
 
+  /// Returns `true` only when the host has been granted *precise* location
+  /// (Android `ACCESS_FINE_LOCATION`, iOS `accuracyAuthorization == fullAccuracy`).
+  ///
+  /// Distinguishes from the broader `Permission.locationAlways` check
+  /// exposed by `permission_handler`: that returns granted on Android even
+  /// when only `ACCESS_COARSE_LOCATION` is held alongside background
+  /// location, and granted on iOS even when the user has flipped on
+  /// "Precise Location: Off". Both states leave Locus capturing at coarse
+  /// cadence (~1/min) instead of the configured high-accuracy rate.
+  /// Embedders that need to surface a "precise location is required"
+  /// affordance should consult this method directly rather than relying
+  /// on the boolean granted/denied output of `permission_handler`.
+  static Future<bool> hasPreciseLocationPermission() {
+    return _instance.hasPreciseLocationPermission();
+  }
+
   // ============================================================
   // Dynamic Headers
   // ============================================================

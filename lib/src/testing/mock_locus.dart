@@ -768,6 +768,12 @@ class MockLocus implements LocusInterface {
   }
 
   @override
+  Future<bool> hasPreciseLocationPermission() async {
+    _methodCalls.add('hasPreciseLocationPermission');
+    return true;
+  }
+
+  @override
   Future<bool> requestPermission() async {
     _methodCalls.add('requestPermission');
     return true;

@@ -123,4 +123,19 @@ class LocusLocation {
   static Future<bool> requestPermission() async {
     return PermissionService.requestAll();
   }
+
+  /// True only when the host has been granted *precise* location authority.
+  /// Implementation lives natively (Android: ACCESS_FINE_LOCATION; iOS:
+  /// accuracyAuthorization). On platforms that don't implement the channel
+  /// method (or on errors), falls back to `false` so callers fail safe.
+  static Future<bool> hasPreciseLocationPermission() async {
+    try {
+      final result = await LocusChannels.methods.invokeMethod<bool>(
+        'hasPreciseLocationPermission',
+      );
+      return result ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 }
