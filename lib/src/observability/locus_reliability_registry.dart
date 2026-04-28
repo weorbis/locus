@@ -10,10 +10,33 @@ import 'package:locus/src/observability/reliability_event.dart';
 /// The public surface (`Locus.reliability`, `Locus.metrics`) is a thin
 /// re-export of this registry. Internal SDK code (sync, storage, quarantine
 /// janitor, ...) calls the `record*` / `emit` methods to feed it.
+///
+/// ## Per-isolate scope
+///
+/// [instance] is a `static final` inside this Dart library, which means
+/// **one registry per Dart isolate**, not one per process. Headless
+/// callbacks (geofence triggers, sync-on-boot) execute in a secondary
+/// isolate spawned by the Flutter engine. Events that fire there land in
+/// *that* isolate's registry, not the foreground app's.
+///
+/// Practical consequences for embedders:
+///
+/// * Subscribing to `Locus.reliability` from a Riverpod provider only sees
+///   events emitted from the foreground isolate.
+/// * `Locus.metrics.snapshot()` read from the foreground only reflects
+///   foreground-side counters — captures and syncs that happen during
+///   headless execution don't show up there.
+/// * Background-isolate observability is best read via the structured logs
+///   the SDK emits (e.g. `tracking_heartbeat`), which the platform side
+///   forwards into the unified log stream.
+///
+/// Plumbing headless events into the foreground registry would require a
+/// platform-channel bridge with explicit ordering guarantees and is
+/// tracked as a follow-up.
 class LocusReliabilityRegistry {
   LocusReliabilityRegistry._();
 
-  /// Process-wide singleton.
+  /// Per-isolate singleton — see the class-level dartdoc on isolate scope.
   static final LocusReliabilityRegistry instance = LocusReliabilityRegistry._();
 
   final _InMemoryLocusMetrics _metrics = _InMemoryLocusMetrics();

@@ -168,5 +168,94 @@ void main() {
       await monitor.detach();
       await controller.close();
     });
+
+    test('emitted SyncStalled carries auto-classified lastErrorClass', () async {
+      final monitor = newMonitor();
+      monitor.recordSuccess();
+      clock.advance(const Duration(minutes: 2));
+      monitor.recordFailure(httpStatus: 401);
+      await Future<void>.delayed(Duration.zero);
+      final stalled = events.whereType<SyncStalled>().single;
+      expect(stalled.lastHttpStatus, 401);
+      expect(stalled.lastErrorClass, SyncErrorClass.auth);
+    });
+
+    test('emitted SyncUnrecoverable carries auto-classified lastErrorClass',
+        () async {
+      final monitor = newMonitor();
+      monitor.recordSuccess();
+      clock.advance(const Duration(minutes: 31));
+      monitor.recordFailure(httpStatus: 503);
+      await Future<void>.delayed(Duration.zero);
+      final unrec = events.whereType<SyncUnrecoverable>().single;
+      expect(unrec.lastHttpStatus, 503);
+      expect(unrec.lastErrorClass, SyncErrorClass.server);
+    });
+
+    test('transport-level error (status 0) classifies as network', () async {
+      final monitor = newMonitor();
+      monitor.recordSuccess();
+      clock.advance(const Duration(minutes: 2));
+      monitor.recordFailure(httpStatus: 0);
+      await Future<void>.delayed(Duration.zero);
+      final stalled = events.whereType<SyncStalled>().single;
+      expect(stalled.lastErrorClass, SyncErrorClass.network);
+    });
+  });
+
+  group('classifySyncError', () {
+    test('null → network (transport-level: no response received)', () {
+      expect(classifySyncError(null), SyncErrorClass.network);
+    });
+
+    test('0 → network (matches the platform-side transport error sentinel)',
+        () {
+      expect(classifySyncError(0), SyncErrorClass.network);
+    });
+
+    test('401 / 403 → auth', () {
+      expect(classifySyncError(401), SyncErrorClass.auth);
+      expect(classifySyncError(403), SyncErrorClass.auth);
+    });
+
+    test('5xx → server', () {
+      expect(classifySyncError(500), SyncErrorClass.server);
+      expect(classifySyncError(502), SyncErrorClass.server);
+      expect(classifySyncError(599), SyncErrorClass.server);
+    });
+
+    test('other 4xx → unknown (not classified as auth)', () {
+      expect(classifySyncError(400), SyncErrorClass.unknown);
+      expect(classifySyncError(404), SyncErrorClass.unknown);
+      expect(classifySyncError(429), SyncErrorClass.unknown);
+    });
+
+    test('200/201 (defensive: not expected here) → unknown', () {
+      // Recorder calls classify only on failures, but the function itself
+      // must be total.
+      expect(classifySyncError(200), SyncErrorClass.unknown);
+    });
+  });
+
+  group('SyncStalled / SyncUnrecoverable constructor', () {
+    test('explicit lastErrorClass overrides auto-classification', () {
+      final stalled = SyncStalled(
+        sinceLastSuccess: const Duration(minutes: 2),
+        consecutiveFailures: 1,
+        lastHttpStatus: 500,
+        // Force a different class to verify the override path.
+        lastErrorClass: SyncErrorClass.auth,
+      );
+      expect(stalled.lastErrorClass, SyncErrorClass.auth);
+    });
+
+    test('toString includes lastErrorClass', () {
+      final stalled = SyncStalled(
+        sinceLastSuccess: const Duration(minutes: 5),
+        consecutiveFailures: 4,
+        lastHttpStatus: 401,
+      );
+      expect(stalled.toString(), contains('lastErrorClass: auth'));
+    });
   });
 }

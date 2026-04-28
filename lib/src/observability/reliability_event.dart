@@ -84,6 +84,38 @@ final class QuarantinePurged extends LocusReliabilityEvent {
   String toString() => 'QuarantinePurged(count: $count, olderThan: $olderThan)';
 }
 
+/// Coarse classification of a sync failure. Embedders use it to route
+/// recovery: an `auth` stall asks for a session refresh, `network` and
+/// `server` stalls ask for a retry-with-backoff, `unknown` falls back to
+/// the operator.
+///
+/// Mapping is intentionally coarse — the underlying `lastHttpStatus` carries
+/// the precise code when consumers need finer detail.
+enum SyncErrorClass {
+  /// HTTP 401/403 — backend rejected credentials.
+  auth,
+
+  /// Transport-level failure — no HTTP response, status reported as `0`.
+  network,
+
+  /// HTTP 5xx — backend acknowledged but failed to serve.
+  server,
+
+  /// Anything else (HTTP 4xx other than 401/403, or unmapped statuses).
+  unknown,
+}
+
+/// Maps an HTTP status (or `null` for transport errors) to a
+/// [SyncErrorClass]. Keep in sync with the documented mapping in
+/// [SyncErrorClass].
+SyncErrorClass classifySyncError(int? httpStatus) {
+  if (httpStatus == null) return SyncErrorClass.network;
+  if (httpStatus == 401 || httpStatus == 403) return SyncErrorClass.auth;
+  if (httpStatus == 0) return SyncErrorClass.network;
+  if (httpStatus >= 500 && httpStatus < 600) return SyncErrorClass.server;
+  return SyncErrorClass.unknown;
+}
+
 /// Emitted when sync has failed long enough to warrant an operator alert
 /// but is still considered recoverable.
 final class SyncStalled extends LocusReliabilityEvent {
@@ -91,8 +123,9 @@ final class SyncStalled extends LocusReliabilityEvent {
     required this.sinceLastSuccess,
     required this.consecutiveFailures,
     this.lastHttpStatus,
+    SyncErrorClass? lastErrorClass,
     super.occurredAt,
-  });
+  }) : lastErrorClass = lastErrorClass ?? classifySyncError(lastHttpStatus);
 
   /// How long it has been since the last successful sync.
   final Duration sinceLastSuccess;
@@ -104,9 +137,16 @@ final class SyncStalled extends LocusReliabilityEvent {
   /// network error).
   final int? lastHttpStatus;
 
+  /// Coarse classification of the last failure. Defaults to
+  /// [classifySyncError] over [lastHttpStatus] when not supplied.
+  ///
+  /// Embedders read this to decide what kind of recovery to attempt without
+  /// having to maintain their own status-code mapping. See [SyncErrorClass].
+  final SyncErrorClass lastErrorClass;
+
   @override
   String toString() =>
-      'SyncStalled(sinceLastSuccess: $sinceLastSuccess, consecutiveFailures: $consecutiveFailures, lastHttpStatus: $lastHttpStatus)';
+      'SyncStalled(sinceLastSuccess: $sinceLastSuccess, consecutiveFailures: $consecutiveFailures, lastHttpStatus: $lastHttpStatus, lastErrorClass: ${lastErrorClass.name})';
 }
 
 /// Emitted when sync has been failing for so long that operator intervention
@@ -116,8 +156,9 @@ final class SyncUnrecoverable extends LocusReliabilityEvent {
     required this.sinceLastSuccess,
     required this.consecutiveFailures,
     this.lastHttpStatus,
+    SyncErrorClass? lastErrorClass,
     super.occurredAt,
-  });
+  }) : lastErrorClass = lastErrorClass ?? classifySyncError(lastHttpStatus);
 
   /// How long it has been since the last successful sync.
   final Duration sinceLastSuccess;
@@ -128,9 +169,12 @@ final class SyncUnrecoverable extends LocusReliabilityEvent {
   /// HTTP status of the last attempt (null on transport-level errors).
   final int? lastHttpStatus;
 
+  /// Coarse classification of the last failure. See [SyncErrorClass].
+  final SyncErrorClass lastErrorClass;
+
   @override
   String toString() =>
-      'SyncUnrecoverable(sinceLastSuccess: $sinceLastSuccess, consecutiveFailures: $consecutiveFailures, lastHttpStatus: $lastHttpStatus)';
+      'SyncUnrecoverable(sinceLastSuccess: $sinceLastSuccess, consecutiveFailures: $consecutiveFailures, lastHttpStatus: $lastHttpStatus, lastErrorClass: ${lastErrorClass.name})';
 }
 
 /// Emitted when an underlying storage operation throws (insert, delete,

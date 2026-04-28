@@ -150,14 +150,20 @@ class Locus {
   /// Subscribe early in the app's lifecycle and forward events into your
   /// telemetry pipeline (Sentry, structured logs, dashboards). The stream is
   /// a broadcast — late subscribers do not see prior events.
+  ///
+  /// **Isolate scope.** The backing registry is per-isolate. Headless
+  /// callbacks (geofence triggers, sync-on-boot) emit events into a
+  /// different registry than the one observed here; rely on the SDK's
+  /// structured logs for cross-isolate visibility.
   static Stream<LocusReliabilityEvent> get reliability =>
       LocusReliabilityRegistry.instance.reliability;
 
   /// Counters that answer "how reliable has the SDK been since install?".
   ///
   /// Use [LocusMetrics.snapshot] to read the current values. Counters are
-  /// process-local; persistence across app launches is not yet provided by
-  /// the default in-memory implementation.
+  /// process-local *and* per-isolate; persistence across app launches and
+  /// cross-isolate aggregation are not provided by the default in-memory
+  /// implementation. See [reliability] for the full discussion.
   static LocusMetrics get metrics =>
       LocusReliabilityRegistry.instance.metrics;
 

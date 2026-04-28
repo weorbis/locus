@@ -76,6 +76,16 @@ class MethodChannelLocus implements LocusInterface {
       pauseReasonReader: () => syncPauseReason,
       interval: _kDefaultHeartbeatInterval,
     )..start();
+
+    // QuarantineJanitor is intentionally NOT auto-started here. The native
+    // LocationStore.pruneByAge / pruneByCount paths already discard stale
+    // records (including those without route context) at insertion time, and
+    // the heartbeat above keeps `pointsQuarantinedNow` in step with the
+    // backlog. Wiring a Dart-side janitor would require dedicated
+    // platform-channel handlers (`purgeQuarantined`, `countQuarantined`) plus
+    // a new native eviction event surface. That work is tracked separately;
+    // the class stays buildable + tested for embedders that ship their own
+    // native purger.
   }
 
   late final HeartbeatEmitter _heartbeatEmitter;
