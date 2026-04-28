@@ -81,6 +81,23 @@ class ConfigManager(context: Context) {
     var retryDelayMultiplier: Double = 2.0
     var maxRetryDelayMs: Int = 60000
 
+    /**
+     * After all per-batch HTTP retries are exhausted for a single route
+     * context the drain skips that context so other contexts in the queue
+     * can still make progress. Without a cooldown the skipped context is
+     * stranded until the *next* explicit `resumeSync()` or until any other
+     * context produces a 2xx. For a one-task-per-shift workload (where there
+     * is only one active context) this means the queue wedges for the rest
+     * of the session under any sustained transient backend failure.
+     *
+     * These two knobs put a clock on that strand. The first time a context
+     * exhausts its retries it gets [drainStrandInitialCooldownMs]; each
+     * subsequent re-strand doubles, capped at [drainStrandMaxCooldownMs].
+     * Any 2xx (from the same or another context) clears all strands.
+     */
+    var drainStrandInitialCooldownMs: Int = 30_000
+    var drainStrandMaxCooldownMs: Int = 300_000
+
     // Sync policy settings
     var syncPolicyLowBatteryThreshold: Int = 20
     var syncPolicyPreferWifi: Boolean = false
@@ -163,6 +180,8 @@ class ConfigManager(context: Context) {
         (config["retryDelay"] as? Number)?.let { retryDelayMs = it.toInt() }
         (config["retryDelayMultiplier"] as? Number)?.let { retryDelayMultiplier = it.toDouble() }
         (config["maxRetryDelay"] as? Number)?.let { maxRetryDelayMs = it.toInt() }
+        (config["drainStrandInitialCooldown"] as? Number)?.let { drainStrandInitialCooldownMs = it.toInt() }
+        (config["drainStrandMaxCooldown"] as? Number)?.let { drainStrandMaxCooldownMs = it.toInt() }
         (config["method"] as? String)?.let { httpMethod = it }
 
         (config["headers"] as? Map<*, *>)?.let { httpHeaders = it.toStringKeyMap() }

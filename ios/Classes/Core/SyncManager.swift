@@ -87,14 +87,29 @@ class SyncManager {
         let ids: [String]
     }
 
-    /// Tracks route contexts that exhausted all retries during the current
-    /// drain cycle. `selectNextLocationBatch` skips these so the drain can
-    /// advance to the next context group instead of re-selecting the same
-    /// failed batch in an infinite loop.
+    /// Route contexts whose per-batch retries have all been exhausted, mapped
+    /// to a `StrandedContextState` giving the wall-clock time at which the
+    /// context becomes eligible for a fresh drain attempt and the cooldown
+    /// that produced that timestamp (so consecutive strands can double the
+    /// next cooldown up to the configured cap).
     ///
-    /// Cleared at the start of each `resumeSync` call so that previously
-    /// failed contexts get a fresh chance on the next cycle.
-    private var drainExhaustedContexts = Set<RouteContext>()
+    /// Why a map instead of the old `Set<RouteContext>`: with a set, a
+    /// stranded context could only ever be cleared by an explicit
+    /// `resumeSync` call or by a 2xx from a *different* context. For
+    /// single-context workloads (one task per shift) neither condition can
+    /// fire, so the queue wedged silently. The cooldown lets a stranded
+    /// context get periodic fresh shots; if the backend has recovered, the
+    /// next 2xx clears the entire map (existing behavior in
+    /// `recordSyncSuccess`).
+    private struct StrandedContextState {
+        /// `Date().timeIntervalSinceReferenceDate` at which the context is
+        /// retryable.
+        let eligibleAt: TimeInterval
+        /// Cooldown that placed this entry. The next *fresh* strand for the
+        /// same context will use `min(this * 2, drainStrandMaxCooldown)`.
+        let cooldown: TimeInterval
+    }
+    private var drainExhaustedContexts: [RouteContext: StrandedContextState] = [:]
 
     private func createURLSession() -> URLSession {
         let configuration = URLSessionConfiguration.default
@@ -368,8 +383,14 @@ class SyncManager {
             guard let context = extractRouteContext(from: payload) else {
                 continue
             }
-            // Skip contexts that exhausted all retries in this drain cycle.
-            guard !drainExhaustedContexts.contains(context) else { continue }
+            // Skip contexts whose strand-cooldown hasn't elapsed yet. An
+            // expired entry is a green light — it stays in the map (so the
+            // *next* strand doubles the cooldown), but selectNextLocationBatch
+            // treats it as eligible.
+            if let strand = drainExhaustedContexts[context],
+               Date().timeIntervalSinceReferenceDate < strand.eligibleAt {
+                continue
+            }
             if selectedContext == nil {
                 selectedContext = context
             }
@@ -901,16 +922,46 @@ class SyncManager {
     /// When a retry is scheduled, the drain pauses for this batch — the retry
     /// runs independently and restarts the drain on success.
     ///
-    /// When retries are exhausted, the batch's `RouteContext` is added to
-    /// `drainExhaustedContexts` so `selectNextLocationBatch` skips it, and
-    /// the drain continues to the next context group.
+    /// When retries are exhausted, the batch's `RouteContext` is parked in
+    /// `drainExhaustedContexts` with a cooldown (initial value on first
+    /// strand, doubling up to the configured cap on each subsequent fresh
+    /// strand cycle). `selectNextLocationBatch` skips contexts whose
+    /// cooldown hasn't elapsed. The drain continues to the next context
+    /// group; if all contexts are in cooldown the next `requestLocationSync`
+    /// yields no batch.
     private func advanceDrainAfterFailure(payloads: [[String: Any]], retryScheduled: Bool) {
         if retryScheduled {
             completeLocationSync(continueDrain: false)
             return
         }
+        // Cooldown doubles only on a *fresh* strand cycle (previous window
+        // already elapsed) so concurrent batches inside the same outage
+        // cascade can't ratchet eligibility up to the cap in seconds.
         if let first = payloads.first, let context = extractRouteContext(from: first) {
-            drainExhaustedContexts.insert(context)
+            let now = Date().timeIntervalSinceReferenceDate
+            let previous = drainExhaustedContexts[context]
+            let maxCooldown = max(0, config.drainStrandMaxCooldown)
+            let initialCooldown = max(0, min(config.drainStrandInitialCooldown, max(maxCooldown, 1)))
+
+            let isFreshStrandCycle = previous == nil || now >= (previous?.eligibleAt ?? 0)
+            if isFreshStrandCycle {
+                let cooldown: TimeInterval
+                if let previous = previous {
+                    cooldown = max(initialCooldown, min(previous.cooldown * 2, maxCooldown))
+                } else {
+                    cooldown = initialCooldown
+                }
+                drainExhaustedContexts[context] = StrandedContextState(
+                    eligibleAt: now + cooldown,
+                    cooldown: cooldown
+                )
+                delegate?.onLog(
+                    level: "warn",
+                    message: "drain stranded for context taskId=\(context.taskId); next attempt in \(Int(cooldown * 1000))ms"
+                )
+            }
+            // else: re-strand inside an already-pending cooldown window;
+            // keep the existing entry untouched so the original eligibility wins.
         }
         completeLocationSync(continueDrain: true)
     }

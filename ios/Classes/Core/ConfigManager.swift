@@ -44,6 +44,23 @@ class ConfigManager {
     var retryDelay: TimeInterval = 5
     var retryDelayMultiplier: Double = 2.0
     var maxRetryDelay: TimeInterval = 60
+
+    /// After all per-batch HTTP retries are exhausted for a single route
+    /// context the drain skips that context so other contexts in the queue
+    /// can still make progress. Without a cooldown the skipped context is
+    /// stranded until the *next* explicit `resumeSync()` or until any other
+    /// context produces a 2xx. For a one-task-per-shift workload (where
+    /// there is only one active context) this means the queue wedges for
+    /// the rest of the session under any sustained transient backend
+    /// failure.
+    ///
+    /// These two knobs put a clock on that strand. The first time a context
+    /// exhausts its retries it gets `drainStrandInitialCooldown`; each
+    /// subsequent re-strand (after the previous cooldown has elapsed)
+    /// doubles, capped at `drainStrandMaxCooldown`. Any 2xx (from the same
+    /// or another context) clears all strands.
+    var drainStrandInitialCooldown: TimeInterval = 30
+    var drainStrandMaxCooldown: TimeInterval = 300
     var disableAutoSyncOnCellular = false
     var batchSync = false
     var maxBatchSize = 50
@@ -193,6 +210,8 @@ class ConfigManager {
         if let val = config["retryDelay"] as? NSNumber { retryDelay = val.doubleValue / 1000.0 }
         if let val = config["retryDelayMultiplier"] as? NSNumber { retryDelayMultiplier = val.doubleValue }
         if let val = config["maxRetryDelay"] as? NSNumber { maxRetryDelay = val.doubleValue / 1000.0 }
+        if let val = config["drainStrandInitialCooldown"] as? NSNumber { drainStrandInitialCooldown = val.doubleValue / 1000.0 }
+        if let val = config["drainStrandMaxCooldown"] as? NSNumber { drainStrandMaxCooldown = val.doubleValue / 1000.0 }
         if let val = config["disableAutoSyncOnCellular"] as? Bool { disableAutoSyncOnCellular = val }
         if let val = config["queueMaxDays"] as? NSNumber { queueMaxDays = val.intValue }
         if let val = config["queueMaxRecords"] as? NSNumber { queueMaxRecords = val.intValue }
