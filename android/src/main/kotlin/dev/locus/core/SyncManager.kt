@@ -700,7 +700,8 @@ class SyncManager(
                     queueStore.deleteByIds(listOf(id))
                 }
 
-                emitHttpEvent(status, ok, responseText)
+                // Queue path always carries one record per request.
+                emitHttpEvent(status, ok, responseText, recordsSent = if (ok) 1 else null)
                 log("info", "http $status")
 
                 when {
@@ -812,7 +813,11 @@ class SyncManager(
                 recordSyncSuccess()
             }
 
-            emitHttpEvent(status, ok, responseText)
+            // Single-location sync: count is the size of the deleted set, or 1
+            // when the call had no idsToDelete (legacy callers). Failures emit
+            // no count so syncAttemptsFailed is not misread as records sent.
+            val sentCount = if (ok) (idsToDelete?.size ?: 1) else null
+            emitHttpEvent(status, ok, responseText, recordsSent = sentCount)
             log(if (ok) "info" else "error", "http $status${if (ok) "" else " $responseText"}")
 
             when {
@@ -895,7 +900,11 @@ class SyncManager(
                 recordSyncSuccess()
             }
 
-            emitHttpEvent(status, ok, responseText)
+            // Batched sync: count is the number of rows actually deleted on a
+            // 2xx response. Non-2xx attempts skip the count so the failure
+            // path can't accidentally inflate `pointsSent`.
+            val sentCount = if (ok) idsToDelete.size else null
+            emitHttpEvent(status, ok, responseText, recordsSent = sentCount)
             log(if (ok) "info" else "error", "http $status${if (ok) "" else " $responseText"}")
 
             when {
@@ -1002,14 +1011,27 @@ class SyncManager(
         return max(config.retryDelayMs.toLong(), min(delay, config.maxRetryDelayMs.toLong()))
     }
 
-    private fun emitHttpEvent(status: Int, ok: Boolean, responseText: String?) {
+    private fun emitHttpEvent(
+        status: Int,
+        ok: Boolean,
+        responseText: String?,
+        recordsSent: Int? = null,
+    ) {
+        // recordsSent is the SDK's best-effort count of locations the backend
+        // acknowledged in this attempt. Only the success branches of the
+        // location-sync paths set it; failures, transport errors, and queue
+        // requests omit it so Locus.metrics counters stay precise.
+        val data = mutableMapOf<String, Any>(
+            "status" to status,
+            "ok" to ok,
+            "responseText" to (responseText ?: "")
+        )
+        if (recordsSent != null) {
+            data["recordsSent"] = recordsSent
+        }
         val httpEvent = mapOf(
             "type" to "http",
-            "data" to mapOf(
-                "status" to status,
-                "ok" to ok,
-                "responseText" to (responseText ?: "")
-            )
+            "data" to data,
         )
         listener.onHttpEvent(httpEvent)
     }

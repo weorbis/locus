@@ -768,14 +768,21 @@ class SyncManager {
             storage.removeLocations(ids)
             recordSyncSuccess()
         }
-        
+
+        // recordsSent: number of locations the backend acknowledged on this
+        // attempt. Set only on success so Locus.metrics.pointsSent is precise;
+        // failures emit no count.
+        var data: [String: Any] = [
+            "status": status,
+            "ok": ok,
+            "responseText": responseText
+        ]
+        if ok {
+            data["recordsSent"] = idsToDelete?.count ?? 1
+        }
         let event: [String: Any] = [
             "type": "http",
-            "data": [
-                "status": status,
-                "ok": ok,
-                "responseText": responseText
-            ]
+            "data": data
         ]
         delegate?.onHttpEvent(event)
         delegate?.onLog(level: ok ? "info" : "error", message: "http \(status) \(ok ? "" : responseText)")
@@ -813,14 +820,19 @@ class SyncManager {
         if ok {
             storage.removeQueueItems([id])
         }
-        
+
+        // Queue path always carries one record per request; emit on success.
+        var data: [String: Any] = [
+            "status": status,
+            "ok": ok,
+            "responseText": responseText
+        ]
+        if ok {
+            data["recordsSent"] = 1
+        }
         let event: [String: Any] = [
             "type": "http",
-            "data": [
-                "status": status,
-                "ok": ok,
-                "responseText": responseText
-            ]
+            "data": data
         ]
         delegate?.onHttpEvent(event)
         delegate?.onLog(level: ok ? "info" : "error", message: "http \(status) \(ok ? "" : responseText)")

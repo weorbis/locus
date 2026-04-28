@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:locus/src/config/config.dart';
 import 'package:locus/src/features/sync/services/sync_health_monitor.dart';
+import 'package:locus/src/features/sync/services/sync_metrics_recorder.dart';
 import 'package:locus/src/observability/locus_logger.dart';
 import 'package:locus/src/observability/locus_reliability_registry.dart';
 import 'package:locus/src/shared/events.dart';
@@ -45,6 +46,15 @@ class MethodChannelLocus implements LocusInterface {
     );
     monitor.attachTo(httpStream);
     unawaited(LocusReliabilityRegistry.instance.installSyncHealthMonitor(monitor));
+
+    // Auto-install a SyncMetricsRecorder so Locus.metrics.snapshot() reflects
+    // real sync activity. It listens to the same httpStream as the health
+    // monitor but mutates cumulative counters (pointsSent, syncAttemptsTotal,
+    // syncAttemptsFailed, lastSuccessAt, lastFailureAt) instead of emitting
+    // reliability events. The registry holds the reference so the broadcast
+    // subscription stays alive.
+    final recorder = SyncMetricsRecorder()..attachTo(httpStream);
+    unawaited(LocusReliabilityRegistry.instance.installSyncMetricsRecorder(recorder));
   }
 
   // ============================================================

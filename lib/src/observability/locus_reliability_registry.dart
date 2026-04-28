@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:locus/src/features/sync/services/sync_health_monitor.dart';
+import 'package:locus/src/features/sync/services/sync_metrics_recorder.dart';
 import 'package:locus/src/observability/locus_metrics.dart';
 import 'package:locus/src/observability/reliability_event.dart';
 
@@ -19,6 +20,7 @@ class LocusReliabilityRegistry {
   StreamController<LocusReliabilityEvent> _eventController =
       StreamController<LocusReliabilityEvent>.broadcast();
   SyncHealthMonitor? _syncHealthMonitor;
+  SyncMetricsRecorder? _syncMetricsRecorder;
 
   /// Public stream of reliability events.
   Stream<LocusReliabilityEvent> get reliability => _eventController.stream;
@@ -38,6 +40,15 @@ class LocusReliabilityRegistry {
     await previous?.detach();
   }
 
+  /// Installs a [SyncMetricsRecorder]. Detaches and replaces any previously
+  /// installed recorder. Held by the registry so the subscription stays
+  /// alive without callers needing to hold the reference themselves.
+  Future<void> installSyncMetricsRecorder(SyncMetricsRecorder recorder) async {
+    final previous = _syncMetricsRecorder;
+    _syncMetricsRecorder = recorder;
+    await previous?.detach();
+  }
+
   /// Emit a reliability event to subscribers. Safe to call at any time:
   /// after [resetForTests] closes the controller, the next call will see a
   /// fresh broadcast stream.
@@ -47,12 +58,21 @@ class LocusReliabilityRegistry {
   }
 
   /// Increment the captured-points counter.
+  ///
+  /// Called once per location event surfaced to embedders (after spoof and
+  /// privacy-zone filtering). Granularity is per-event, not per-batch — the
+  /// platform delivers locations one at a time.
   void recordCaptured(int count) {
     if (count <= 0) return;
     _metrics._pointsCaptured += count;
   }
 
   /// Record a successful sync that flushed [count] points.
+  ///
+  /// Cardinality is intentionally per-batch, not per-record: when a single
+  /// HTTP request flushes 10 stored locations, [count] is 10 and
+  /// [LocusMetricsSnapshot.syncAttemptsTotal] advances by 1. This matches
+  /// the platform side, which deletes rows by `idsToDelete.size` on a 2xx.
   void recordSent(int count, {DateTime? at}) {
     if (count < 0) return;
     final ts = (at ?? DateTime.now()).toUtc();
@@ -90,6 +110,9 @@ class LocusReliabilityRegistry {
     final monitor = _syncHealthMonitor;
     _syncHealthMonitor = null;
     await monitor?.detach();
+    final recorder = _syncMetricsRecorder;
+    _syncMetricsRecorder = null;
+    await recorder?.detach();
     if (!_eventController.isClosed) {
       await _eventController.close();
     }

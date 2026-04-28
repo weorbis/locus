@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:locus/src/shared/events.dart';
 import 'package:locus/src/models.dart';
 import 'package:locus/src/observability/locus_logger.dart';
+import 'package:locus/src/observability/locus_reliability_registry.dart';
 import 'package:locus/src/core/event_mapper.dart';
 import 'package:locus/src/features/location/services/spoof_detection.dart';
 import 'package:locus/src/features/diagnostics/services/error_recovery.dart';
@@ -257,6 +258,11 @@ class LocusStreams {
       } else {
         _eventController?.add(event);
       }
+      // Count one captured point per location emitted to listeners. Spoof-
+      // blocked and privacy-zone-excluded events have already returned above
+      // so they never advance this counter — `pointsCaptured` matches what
+      // the SDK actually surfaces.
+      LocusReliabilityRegistry.instance.recordCaptured(1);
       return;
     }
 
