@@ -112,45 +112,23 @@ class ConfigManager {
     // `compressRequests`, but a one-hour automatic fallback gives the
     // caller a self-healing path without paging the on-call.
     //
-    // The fallback is queue-protected separately from `dynamicHeaders` so
-    // a stalled headers callback can't block compression decisions on the
-    // hot send path.
-    private let compressionFallbackQueue = DispatchQueue(label: "dev.locus.config.compressionfallback")
-    private var _compressionDisabledUntil: Date?
+    // State machine extracted to a plugin-free helper so it's testable
+    // as plain XCTest (no Flutter framework required).
+    private let compressionFallback = CompressionFallbackState()
 
-    /// Disables gzip compression for `duration` from now. Subsequent calls
-    /// extend the deadline (max-of-existing-and-new) so a back-to-back
-    /// 415 burst doesn't shorten the window. Idempotent.
+    /// Disables gzip compression for `duration` seconds from now.
     func disableCompressionFor(duration: TimeInterval) {
-        compressionFallbackQueue.sync {
-            let proposed = Date().addingTimeInterval(duration)
-            if let existing = _compressionDisabledUntil, existing > proposed {
-                return
-            }
-            _compressionDisabledUntil = proposed
-        }
+        compressionFallback.disableFor(duration: duration)
     }
 
-    /// Whether the 415 fallback currently suppresses compression. Returns
-    /// `false` once the deadline elapses; the stored value is cleared on
-    /// the same read so callers don't keep tripping the branch after the
-    /// window closes.
+    /// Whether the 415 fallback currently suppresses compression.
     var isCompressionDisabledByFallback: Bool {
-        compressionFallbackQueue.sync {
-            guard let until = _compressionDisabledUntil else { return false }
-            if Date() >= until {
-                _compressionDisabledUntil = nil
-                return false
-            }
-            return true
-        }
+        compressionFallback.isDisabled
     }
 
     /// Test-only seam: clears the fallback regardless of the deadline.
     func resetCompressionFallback() {
-        compressionFallbackQueue.sync {
-            _compressionDisabledUntil = nil
-        }
+        compressionFallback.reset()
     }
     var syncOnCellular: Bool = true
     var syncInterval: Int = 0

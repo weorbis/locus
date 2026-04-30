@@ -28,4 +28,14 @@ Pod::Spec.new do |s|
   # Flutter.framework does not contain a i386 slice.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }
   s.swift_version = '5.9'
+
+  # XCTest unit tests under `Tests/`. Targeted at plugin-free helpers
+  # (CompressionFallbackState, future drainExhaustedContexts splits) so
+  # the suite runs without a Flutter host project. Validate via
+  # `pod lib lint --include-podspecs=true` and execute through the
+  # generated `locus-Unit-Tests` scheme in the example workspace.
+  s.test_spec 'Tests' do |test_spec|
+    test_spec.source_files = 'Tests/**/*.swift'
+    test_spec.test_type = :unit
+  end
 end

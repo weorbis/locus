@@ -34,11 +34,15 @@ extensions.configure<LibraryExtension>("android") {
     defaultConfig {
         minSdk = 26
         targetSdk = 34
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     sourceSets {
         getByName("main") {
             java.srcDirs("src/main/kotlin")
+        }
+        getByName("test") {
+            java.srcDirs("src/test/kotlin")
         }
     }
 
@@ -49,6 +53,11 @@ extensions.configure<LibraryExtension>("android") {
 
     lint {
         disable.add("InvalidPackage")
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.isReturnDefaultValues = true
     }
 }
 
@@ -62,4 +71,11 @@ dependencies {
     add("implementation", "com.google.android.gms:play-services-location:21.3.0")
     add("implementation", "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     add("implementation", "androidx.security:security-crypto:1.1.0-alpha06")
+
+    // JVM unit tests under src/test/kotlin. State helpers
+    // (`CompressionFallbackState`, future drainExhaustedContexts) are
+    // Context-free by design so plain JUnit + kotlinx-coroutines-test is
+    // enough — no Robolectric / emulator required.
+    add("testImplementation", "junit:junit:4.13.2")
+    add("testImplementation", "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
 }

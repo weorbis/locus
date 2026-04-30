@@ -115,48 +115,20 @@ class ConfigManager(context: Context) {
     // [compressRequests], but a one-hour automatic fallback gives the
     // caller a self-healing path without paging the on-call.
     //
-    // The fallback state is lock-protected separately from the rest of
-    // the config so a stalled write can't block compression decisions on
-    // the hot send path.
-    private val compressionFallbackLock = Any()
-    private var compressionDisabledUntilMs: Long? = null
+    // State machine extracted to a Context-free helper so it's testable
+    // as plain JUnit (no Robolectric overhead). Thread-safe by design.
+    private val compressionFallback = CompressionFallbackState()
 
-    /**
-     * Disables gzip compression for [durationMs] milliseconds from now.
-     * Subsequent calls extend the deadline (max-of-existing-and-new) so a
-     * back-to-back 415 burst doesn't shorten the window. Idempotent.
-     */
-    fun disableCompressionFor(durationMs: Long) {
-        synchronized(compressionFallbackLock) {
-            val proposed = System.currentTimeMillis() + durationMs
-            val existing = compressionDisabledUntilMs
-            if (existing != null && existing > proposed) return
-            compressionDisabledUntilMs = proposed
-        }
-    }
+    /** Disables gzip compression for [durationMs] ms from now. */
+    fun disableCompressionFor(durationMs: Long) =
+        compressionFallback.disableFor(durationMs)
 
-    /**
-     * Whether the 415 fallback currently suppresses compression. Returns
-     * `false` once the deadline elapses; the stored value is cleared on
-     * the same read so callers don't keep tripping the branch after the
-     * window closes.
-     */
+    /** Whether the 415 fallback currently suppresses compression. */
     val isCompressionDisabledByFallback: Boolean
-        get() = synchronized(compressionFallbackLock) {
-            val until = compressionDisabledUntilMs ?: return@synchronized false
-            if (System.currentTimeMillis() >= until) {
-                compressionDisabledUntilMs = null
-                return@synchronized false
-            }
-            true
-        }
+        get() = compressionFallback.isDisabled
 
-    /** Test-only seam: clears the fallback regardless of the deadline. */
-    fun resetCompressionFallback() {
-        synchronized(compressionFallbackLock) {
-            compressionDisabledUntilMs = null
-        }
-    }
+    /** Test-only seam: clears the flag regardless of the deadline. */
+    fun resetCompressionFallback() = compressionFallback.reset()
 
     // Sync policy settings
     var syncPolicyLowBatteryThreshold: Int = 20
