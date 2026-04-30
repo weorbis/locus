@@ -163,5 +163,53 @@ void main() {
       await emitter.stop();
       expect(emitter.isRunning, isFalse);
     });
+
+    test('M-1: startIfNotRunning is idempotent and a no-op when running',
+        () async {
+      // The lifecycle path (LocusLifecycle.ready) calls `startIfNotRunning`
+      // on every `ready()` so repeat invocations (hot reload, test setup,
+      // re-attach after a transient detach) must not stack timers.
+      final emitter = HeartbeatEmitter(
+        backlogReader: () async => const LocationSyncBacklog(),
+        interval: const Duration(minutes: 5),
+      );
+      emitter.startIfNotRunning();
+      emitter.startIfNotRunning();
+      emitter.startIfNotRunning();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(emitter.isRunning, isTrue);
+      final heartbeats = records.where(
+        (r) =>
+            r.object is LocusEvent &&
+            (r.object! as LocusEvent).name == 'tracking_heartbeat',
+      );
+      // Only one immediate tick despite three start calls.
+      expect(heartbeats, hasLength(1));
+
+      await emitter.stop();
+      expect(emitter.isRunning, isFalse);
+    });
+
+    test('M-1: never-started emitter does not emit until start is called',
+        () async {
+      // Apps that import the package without calling `Locus.ready` (test
+      // suites, lazy-loaded bundles) must not start a background timer.
+      // Pre-fix the constructor of `MethodChannelLocus` started the timer
+      // unconditionally; this test guards the new behavior at the unit
+      // level — constructing the emitter without calling `start` is
+      // observably silent.
+      HeartbeatEmitter(
+        backlogReader: () async => const LocationSyncBacklog(),
+        interval: const Duration(milliseconds: 10),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final heartbeats = records.where(
+        (r) =>
+            r.object is LocusEvent &&
+            (r.object! as LocusEvent).name == 'tracking_heartbeat',
+      );
+      expect(heartbeats, isEmpty);
+    });
   });
 }

@@ -31,11 +31,15 @@ void main() {
       expect(snap.lastFailureAt, isNull);
     });
 
-    test('success without recordsSent counts as one record', () async {
-      // Legacy / queue path keeps recordsSent null; recorder treats it as 1.
+    test('success without recordsSent defaults to zero and warns', () async {
+      // L-5 / Wave 3 §5.6: a success without an explicit count is now
+      // treated as zero records (was 1) so a queue-path that never fills
+      // `recordsSent` cannot silently inflate `pointsSent`. The recorder
+      // emits a `http_event_missing_records_sent` warning so the missing
+      // call site is observable.
       recorder.record(const HttpEvent(status: 200, ok: true));
       final snap = await registry.metrics.snapshot();
-      expect(snap.pointsSent, 1);
+      expect(snap.pointsSent, 0);
       expect(snap.syncAttemptsTotal, 1);
     });
 

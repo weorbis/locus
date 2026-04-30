@@ -8,6 +8,7 @@ import 'package:locus/src/shared/location_utils.dart';
 import 'package:locus/src/core/locus_channels.dart';
 import 'package:locus/src/features/battery/services/locus_adaptive.dart';
 import 'package:locus/src/core/locus_streams.dart';
+import 'package:locus/src/core/method_channel_locus.dart';
 import 'package:locus/src/features/trips/services/locus_trip.dart';
 import 'package:locus/src/features/tracking/services/locus_profiles.dart';
 import 'package:locus/src/features/geofencing/services/locus_workflows.dart';
@@ -55,6 +56,15 @@ class LocusLifecycle {
 
     final result =
         await LocusChannels.methods.invokeMethod('ready', config.toMap());
+
+    // Start the silent-stop heartbeat now that native init has completed.
+    // Constructing a `MethodChannelLocus` no longer auto-starts the timer
+    // (so apps that import the package without calling `Locus.ready` —
+    // test harnesses, lazy bundles — never spin a background timer).
+    // `startIfNotRunning` makes repeated `ready` calls (hot reload, test
+    // setup) a no-op.
+    MethodChannelLocus.instance?.heartbeatEmitter.startIfNotRunning();
+
     if (result is Map) {
       return GeolocationState.fromMap(Map<String, dynamic>.from(result));
     }
@@ -111,6 +121,11 @@ class LocusLifecycle {
 
   /// Destroys the SDK instance, cleaning up all resources and static state.
   static Future<void> destroy() async {
+    // Stop the heartbeat first so no late tick races with the rest of
+    // teardown (timer would otherwise observe a torn-down registry / a
+    // missing native channel and log a spurious warning).
+    await MethodChannelLocus.instance?.heartbeatEmitter.stop();
+
     await LocusAdaptive.stopAdaptiveTracking();
     await LocusStreams.stopNativeStream(force: true);
 

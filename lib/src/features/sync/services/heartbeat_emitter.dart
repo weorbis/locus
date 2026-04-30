@@ -57,6 +57,12 @@ class HeartbeatEmitter {
     unawaited(_tick());
   }
 
+  /// Identical to [start] but with a name that documents intent at the call
+  /// site — used by `LocusLifecycle.ready` which may be invoked multiple
+  /// times across hot reloads / test setups. Prefer this alias when
+  /// idempotence is the contract, not a side-effect.
+  void startIfNotRunning() => start();
+
   /// Cancels the heartbeat. Safe to call multiple times.
   Future<void> stop() async {
     _timer?.cancel();

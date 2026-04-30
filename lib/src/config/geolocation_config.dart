@@ -98,6 +98,7 @@ class Config {
     this.adaptiveTracking,
     this.lowBattery,
     this.spoofDetection,
+    this.compressRequests = true,
   });
 
   /// Creates a [Config] from a map representation.
@@ -231,6 +232,7 @@ class Config {
           ? SpoofDetectionConfig.fromMap(
               Map<String, dynamic>.from(map['spoofDetection'] as Map))
           : null,
+      compressRequests: map['compressRequests'] as bool? ?? true,
     );
   }
 
@@ -484,6 +486,14 @@ class Config {
   /// Configuration for location spoofing detection.
   final SpoofDetectionConfig? spoofDetection;
 
+  /// Enable gzip request compression (`Content-Encoding: gzip`) on sync POSTs.
+  ///
+  /// When `true` (default), Locus gzips request bodies larger than 1 KB before
+  /// sending. Cuts ~100 KB JSON batches by ~10x on flaky networks. Disable for
+  /// backends that cannot decompress gzipped requests; the SDK then sends raw
+  /// JSON. The flag plumbs through to native via the existing config channel.
+  final bool compressRequests;
+
   /// Creates a copy of this [Config] with optionally modified fields.
   ///
   /// Returns a new [Config] instance with the specified fields updated
@@ -567,6 +577,7 @@ class Config {
     AdaptiveTrackingConfig? adaptiveTracking,
     LowBatteryConfig? lowBattery,
     SpoofDetectionConfig? spoofDetection,
+    bool? compressRequests,
   }) {
     return Config(
       desiredAccuracy: desiredAccuracy ?? this.desiredAccuracy,
@@ -675,6 +686,7 @@ class Config {
       adaptiveTracking: adaptiveTracking ?? this.adaptiveTracking,
       lowBattery: lowBattery ?? this.lowBattery,
       spoofDetection: spoofDetection ?? this.spoofDetection,
+      compressRequests: compressRequests ?? this.compressRequests,
     );
   }
 
@@ -775,6 +787,7 @@ class Config {
     put('adaptiveTracking', adaptiveTracking?.toMap());
     put('lowBattery', lowBattery?.toMap());
     put('spoofDetection', spoofDetection?.toMap());
+    put('compressRequests', compressRequests);
 
     return map;
   }

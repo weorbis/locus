@@ -415,7 +415,13 @@ class SQLiteStorage {
     
     func clearGeofences() {
         queue.async { [weak self] in
-            self?._executeStatementOnQueue("DELETE FROM geofences")
+            guard let self = self else { return }
+            self._executeStatementOnQueue("DELETE FROM geofences")
+            // Match the WAL-checkpoint cadence of the other write paths
+            // (insertQueueItem, removeLocations, pruneLocations, etc.) so a
+            // bulk geofence reset doesn't strand WAL pages until the next
+            // unrelated write triggers a checkpoint.
+            self.walCheckpointOnQueue()
         }
     }
     

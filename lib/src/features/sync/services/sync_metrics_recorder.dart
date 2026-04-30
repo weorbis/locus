@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:locus/src/features/sync/models/http_event.dart';
+import 'package:locus/src/observability/locus_logger.dart';
 import 'package:locus/src/observability/locus_reliability_registry.dart';
 
 /// Bridges the SDK's [HttpEvent] stream into [LocusReliabilityRegistry]
@@ -29,6 +30,7 @@ class SyncMetricsRecorder {
       : _registry = registry ?? LocusReliabilityRegistry.instance;
 
   final LocusReliabilityRegistry _registry;
+  final _log = locusLogger('sync_metrics');
 
   // ignore: cancel_subscriptions — cancelled via [detach].
   StreamSubscription<HttpEvent>? _subscription;
@@ -44,9 +46,18 @@ class SyncMetricsRecorder {
   /// for tests and for sites that already have an event in hand.
   void record(HttpEvent event) {
     if (event.ok) {
-      // Platform success without a count is treated as a single-record sync.
-      // Zero or negative values are ignored by the registry.
-      final count = event.recordsSent ?? 1;
+      // A success without `recordsSent` is treated as zero records — the
+      // platform is the source of truth for the count, and silently
+      // pretending one record flushed (the legacy default) over-reports
+      // `pointsSent` for queue paths and any future code path that
+      // doesn't fill the field. Surface the gap via a warning so the
+      // missing-count site can be located and fixed.
+      final count = event.recordsSent ?? 0;
+      if (event.recordsSent == null) {
+        _log.eventWarning('http_event_missing_records_sent', <String, Object?>{
+          'status': event.status,
+        });
+      }
       _registry.recordSent(count);
     } else {
       _registry.recordSyncFailure(httpStatus: event.status);

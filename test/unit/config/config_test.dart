@@ -177,4 +177,43 @@ void main() {
       expect(config.updateIntervalSeconds, equals(60));
     });
   });
+
+  group('compressRequests (Q8)', () {
+    test('defaults to true and round-trips through toMap/fromMap', () {
+      const defaults = Config();
+      expect(defaults.compressRequests, isTrue,
+          reason: 'gzip request compression must be on by default');
+
+      final map = defaults.toMap();
+      expect(map['compressRequests'], isTrue);
+
+      final restored = Config.fromMap(map);
+      expect(restored.compressRequests, isTrue);
+    });
+
+    test('can be disabled and survives round-trip', () {
+      const config = Config(compressRequests: false);
+      expect(config.compressRequests, isFalse);
+
+      final map = config.toMap();
+      expect(map['compressRequests'], isFalse);
+
+      final restored = Config.fromMap(map);
+      expect(restored.compressRequests, isFalse);
+    });
+
+    test('copyWith updates the flag', () {
+      const config = Config();
+      final updated = config.copyWith(compressRequests: false);
+      expect(updated.compressRequests, isFalse);
+
+      final reEnabled = updated.copyWith(compressRequests: true);
+      expect(reEnabled.compressRequests, isTrue);
+    });
+
+    test('fromMap defaults to true when key is absent (back-compat)', () {
+      final restored = Config.fromMap(<String, dynamic>{});
+      expect(restored.compressRequests, isTrue);
+    });
+  });
 }

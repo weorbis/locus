@@ -41,6 +41,12 @@ class MethodChannelLocus implements LocusInterface {
   /// Automatically registers polygon geofence and privacy zone services
   /// with the event stream for location processing.
   MethodChannelLocus() {
+    // The most-recent constructed instance wins. `Locus._instance` is the
+    // canonical singleton (constructed once at static-init); this back
+    // reference lets internal lifecycle code (`LocusLifecycle.ready` /
+    // `destroy`) reach the heartbeat emitter without widening the public
+    // [LocusInterface] surface with a method-channel-only API.
+    _activeInstance = this;
     // Register services with LocusStreams for event processing. Privacy zone
     // registration is fire-and-forget; errors are logged inside the helper.
     LocusStreams.setPolygonGeofenceService(_polygonGeofenceService);
@@ -65,17 +71,20 @@ class MethodChannelLocus implements LocusInterface {
     final recorder = SyncMetricsRecorder()..attachTo(httpStream);
     unawaited(LocusReliabilityRegistry.instance.installSyncMetricsRecorder(recorder));
 
-    // Auto-start the silent-stop heartbeat. Embedders subscribe to the
-    // structured `tracking_heartbeat` log and alarm on its absence. The
-    // emitter also re-evaluates SyncHealthMonitor on each tick so the
-    // unrecoverable threshold can fire during long quiet periods (no new
-    // sync attempts arriving). Quarantine gauge is refreshed inside the
-    // tick from the same backlog read.
+    // Construct the silent-stop heartbeat but do NOT start it here.
+    // Lifecycle ownership lives with `LocusLifecycle.ready` /
+    // `LocusLifecycle.destroy` so apps that import the package without
+    // calling `Locus.ready` (test suites, lazy bundles) never spin a
+    // background timer, and a `Locus.destroy()` call cleanly cancels it.
+    // Embedders subscribe to the structured `tracking_heartbeat` log and
+    // alarm on its absence; the emitter also re-evaluates
+    // SyncHealthMonitor on each tick so the unrecoverable threshold can
+    // fire during long quiet periods.
     _heartbeatEmitter = HeartbeatEmitter(
       backlogReader: getLocationSyncBacklog,
       pauseReasonReader: () => syncPauseReason,
       interval: _kDefaultHeartbeatInterval,
-    )..start();
+    );
 
     // QuarantineJanitor is intentionally NOT auto-started here. The native
     // LocationStore.pruneByAge / pruneByCount paths already discard stale
@@ -89,6 +98,22 @@ class MethodChannelLocus implements LocusInterface {
   }
 
   late final HeartbeatEmitter _heartbeatEmitter;
+
+  /// The auto-installed silent-stop heartbeat. Lifecycle is owned by
+  /// [LocusLifecycle.ready] (start) and [LocusLifecycle.destroy] (stop);
+  /// public callers should not start or stop it directly.
+  HeartbeatEmitter get heartbeatEmitter => _heartbeatEmitter;
+
+  /// Most-recent constructed instance, used by `LocusLifecycle` to reach
+  /// instance-scoped resources (heartbeat emitter) without polluting the
+  /// public `LocusInterface`. `null` only in the brief window before the
+  /// canonical singleton has been constructed.
+  static MethodChannelLocus? _activeInstance;
+
+  /// Active method-channel instance. Returns `null` when the canonical
+  /// singleton is a mock (set via `Locus.setMockInstance`) or before any
+  /// [MethodChannelLocus] has been constructed.
+  static MethodChannelLocus? get instance => _activeInstance;
 
   /// Stops the auto-installed heartbeat. Exposed for embedders that need
   /// fine-grained control over background activity (test harnesses, suspend

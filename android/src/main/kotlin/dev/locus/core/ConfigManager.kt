@@ -98,6 +98,15 @@ class ConfigManager(context: Context) {
     var drainStrandInitialCooldownMs: Int = 30_000
     var drainStrandMaxCooldownMs: Int = 300_000
 
+    /**
+     * When `true`, [SyncManager] gzips request bodies larger than 1 KB before
+     * POSTing them. The wire format is `Content-Encoding: gzip` (RFC 1952).
+     * Defaults to `true`; flip to `false` to bypass compression for backends
+     * that cannot decompress (a legitimate gzipped POST will then look like a
+     * malformed body and the server will return 400).
+     */
+    var compressRequests: Boolean = true
+
     // Sync policy settings
     var syncPolicyLowBatteryThreshold: Int = 20
     var syncPolicyPreferWifi: Boolean = false
@@ -182,6 +191,7 @@ class ConfigManager(context: Context) {
         (config["maxRetryDelay"] as? Number)?.let { maxRetryDelayMs = it.toInt() }
         (config["drainStrandInitialCooldown"] as? Number)?.let { drainStrandInitialCooldownMs = it.toInt() }
         (config["drainStrandMaxCooldown"] as? Number)?.let { drainStrandMaxCooldownMs = it.toInt() }
+        (config["compressRequests"] as? Boolean)?.let { compressRequests = it }
         (config["method"] as? String)?.let { httpMethod = it }
 
         (config["headers"] as? Map<*, *>)?.let { httpHeaders = it.toStringKeyMap() }

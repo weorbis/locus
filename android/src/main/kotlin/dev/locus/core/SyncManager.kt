@@ -13,6 +13,7 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
@@ -20,6 +21,7 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.zip.GZIPOutputStream
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -249,7 +251,9 @@ class SyncManager(
         val wasPaused = isSyncPaused
         isSyncPaused = false
         config.setSyncPauseReason(null)
-        drainExhaustedContexts.clear()
+        synchronized(locationSyncLock) {
+            drainExhaustedContexts.clear()
+        }
         if (wasPaused) emitPauseChange(false, null)
         requestLocationSync(config.maxBatchSize)
         syncQueue(0)
@@ -392,28 +396,35 @@ class SyncManager(
         val context = payloads.firstOrNull()?.let { extractRouteContext(it) }
         if (context != null) {
             val now = SystemClock.elapsedRealtime()
-            val previous = drainExhaustedContexts[context]
             val maxCooldownMs = config.drainStrandMaxCooldownMs.toLong().coerceAtLeast(0L)
             val initialCooldownMs = config.drainStrandInitialCooldownMs.toLong()
                 .coerceAtLeast(0L)
                 .coerceAtMost(maxCooldownMs.coerceAtLeast(1L))
 
-            val isFreshStrandCycle = previous == null || now >= previous.eligibleAtElapsedMs
-            if (isFreshStrandCycle) {
-                val cooldown = if (previous != null) {
-                    // Guard against multiplication overflow on absurd configs.
-                    minOf(previous.cooldownMs * 2, maxCooldownMs).coerceAtLeast(initialCooldownMs)
+            val appliedCooldown = synchronized(locationSyncLock) {
+                val previous = drainExhaustedContexts[context]
+                val isFreshStrandCycle = previous == null || now >= previous.eligibleAtElapsedMs
+                if (!isFreshStrandCycle) {
+                    null
                 } else {
-                    initialCooldownMs
+                    val cooldown = if (previous != null) {
+                        // Guard against multiplication overflow on absurd configs.
+                        minOf(previous.cooldownMs * 2, maxCooldownMs).coerceAtLeast(initialCooldownMs)
+                    } else {
+                        initialCooldownMs
+                    }
+                    drainExhaustedContexts[context] = StrandedContextState(
+                        eligibleAtElapsedMs = now + cooldown,
+                        cooldownMs = cooldown,
+                    )
+                    cooldown
                 }
-                drainExhaustedContexts[context] = StrandedContextState(
-                    eligibleAtElapsedMs = now + cooldown,
-                    cooldownMs = cooldown,
-                )
+            }
+            if (appliedCooldown != null) {
                 log(
                     "warn",
                     "drain stranded for context taskId=${context.taskId}; " +
-                        "next attempt in ${cooldown}ms"
+                        "next attempt in ${appliedCooldown}ms"
                 )
             }
             // else: re-strand inside an already-pending cooldown window;
@@ -549,12 +560,16 @@ class SyncManager(
             .apply()
         // Any 2xx proves auth is valid — clear the persisted auth-failure marker
         // defensively in case resumeSync() wasn't explicitly called after token refresh.
-        // Only notify Dart if the persisted reason actually changed (avoids churn on
-        // every successful batch).
+        // The clear-and-emit pair is gated on `hadPersistedReason` so the
+        // common steady-state case (no pause reason set) doesn't issue a
+        // wasted prefs write per batch — `setSyncPauseReason(null)` is an
+        // editor commit even when the value is already absent.
         val hadPersistedReason = config.getSyncPauseReason() != null
-        config.setSyncPauseReason(null)
-        if (hadPersistedReason && !isSyncPaused) {
-            emitPauseChange(false, null)
+        if (hadPersistedReason) {
+            config.setSyncPauseReason(null)
+            if (!isSyncPaused) {
+                emitPauseChange(false, null)
+            }
         }
         // Any 2xx also proves the network/auth path to the backend is healthy
         // for *some* context, so contexts that previously hit max-retry deserve
@@ -719,6 +734,9 @@ class SyncManager(
                     }
                 }
 
+                val rawJson = body.toString().toByteArray(Charsets.UTF_8)
+                val (wireBytes, contentEncoding) = maybeCompress(rawJson)
+
                 connection = (URL(config.httpUrl).openConnection() as HttpURLConnection).apply {
                     requestMethod = config.httpMethod
                     connectTimeout = config.httpTimeoutMs
@@ -731,10 +749,13 @@ class SyncManager(
                     config.idempotencyHeader?.let { header ->
                         setRequestProperty(sanitizeHeaderKey(header), idempotencyKey)
                     }
+                    if (contentEncoding != null) {
+                        setRequestProperty("Content-Encoding", contentEncoding)
+                    }
                 }
 
                 connection.outputStream.use { output ->
-                    output.write(body.toString().toByteArray())
+                    output.write(wireBytes)
                     output.flush()
                 }
 
@@ -821,6 +842,9 @@ class SyncManager(
     ) {
         var connection: HttpURLConnection? = null
         try {
+            val rawJson = body.toString().toByteArray(Charsets.UTF_8)
+            val (wireBytes, contentEncoding) = maybeCompress(rawJson)
+
             connection = (URL(config.httpUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = config.httpMethod
                 connectTimeout = config.httpTimeoutMs
@@ -830,10 +854,13 @@ class SyncManager(
                 config.httpHeaders.toMap().forEach { (key, value) ->
                     setRequestProperty(sanitizeHeaderKey(key), sanitizeHeaderValue(value.toString()))
                 }
+                if (contentEncoding != null) {
+                    setRequestProperty("Content-Encoding", contentEncoding)
+                }
             }
 
             connection.outputStream.use { output ->
-                output.write(body.toString().toByteArray())
+                output.write(wireBytes)
                 output.flush()
             }
 
@@ -908,6 +935,9 @@ class SyncManager(
     ) {
         var connection: HttpURLConnection? = null
         try {
+            val rawJson = body.toString().toByteArray(Charsets.UTF_8)
+            val (wireBytes, contentEncoding) = maybeCompress(rawJson)
+
             connection = (URL(config.httpUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = config.httpMethod
                 connectTimeout = config.httpTimeoutMs
@@ -917,10 +947,13 @@ class SyncManager(
                 config.httpHeaders.toMap().forEach { (key, value) ->
                     setRequestProperty(sanitizeHeaderKey(key), sanitizeHeaderValue(value.toString()))
                 }
+                if (contentEncoding != null) {
+                    setRequestProperty("Content-Encoding", contentEncoding)
+                }
             }
 
             connection.outputStream.use { output ->
-                output.write(body.toString().toByteArray())
+                output.write(wireBytes)
                 output.flush()
             }
 
@@ -1065,6 +1098,56 @@ class SyncManager(
         return max(config.retryDelayMs.toLong(), min(delay, config.maxRetryDelayMs.toLong()))
     }
 
+    /**
+     * Compresses [input] with gzip (RFC 1952) for use as an HTTP request body.
+     * Visible for testing.
+     */
+    internal fun gzip(input: ByteArray): ByteArray =
+        ByteArrayOutputStream(maxOf(32, input.size / 4)).use { baos ->
+            GZIPOutputStream(baos).use { it.write(input) }
+            baos.toByteArray()
+        }
+
+    /**
+     * Returns the wire bytes for a JSON request body and the matching
+     * `Content-Encoding` header value (or `null` to send uncompressed).
+     *
+     * Compression is only applied when:
+     *  - [ConfigManager.compressRequests] is `true`
+     *  - the raw body is larger than 1 KB (gzip overhead exceeds savings below
+     *    this threshold)
+     *  - the gzipped output is actually smaller than the raw body (already-
+     *    compressed JSON content is unlikely in practice but cheap to guard).
+     *
+     * Visible for testing.
+     */
+    internal fun maybeCompress(rawJson: ByteArray): Pair<ByteArray, String?> {
+        // TODO(Q8 §4.2): if the backend returned 415 with Content-Encoding: gzip
+        //  on a recent request, disable compression for 60 minutes per
+        //  installation (intermediary proxies that strip/double-encode are the
+        //  failure mode). Requires a lock-protected timestamp in ConfigManager
+        //  and a hook in performBatchHttpRequest to set it on 415. Tracked
+        //  separately because the staging cohort to validate this needs a
+        //  proxy that exhibits the misbehavior — until then, ship with a
+        //  simple retry-as-uncompressed on the next attempt via the existing
+        //  scheduleBatchRetry mechanism (retries do not change body builder
+        //  state today, so they re-gzip; that's acceptable for the rare case).
+        if (!config.compressRequests || rawJson.size <= COMPRESSION_THRESHOLD_BYTES) {
+            return rawJson to null
+        }
+        val gzipped = gzip(rawJson)
+        return if (gzipped.size < rawJson.size) {
+            val ratio = "%.2f".format(gzipped.size.toDouble() / rawJson.size)
+            log(
+                "info",
+                "sync_body_compressed raw_bytes=${rawJson.size} compressed_bytes=${gzipped.size} ratio=$ratio"
+            )
+            gzipped to "gzip"
+        } else {
+            rawJson to null
+        }
+    }
+
     private fun emitHttpEvent(
         status: Int,
         ok: Boolean,
@@ -1182,6 +1265,15 @@ class SyncManager(
             "bg_last_location_sync_success_at"
         private const val KEY_LAST_LOCATION_SYNC_FAILURE_REASON =
             "bg_last_location_sync_failure_reason"
+
+        /**
+         * Don't compress request bodies smaller than this threshold; gzip's
+         * 18-byte framing plus per-stream dictionary overhead can make the
+         * compressed payload *larger* than the raw bytes for tiny inputs.
+         * 1 KB is the conventional cutoff (matches CDN defaults, e.g. nginx
+         * `gzip_min_length`).
+         */
+        internal const val COMPRESSION_THRESHOLD_BYTES = 1024
 
         internal const val REASON_HTTP_401 = "http_401"
         internal const val REASON_HTTP_403 = "http_403"

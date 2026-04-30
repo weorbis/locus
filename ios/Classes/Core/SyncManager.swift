@@ -74,6 +74,24 @@ class SyncManager {
     
     private var urlSession: URLSession!
 
+    /// Serial queue used as the URLSession delegate queue. All `URLSession`
+    /// completion callbacks (including `dataTask(with:completionHandler:)`)
+    /// run here, so `handleResponse` mutations that touch shared state
+    /// (e.g. `_metrics`, dynamic header reads) are implicitly serialized.
+    /// Cross-queue handoff to `locationDrainStateQueue` for
+    /// `drainExhaustedContexts` writes still applies — that lock guards
+    /// reads happening on a different queue (`selectNextLocationBatch`).
+    /// `qualityOfService = .utility` matches the background-sync nature of
+    /// this work; `maxConcurrentOperationCount = 1` enforces the serial
+    /// invariant.
+    private lazy var urlSessionDelegateQueue: OperationQueue = {
+        let q = OperationQueue()
+        q.maxConcurrentOperationCount = 1
+        q.name = "dev.locus.sync.urlsession"
+        q.qualityOfService = .utility
+        return q
+    }()
+
     private struct RouteContext: Hashable {
         let ownerId: String
         let driverId: String
@@ -117,7 +135,17 @@ class SyncManager {
         configuration.timeoutIntervalForResource = config.httpTimeout * 2
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.waitsForConnectivity = true
-        return URLSession(configuration: configuration)
+        // Pin a serial delegate queue so URLSession completion callbacks
+        // (`dataTask(with:completionHandler:)`) all land on a single thread.
+        // Without this, the system picks an arbitrary thread per response
+        // and concurrent `handleResponse` calls can race on
+        // `drainExhaustedContexts` (the queue serializes inbound completions;
+        // the cross-queue handoff to `locationDrainStateQueue` stays).
+        return URLSession(
+            configuration: configuration,
+            delegate: nil,
+            delegateQueue: urlSessionDelegateQueue
+        )
     }
     
     init(config: ConfigManager, storage: StorageManager) {
@@ -251,10 +279,18 @@ class SyncManager {
         let wasPaused = isSyncPaused
         isSyncPaused = false
         config.setSyncPauseReason(nil)
-        drainExhaustedContexts.removeAll()
+        clearDrainContext()
         if wasPaused { emitPauseChange(isPaused: false, reason: nil) }
         requestLocationSync(limit: config.maxBatchSize)
         _ = syncQueue(limit: 0)
+    }
+
+    private func clearDrainContextLocked() {
+        drainExhaustedContexts.removeAll()
+    }
+
+    private func clearDrainContext() {
+        locationDrainStateQueue.sync { clearDrainContextLocked() }
     }
 
     /// Check if sync is currently paused.
@@ -470,9 +506,52 @@ class SyncManager {
         )
     }
 
-    private func recordSyncSuccess() {
-        UserDefaults.standard.set(Date().timeIntervalSince1970 * 1000, forKey: "bg_last_location_sync_success_at")
+    /// Coalesces UserDefaults writes from `recordSyncSuccess`. A burst of
+    /// successful batches (e.g. a full drain catch-up) would otherwise issue
+    /// one prefs write per batch; the debouncer collapses that into a single
+    /// flush per second. Lives on `locationDrainStateQueue` so cancel/replace
+    /// of the field is serialized with the timer's event handler.
+    private var pendingUserDefaultsWriteTimer: DispatchSourceTimer?
+
+    /// Pending success timestamp captured at scheduling time; the timer
+    /// flushes whichever was last set. Holding the value lets the actual
+    /// `UserDefaults.set` happen inside the timer handler instead of at
+    /// schedule time, so the disk write is fully deferred.
+    private var pendingLastSuccessAtMs: Double?
+
+    private func scheduleUserDefaultsWrite() {
+        let nowMs = Date().timeIntervalSince1970 * 1000
+        locationDrainStateQueue.sync {
+            pendingLastSuccessAtMs = nowMs
+            pendingUserDefaultsWriteTimer?.cancel()
+            let timer = DispatchSource.makeTimerSource(queue: locationDrainStateQueue)
+            timer.schedule(deadline: .now() + .milliseconds(1000))
+            timer.setEventHandler { [weak self] in
+                self?.flushUserDefaults()
+            }
+            timer.resume()
+            pendingUserDefaultsWriteTimer = timer
+        }
+    }
+
+    /// Flushes the most-recent pending success timestamp to UserDefaults and
+    /// clears the failure-reason marker. Runs on `locationDrainStateQueue`
+    /// from the debounce timer.
+    private func flushUserDefaults() {
+        let pending = pendingLastSuccessAtMs
+        pendingLastSuccessAtMs = nil
+        pendingUserDefaultsWriteTimer = nil
+        if let value = pending {
+            UserDefaults.standard.set(value, forKey: "bg_last_location_sync_success_at")
+        }
         UserDefaults.standard.removeObject(forKey: "bg_last_location_sync_failure_reason")
+    }
+
+    private func recordSyncSuccess() {
+        // Debounce the prefs write: a drain that flushes N batches back-to-back
+        // would otherwise hit UserDefaults N times for the same essentially-now
+        // timestamp. Coalesce to one flush per second.
+        scheduleUserDefaultsWrite()
         // Any 2xx proves auth is valid — clear the persisted auth-failure marker
         // defensively in case resumeSync() wasn't explicitly called after token refresh.
         // Only notify Dart if the persisted reason actually changed (avoids churn
@@ -488,7 +567,7 @@ class SyncManager {
         // into `drainExhaustedContexts` strands every other context's backlog
         // until the next explicit `resumeSync()` call. Clearing on success
         // makes the drain self-healing.
-        drainExhaustedContexts.removeAll()
+        clearDrainContext()
     }
 
     private func recordSyncFailure(_ reason: String) {
@@ -530,14 +609,73 @@ class SyncManager {
             request.setValue(sanitizedValue, forHTTPHeaderField: sanitizedKey)
         }
 
+        let rawJson: Data
         do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            rawJson = try JSONSerialization.data(withJSONObject: body)
         } catch {
             return nil
         }
 
+        let (wireBytes, contentEncoding) = maybeCompress(rawJson)
+        request.httpBody = wireBytes
+        if let encoding = contentEncoding {
+            request.setValue(encoding, forHTTPHeaderField: "Content-Encoding")
+        }
+
         return request
     }
+
+    /// Returns the wire bytes for `rawJson` and the matching `Content-Encoding`
+    /// header value (or `nil` to send uncompressed).
+    ///
+    /// Compression is only applied when:
+    ///   - `ConfigManager.compressRequests` is `true`
+    ///   - the raw body is larger than `compressionThresholdBytes` (gzip
+    ///     overhead exceeds savings below this size)
+    ///   - the gzipped output is actually smaller than the raw body
+    ///
+    /// If `GzipEncoder` throws (transient OS-level failure) the call falls back
+    /// to sending the uncompressed body.
+    func maybeCompress(_ rawJson: Data) -> (Data, String?) {
+        // TODO(Q8 §4.2): if the backend returned 415 with Content-Encoding:
+        //  gzip on a recent request, disable compression for 60 minutes per
+        //  installation (intermediary proxies that strip/double-encode are
+        //  the failure mode). Requires a queue-protected timestamp in
+        //  ConfigManager and a hook in handleResponse to set it on 415.
+        //  Tracked separately because validating this needs a real-world
+        //  proxy that exhibits the misbehavior; ship without the auto-disable
+        //  for now and rely on operator override via Config.compressRequests.
+        guard config.compressRequests, rawJson.count > SyncManager.compressionThresholdBytes else {
+            return (rawJson, nil)
+        }
+        do {
+            let gzipped = try GzipEncoder.encode(rawJson)
+            guard gzipped.count < rawJson.count else {
+                return (rawJson, nil)
+            }
+            let ratio = Double(gzipped.count) / Double(rawJson.count)
+            delegate?.onLog(
+                level: "info",
+                message: String(
+                    format: "sync_body_compressed raw_bytes=%d compressed_bytes=%d ratio=%.2f",
+                    rawJson.count, gzipped.count, ratio
+                )
+            )
+            return (gzipped, "gzip")
+        } catch {
+            delegate?.onLog(
+                level: "warn",
+                message: "gzip_encode_failed; sending uncompressed: \(error)"
+            )
+            return (rawJson, nil)
+        }
+    }
+
+    /// Don't compress request bodies smaller than this; gzip's 18-byte framing
+    /// plus per-stream dictionary overhead can make the compressed payload
+    /// *larger* than the raw bytes for tiny inputs. 1 KB is the conventional
+    /// cutoff (matches CDN defaults, e.g. nginx `gzip_min_length`).
+    static let compressionThresholdBytes = 1024
 
     private func sanitizeHeaderKey(_ key: String) -> String {
         let invalidCharacters = CharacterSet(charactersIn: "\r\n")
@@ -939,12 +1077,13 @@ class SyncManager {
         // cascade can't ratchet eligibility up to the cap in seconds.
         if let first = payloads.first, let context = extractRouteContext(from: first) {
             let now = Date().timeIntervalSinceReferenceDate
-            let previous = drainExhaustedContexts[context]
             let maxCooldown = max(0, config.drainStrandMaxCooldown)
             let initialCooldown = max(0, min(config.drainStrandInitialCooldown, max(maxCooldown, 1)))
 
-            let isFreshStrandCycle = previous == nil || now >= (previous?.eligibleAt ?? 0)
-            if isFreshStrandCycle {
+            let appliedCooldown: TimeInterval? = locationDrainStateQueue.sync { () -> TimeInterval? in
+                let previous = drainExhaustedContexts[context]
+                let isFreshStrandCycle = previous == nil || now >= (previous?.eligibleAt ?? 0)
+                guard isFreshStrandCycle else { return nil }
                 let cooldown: TimeInterval
                 if let previous = previous {
                     cooldown = max(initialCooldown, min(previous.cooldown * 2, maxCooldown))
@@ -955,6 +1094,9 @@ class SyncManager {
                     eligibleAt: now + cooldown,
                     cooldown: cooldown
                 )
+                return cooldown
+            }
+            if let cooldown = appliedCooldown {
                 delegate?.onLog(
                     level: "warn",
                     message: "drain stranded for context taskId=\(context.taskId); next attempt in \(Int(cooldown * 1000))ms"

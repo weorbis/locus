@@ -18,7 +18,8 @@ Pod::Spec.new do |s|
                    'Classes/Core/**/*',
                    'Classes/Geofence/**/*',
                    'Classes/Motion/**/*',
-                   'Classes/Storage/**/*'
+                   'Classes/Storage/**/*',
+                   'Classes/Utilities/**/*'
   s.dependency 'Flutter'
   s.platform = :ios, '14.0'
   s.frameworks = 'CoreLocation', 'CoreMotion'

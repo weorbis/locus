@@ -46,7 +46,13 @@ class SyncHealthMonitor {
           'stalledThreshold must be smaller than unrecoverableThreshold',
         ),
         _registry = registry ?? LocusReliabilityRegistry.instance,
-        _clock = clock ?? DateTime.now;
+        _clock = clock ?? DateTime.now {
+    // Anchor the fallback baseline at construction. A new install with a
+    // bad token has no `_lastSuccessAt` and would otherwise be unable to
+    // escalate `SyncUnrecoverable` even after 30 minutes of failed
+    // attempts — `evaluate()` would early-return on the null baseline.
+    _startedAt = (_clock()).toUtc();
+  }
 
   /// Time-since-last-success threshold at which a [SyncStalled] event is
   /// emitted.
@@ -59,7 +65,22 @@ class SyncHealthMonitor {
   final LocusReliabilityRegistry _registry;
   final DateTime Function() _clock;
 
+  /// Wall-clock at which this monitor was constructed. Used as the final
+  /// fallback baseline for `evaluate` when the process has never observed
+  /// a success or failure (so a wedged-from-cold-start sync still
+  /// escalates after `unrecoverableThreshold`).
+  late final DateTime _startedAt;
+
   DateTime? _lastSuccessAt;
+
+  /// Wall-clock of the first failure observed since process start (or since
+  /// the last `recordSuccess` if one happened). Acts as the second-tier
+  /// baseline for `evaluate`: when there is no success yet but at least
+  /// one failure has been seen, escalate from that failure rather than
+  /// from process start (so a process that idled cleanly for an hour and
+  /// then started failing waits one stalled-window from the failure, not
+  /// instantly).
+  DateTime? _firstFailureAt;
   int _consecutiveFailures = 0;
   int? _lastHttpStatus;
   SyncHealthState _state = SyncHealthState.healthy;
@@ -81,11 +102,17 @@ class SyncHealthMonitor {
     _lastSuccessAt = (at ?? _clock()).toUtc();
     _consecutiveFailures = 0;
     _lastHttpStatus = null;
+    // A fresh success resets the failure-baseline so the next failure
+    // streak starts its own clock from the moment it begins, not from
+    // some prior failure that has since been resolved.
+    _firstFailureAt = null;
     _state = SyncHealthState.healthy;
   }
 
   /// Records a failed sync attempt. Triggers state evaluation.
   void recordFailure({int? httpStatus, DateTime? at}) {
+    final now = (at ?? _clock()).toUtc();
+    _firstFailureAt ??= now;
     _consecutiveFailures += 1;
     _lastHttpStatus = httpStatus;
     evaluate(at: at);
@@ -94,15 +121,16 @@ class SyncHealthMonitor {
   /// Re-evaluates the current state without recording a new attempt. Use
   /// from a periodic heartbeat to escalate `stalled → unrecoverable` even
   /// when no new sync attempts are happening.
+  ///
+  /// Reference-time fallback chain: `_lastSuccessAt → _firstFailureAt →
+  /// _startedAt`. The last fallback ensures a process that has never
+  /// successfully synced (e.g. fresh install with a bad token) can still
+  /// reach `SyncUnrecoverable` once enough wall time has passed since
+  /// process start.
   void evaluate({DateTime? at}) {
-    final last = _lastSuccessAt;
-    if (last == null) {
-      // No baseline — nothing to escalate from. The first recordSuccess sets
-      // the baseline.
-      return;
-    }
     final now = (at ?? _clock()).toUtc();
-    final since = now.difference(last);
+    final referenceTime = _lastSuccessAt ?? _firstFailureAt ?? _startedAt;
+    final since = now.difference(referenceTime);
 
     if (since >= unrecoverableThreshold &&
         _state != SyncHealthState.unrecoverable) {

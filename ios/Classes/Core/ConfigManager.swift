@@ -61,6 +61,12 @@ class ConfigManager {
     /// or another context) clears all strands.
     var drainStrandInitialCooldown: TimeInterval = 30
     var drainStrandMaxCooldown: TimeInterval = 300
+
+    /// When `true`, `SyncManager` gzips request bodies larger than 1 KB before
+    /// POSTing. The wire format is `Content-Encoding: gzip` (RFC 1952).
+    /// Defaults to `true`; flip to `false` to bypass compression for backends
+    /// that cannot decompress.
+    var compressRequests: Bool = true
     var disableAutoSyncOnCellular = false
     var batchSync = false
     var maxBatchSize = 50
@@ -70,7 +76,33 @@ class ConfigManager {
     var queueMaxDays = 0
     var queueMaxRecords = 0
     var idempotencyHeader = "Idempotency-Key"
-    var dynamicHeaders: [String: String] = [:]
+
+    /// Serializes reads/writes of [dynamicHeaders]. Headers are written from
+    /// the headers-refresh callback path (URLSession delegate queue under
+    /// §2 / Flutter platform thread for the public setter), and read from
+    /// `SyncManager.makeRequest` (which runs on its private serial queue).
+    /// Without serialization a concurrent write while the read is iterating
+    /// the dictionary can crash with `EXC_BAD_ACCESS`.
+    private let dynamicHeadersQueue = DispatchQueue(label: "dev.locus.config.dynamicheaders")
+    private var _dynamicHeaders: [String: String] = [:]
+    var dynamicHeaders: [String: String] {
+        get { dynamicHeadersQueue.sync { _dynamicHeaders } }
+        set { dynamicHeadersQueue.sync { _dynamicHeaders = newValue } }
+    }
+
+    /// Atomic per-key update. `value == nil` removes the entry. Use this in
+    /// preference to read-modify-write through the [dynamicHeaders]
+    /// computed property when only a single header is changing — that
+    /// path would race against a concurrent full-replacement.
+    func updateDynamicHeader(_ key: String, value: String?) {
+        dynamicHeadersQueue.sync {
+            if let value = value {
+                _dynamicHeaders[key] = value
+            } else {
+                _dynamicHeaders.removeValue(forKey: key)
+            }
+        }
+    }
     var syncOnCellular: Bool = true
     var syncInterval: Int = 0
     
@@ -212,6 +244,7 @@ class ConfigManager {
         if let val = config["maxRetryDelay"] as? NSNumber { maxRetryDelay = val.doubleValue / 1000.0 }
         if let val = config["drainStrandInitialCooldown"] as? NSNumber { drainStrandInitialCooldown = val.doubleValue / 1000.0 }
         if let val = config["drainStrandMaxCooldown"] as? NSNumber { drainStrandMaxCooldown = val.doubleValue / 1000.0 }
+        if let val = config["compressRequests"] as? Bool { compressRequests = val }
         if let val = config["disableAutoSyncOnCellular"] as? Bool { disableAutoSyncOnCellular = val }
         if let val = config["queueMaxDays"] as? NSNumber { queueMaxDays = val.intValue }
         if let val = config["queueMaxRecords"] as? NSNumber { queueMaxRecords = val.intValue }
