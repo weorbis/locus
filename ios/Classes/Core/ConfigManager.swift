@@ -103,6 +103,55 @@ class ConfigManager {
             }
         }
     }
+
+    // MARK: - 415 fallback (Q8 §4.2)
+    //
+    // Some intermediary proxies strip or double-encode `Content-Encoding:
+    // gzip`, so the origin sees a body it cannot decompress and replies
+    // 415 Unsupported Media Type. The fix is operator override on
+    // `compressRequests`, but a one-hour automatic fallback gives the
+    // caller a self-healing path without paging the on-call.
+    //
+    // The fallback is queue-protected separately from `dynamicHeaders` so
+    // a stalled headers callback can't block compression decisions on the
+    // hot send path.
+    private let compressionFallbackQueue = DispatchQueue(label: "dev.locus.config.compressionfallback")
+    private var _compressionDisabledUntil: Date?
+
+    /// Disables gzip compression for `duration` from now. Subsequent calls
+    /// extend the deadline (max-of-existing-and-new) so a back-to-back
+    /// 415 burst doesn't shorten the window. Idempotent.
+    func disableCompressionFor(duration: TimeInterval) {
+        compressionFallbackQueue.sync {
+            let proposed = Date().addingTimeInterval(duration)
+            if let existing = _compressionDisabledUntil, existing > proposed {
+                return
+            }
+            _compressionDisabledUntil = proposed
+        }
+    }
+
+    /// Whether the 415 fallback currently suppresses compression. Returns
+    /// `false` once the deadline elapses; the stored value is cleared on
+    /// the same read so callers don't keep tripping the branch after the
+    /// window closes.
+    var isCompressionDisabledByFallback: Bool {
+        compressionFallbackQueue.sync {
+            guard let until = _compressionDisabledUntil else { return false }
+            if Date() >= until {
+                _compressionDisabledUntil = nil
+                return false
+            }
+            return true
+        }
+    }
+
+    /// Test-only seam: clears the fallback regardless of the deadline.
+    func resetCompressionFallback() {
+        compressionFallbackQueue.sync {
+            _compressionDisabledUntil = nil
+        }
+    }
     var syncOnCellular: Bool = true
     var syncInterval: Int = 0
     

@@ -637,15 +637,16 @@ class SyncManager {
     /// If `GzipEncoder` throws (transient OS-level failure) the call falls back
     /// to sending the uncompressed body.
     func maybeCompress(_ rawJson: Data) -> (Data, String?) {
-        // TODO(Q8 §4.2): if the backend returned 415 with Content-Encoding:
-        //  gzip on a recent request, disable compression for 60 minutes per
-        //  installation (intermediary proxies that strip/double-encode are
-        //  the failure mode). Requires a queue-protected timestamp in
-        //  ConfigManager and a hook in handleResponse to set it on 415.
-        //  Tracked separately because validating this needs a real-world
-        //  proxy that exhibits the misbehavior; ship without the auto-disable
-        //  for now and rely on operator override via Config.compressRequests.
-        guard config.compressRequests, rawJson.count > SyncManager.compressionThresholdBytes else {
+        // Q8 §4.2: when the backend returns 415 on a gzipped request,
+        // ConfigManager.disableCompressionFor(...) sets a 60-minute
+        // suppression window so the next batches go uncompressed and the
+        // pipeline self-heals (intermediary proxies that strip /
+        // double-encode are the canonical failure mode). The window
+        // clears automatically at deadline.
+        guard config.compressRequests,
+              !config.isCompressionDisabledByFallback,
+              rawJson.count > SyncManager.compressionThresholdBytes
+        else {
             return (rawJson, nil)
         }
         do {
@@ -676,6 +677,14 @@ class SyncManager {
     /// *larger* than the raw bytes for tiny inputs. 1 KB is the conventional
     /// cutoff (matches CDN defaults, e.g. nginx `gzip_min_length`).
     static let compressionThresholdBytes = 1024
+
+    /// How long the 415 fallback suppresses compression after a single
+    /// `Unsupported Media Type` response. Long enough to outlast a misconfig
+    /// (cache TTLs, edge invalidation) without permanently giving up the
+    /// 60–80% bandwidth savings — a clean 200 still happens once per
+    /// retry path, so the next compressed batch tells us whether the
+    /// proxy issue is over.
+    static let compressionDisableDurationOn415: TimeInterval = 3600
 
     private func sanitizeHeaderKey(_ key: String) -> String {
         let invalidCharacters = CharacterSet(charactersIn: "\r\n")
@@ -921,6 +930,19 @@ class SyncManager {
             pauseForAuthFailure(status: 403)
             completeLocationSync(continueDrain: false)
             return
+        }
+
+        if status == 415 {
+            // Q8 §4.2 fallback: a 415 from a request that may have carried
+            // Content-Encoding: gzip means an intermediary proxy stripped
+            // or double-encoded the body. Disable compression for 60
+            // minutes; the next batches go uncompressed and the same
+            // route succeeds. The retry below picks up the new setting.
+            config.disableCompressionFor(duration: SyncManager.compressionDisableDurationOn415)
+            delegate?.onLog(
+                level: "warn",
+                message: "http_415_disabling_compression duration_seconds=\(Int(SyncManager.compressionDisableDurationOn415))"
+            )
         }
 
         if ok, let ids = idsToDelete {

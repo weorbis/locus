@@ -107,6 +107,57 @@ class ConfigManager(context: Context) {
      */
     var compressRequests: Boolean = true
 
+    // -- 415 fallback (Q8 §4.2) -------------------------------------------
+    //
+    // Some intermediary proxies strip or double-encode `Content-Encoding:
+    // gzip`, so the origin sees a body it cannot decompress and replies
+    // 415 Unsupported Media Type. The fix is operator override on
+    // [compressRequests], but a one-hour automatic fallback gives the
+    // caller a self-healing path without paging the on-call.
+    //
+    // The fallback state is lock-protected separately from the rest of
+    // the config so a stalled write can't block compression decisions on
+    // the hot send path.
+    private val compressionFallbackLock = Any()
+    private var compressionDisabledUntilMs: Long? = null
+
+    /**
+     * Disables gzip compression for [durationMs] milliseconds from now.
+     * Subsequent calls extend the deadline (max-of-existing-and-new) so a
+     * back-to-back 415 burst doesn't shorten the window. Idempotent.
+     */
+    fun disableCompressionFor(durationMs: Long) {
+        synchronized(compressionFallbackLock) {
+            val proposed = System.currentTimeMillis() + durationMs
+            val existing = compressionDisabledUntilMs
+            if (existing != null && existing > proposed) return
+            compressionDisabledUntilMs = proposed
+        }
+    }
+
+    /**
+     * Whether the 415 fallback currently suppresses compression. Returns
+     * `false` once the deadline elapses; the stored value is cleared on
+     * the same read so callers don't keep tripping the branch after the
+     * window closes.
+     */
+    val isCompressionDisabledByFallback: Boolean
+        get() = synchronized(compressionFallbackLock) {
+            val until = compressionDisabledUntilMs ?: return@synchronized false
+            if (System.currentTimeMillis() >= until) {
+                compressionDisabledUntilMs = null
+                return@synchronized false
+            }
+            true
+        }
+
+    /** Test-only seam: clears the fallback regardless of the deadline. */
+    fun resetCompressionFallback() {
+        synchronized(compressionFallbackLock) {
+            compressionDisabledUntilMs = null
+        }
+    }
+
     // Sync policy settings
     var syncPolicyLowBatteryThreshold: Int = 20
     var syncPolicyPreferWifi: Boolean = false

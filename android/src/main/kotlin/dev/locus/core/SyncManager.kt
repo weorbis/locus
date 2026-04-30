@@ -901,6 +901,10 @@ class SyncManager(
             emitHttpEvent(status, ok, responseText, recordsSent = sentCount)
             log(if (ok) "info" else "error", "http $status${if (ok) "" else " $responseText"}")
 
+            if (status == 415) {
+                handle415Fallback()
+            }
+
             when {
                 status == 401 || status == 403 -> {
                     recordSyncFailure("http_$status")
@@ -924,6 +928,21 @@ class SyncManager(
         } finally {
             connection?.disconnect()
         }
+    }
+
+    /**
+     * Q8 §4.2 fallback: a 415 from a request that may have carried
+     * `Content-Encoding: gzip` means an intermediary proxy stripped or
+     * double-encoded the body. Disable compression for 60 minutes; the
+     * next batches go uncompressed and the same route succeeds. The
+     * retry below picks up the new setting automatically.
+     */
+    private fun handle415Fallback() {
+        config.disableCompressionFor(COMPRESSION_DISABLE_DURATION_ON_415_MS)
+        log(
+            "warn",
+            "http_415_disabling_compression duration_seconds=${COMPRESSION_DISABLE_DURATION_ON_415_MS / 1000}",
+        )
     }
 
     private fun performBatchHttpRequest(
@@ -993,6 +1012,10 @@ class SyncManager(
             val sentCount = if (ok) idsToDelete.size else null
             emitHttpEvent(status, ok, responseText, recordsSent = sentCount)
             log(if (ok) "info" else "error", "http $status${if (ok) "" else " $responseText"}")
+
+            if (status == 415) {
+                handle415Fallback()
+            }
 
             when {
                 status == 401 || status == 403 -> {
@@ -1122,17 +1145,16 @@ class SyncManager(
      * Visible for testing.
      */
     internal fun maybeCompress(rawJson: ByteArray): Pair<ByteArray, String?> {
-        // TODO(Q8 §4.2): if the backend returned 415 with Content-Encoding: gzip
-        //  on a recent request, disable compression for 60 minutes per
-        //  installation (intermediary proxies that strip/double-encode are the
-        //  failure mode). Requires a lock-protected timestamp in ConfigManager
-        //  and a hook in performBatchHttpRequest to set it on 415. Tracked
-        //  separately because the staging cohort to validate this needs a
-        //  proxy that exhibits the misbehavior — until then, ship with a
-        //  simple retry-as-uncompressed on the next attempt via the existing
-        //  scheduleBatchRetry mechanism (retries do not change body builder
-        //  state today, so they re-gzip; that's acceptable for the rare case).
-        if (!config.compressRequests || rawJson.size <= COMPRESSION_THRESHOLD_BYTES) {
+        // Q8 §4.2: when the backend returns 415 on a gzipped request,
+        // ConfigManager.disableCompressionFor(...) sets a 60-minute
+        // suppression window so the next batches go uncompressed and the
+        // pipeline self-heals (intermediary proxies that strip /
+        // double-encode are the canonical failure mode). The window
+        // clears automatically at deadline.
+        if (!config.compressRequests ||
+            config.isCompressionDisabledByFallback ||
+            rawJson.size <= COMPRESSION_THRESHOLD_BYTES
+        ) {
             return rawJson to null
         }
         val gzipped = gzip(rawJson)
@@ -1274,6 +1296,16 @@ class SyncManager(
          * `gzip_min_length`).
          */
         internal const val COMPRESSION_THRESHOLD_BYTES = 1024
+
+        /**
+         * Q8 §4.2: how long the 415 fallback suppresses compression after a
+         * single `Unsupported Media Type` response. Long enough to outlast
+         * a misconfig (cache TTLs, edge invalidation) without permanently
+         * giving up the 60–80% bandwidth savings — once the deadline
+         * elapses the next request gzips again, so a cleared proxy issue
+         * self-recovers.
+         */
+        internal const val COMPRESSION_DISABLE_DURATION_ON_415_MS = 60L * 60L * 1000L
 
         internal const val REASON_HTTP_401 = "http_401"
         internal const val REASON_HTTP_403 = "http_403"
