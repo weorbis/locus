@@ -113,3 +113,9 @@ yarn-error.log*
 /.gemini
 /.agent
 .mcp.json
+
+# SwiftPM build cache. iOS build is driven by CocoaPods (locus.podspec);
+# the top-level ios/Package.swift exists only so SourceKit-LSP / IDE
+# indexers can resolve internal types when files are opened standalone.
+ios/.build/
+ios/Package.resolved
