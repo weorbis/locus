@@ -178,7 +178,7 @@ void main() {
     });
   });
 
-  group('compressRequests (Q8)', () {
+  group('compressRequests', () {
     test('defaults to true and round-trips through toMap/fromMap', () {
       const defaults = Config();
       expect(defaults.compressRequests, isTrue,

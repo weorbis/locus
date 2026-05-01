@@ -63,7 +63,8 @@ void main() {
       expect(snap.lastFailureAt, isNull);
     });
 
-    test('recordSyncFailure advances total + failed and stamps lastFailureAt', () async {
+    test('recordSyncFailure advances total + failed and stamps lastFailureAt',
+        () async {
       final reg = LocusReliabilityRegistry.instance;
       final at = DateTime.utc(2026, 4, 27, 11, 0, 0);
       reg.recordSyncFailure(httpStatus: 500, at: at);
@@ -158,8 +159,11 @@ void main() {
       final event = QuarantineGrew(totalQuarantined: 5);
       final after = DateTime.now().toUtc();
       expect(event.occurredAt.isUtc, isTrue);
-      expect(event.occurredAt.isAfter(before.subtract(const Duration(seconds: 1))), isTrue);
-      expect(event.occurredAt.isBefore(after.add(const Duration(seconds: 1))), isTrue);
+      expect(
+          event.occurredAt.isAfter(before.subtract(const Duration(seconds: 1))),
+          isTrue);
+      expect(event.occurredAt.isBefore(after.add(const Duration(seconds: 1))),
+          isTrue);
     });
   });
 }

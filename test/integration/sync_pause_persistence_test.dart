@@ -1,29 +1,19 @@
-/// Regression coverage for issue #35 — "No Data Sent Backend using api".
-///
-/// Root cause: sync defaulted to paused on both the Dart cache and the native
-/// SyncManager. Host apps that set `Config.url` (including the example) would
-/// stream locations in Dart but never actually hit the backend, because every
-/// `attemptBatchSync` (auto) and every `Locus.dataSync.now()` (manual) was
-/// short-circuited by the pause flag.
-///
-/// The fix flips the default to active. Pause is now reserved for transport-
-/// level auth failures (401/403, persisted across process restart via
-/// ConfigManager.setSyncPauseReason) or explicit `Locus.dataSync.pause()`
-/// (in-memory only). Domain gating belongs in setPreSyncValidator.
-///
-/// These tests pin down the PUBLIC API CONTRACT that the fix relies on:
+/// Pins the public API contract for the active-by-default sync pause model:
+/// pause is reserved for transport auth failures (401/403, persisted across
+/// process restart via `ConfigManager.setSyncPauseReason`) or an explicit
+/// `Locus.dataSync.pause()` (in-memory only). Domain gating belongs in
+/// `setPreSyncValidator`.
 ///
 ///   * `Locus.dataSync.now()` must dispatch to the platform channel without
-///     requiring a prior `resume()` call.
+///     requiring a prior `resume()`.
 ///   * `Locus.dataSync.isPaused` reflects the current pause state; after an
 ///     explicit `pause()` it is true, after `resume()` it is false.
-///   * On a simulated cold-restart where native reconciled itself into the
-///     paused state (because the previous process recorded a 401), the Dart
-///     layer observes that paused state via the backlog getter.
+///   * On a simulated cold restart where native reconciled itself into the
+///     paused state (previous process recorded a 401), the Dart layer
+///     observes that paused state via the backlog getter.
 ///
 /// The cross-restart persistence itself is a native contract — verified
-/// on-device (see doc/guides/http-synchronization.md and the smoke protocol
-/// in the #35 PR description).
+/// on-device (see doc/guides/http-synchronization.md).
 @TestOn('vm')
 library;
 

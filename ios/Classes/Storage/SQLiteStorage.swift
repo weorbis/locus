@@ -628,7 +628,7 @@ class SQLiteStorage {
             }
             sqlite3_finalize(insertStatement)
             
-            // Remove from queue (parameterized to prevent SQL injection - F-004)
+            // Remove from queue (parameterized to prevent SQL injection)
             let deleteSql = "DELETE FROM queue WHERE id = ?"
             var deleteStatement: OpaquePointer?
             if sqlite3_prepare_v2(db, deleteSql, -1, &deleteStatement, nil) == SQLITE_OK {

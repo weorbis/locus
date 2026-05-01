@@ -32,7 +32,7 @@ SPEC CHECKSUMS:
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
-  locus: 9842cb820c9ebda9185755b61756f643c9989755
+  locus: 83e0c097d95ae91bf518ffb93e869b7e6e66f1ac
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
 
 PODFILE CHECKSUM: c24c27344913105c54b95f33f73882923a0bd103

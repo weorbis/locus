@@ -20,9 +20,7 @@ import 'package:locus/src/core/locus_interface.dart';
 
 final _log = locusLogger('method_channel');
 
-/// Default thresholds for the auto-installed [SyncHealthMonitor]. Match the
-/// defaults documented in the location-pipeline-resilience design doc and
-/// can be overridden in a future Config field.
+/// Default thresholds for the auto-installed [SyncHealthMonitor].
 const Duration _kDefaultStalledThreshold = Duration(minutes: 1);
 const Duration _kDefaultUnrecoverableThreshold = Duration(minutes: 30);
 
@@ -60,7 +58,8 @@ class MethodChannelLocus implements LocusInterface {
       unrecoverableThreshold: _kDefaultUnrecoverableThreshold,
     );
     monitor.attachTo(httpStream);
-    unawaited(LocusReliabilityRegistry.instance.installSyncHealthMonitor(monitor));
+    unawaited(
+        LocusReliabilityRegistry.instance.installSyncHealthMonitor(monitor));
 
     // Auto-install a SyncMetricsRecorder so Locus.metrics.snapshot() reflects
     // real sync activity. It listens to the same httpStream as the health
@@ -69,7 +68,8 @@ class MethodChannelLocus implements LocusInterface {
     // reliability events. The registry holds the reference so the broadcast
     // subscription stays alive.
     final recorder = SyncMetricsRecorder()..attachTo(httpStream);
-    unawaited(LocusReliabilityRegistry.instance.installSyncMetricsRecorder(recorder));
+    unawaited(
+        LocusReliabilityRegistry.instance.installSyncMetricsRecorder(recorder));
 
     // Construct the silent-stop heartbeat but do NOT start it here.
     // Lifecycle ownership lives with `LocusLifecycle.ready` /

@@ -637,12 +637,10 @@ class SyncManager {
     /// If `GzipEncoder` throws (transient OS-level failure) the call falls back
     /// to sending the uncompressed body.
     func maybeCompress(_ rawJson: Data) -> (Data, String?) {
-        // Q8 §4.2: when the backend returns 415 on a gzipped request,
-        // ConfigManager.disableCompressionFor(...) sets a 60-minute
-        // suppression window so the next batches go uncompressed and the
-        // pipeline self-heals (intermediary proxies that strip /
-        // double-encode are the canonical failure mode). The window
-        // clears automatically at deadline.
+        // A 415 on a gzipped request triggers a 60-minute suppression window
+        // (set by ConfigManager.disableCompressionFor) so the next batches
+        // go uncompressed and self-heal through proxies that strip or
+        // double-encode `Content-Encoding`.
         guard config.compressRequests,
               !config.isCompressionDisabledByFallback,
               rawJson.count > SyncManager.compressionThresholdBytes
@@ -933,11 +931,10 @@ class SyncManager {
         }
 
         if status == 415 {
-            // Q8 §4.2 fallback: a 415 from a request that may have carried
-            // Content-Encoding: gzip means an intermediary proxy stripped
-            // or double-encoded the body. Disable compression for 60
-            // minutes; the next batches go uncompressed and the same
-            // route succeeds. The retry below picks up the new setting.
+            // 415 on a possibly-gzipped request → an intermediary proxy
+            // stripped or double-encoded the body. Suppress compression for
+            // 60 minutes so the next batches succeed; retry below picks up
+            // the new setting.
             config.disableCompressionFor(duration: SyncManager.compressionDisableDurationOn415)
             delegate?.onLog(
                 level: "warn",

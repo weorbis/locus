@@ -931,11 +931,9 @@ class SyncManager(
     }
 
     /**
-     * Q8 §4.2 fallback: a 415 from a request that may have carried
-     * `Content-Encoding: gzip` means an intermediary proxy stripped or
-     * double-encoded the body. Disable compression for 60 minutes; the
-     * next batches go uncompressed and the same route succeeds. The
-     * retry below picks up the new setting automatically.
+     * 415 on a possibly-gzipped request → an intermediary proxy stripped or
+     * double-encoded the body. Suppress compression for 60 minutes so the
+     * next batches succeed; retry below picks up the new setting.
      */
     private fun handle415Fallback() {
         config.disableCompressionFor(COMPRESSION_DISABLE_DURATION_ON_415_MS)
@@ -1145,12 +1143,10 @@ class SyncManager(
      * Visible for testing.
      */
     internal fun maybeCompress(rawJson: ByteArray): Pair<ByteArray, String?> {
-        // Q8 §4.2: when the backend returns 415 on a gzipped request,
-        // ConfigManager.disableCompressionFor(...) sets a 60-minute
-        // suppression window so the next batches go uncompressed and the
-        // pipeline self-heals (intermediary proxies that strip /
-        // double-encode are the canonical failure mode). The window
-        // clears automatically at deadline.
+        // A 415 on a gzipped request triggers a 60-minute suppression window
+        // (set by ConfigManager.disableCompressionFor) so the next batches
+        // go uncompressed and self-heal through proxies that strip or
+        // double-encode `Content-Encoding`.
         if (!config.compressRequests ||
             config.isCompressionDisabledByFallback ||
             rawJson.size <= COMPRESSION_THRESHOLD_BYTES
@@ -1298,9 +1294,9 @@ class SyncManager(
         internal const val COMPRESSION_THRESHOLD_BYTES = 1024
 
         /**
-         * Q8 §4.2: how long the 415 fallback suppresses compression after a
-         * single `Unsupported Media Type` response. Long enough to outlast
-         * a misconfig (cache TTLs, edge invalidation) without permanently
+         * How long the 415 fallback suppresses compression after a single
+         * `Unsupported Media Type` response. Long enough to outlast a
+         * misconfig (cache TTLs, edge invalidation) without permanently
          * giving up the 60–80% bandwidth savings — once the deadline
          * elapses the next request gzips again, so a cleared proxy issue
          * self-recovers.

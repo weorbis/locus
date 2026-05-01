@@ -30,6 +30,17 @@ class ConfigManager(context: Context) {
          * successful 2xx response or explicit resumeSync() call.
          */
         const val KEY_SYNC_PAUSE_REASON = "bg_sync_pause_reason"
+
+        /**
+         * SharedPreferences key recording the wall-clock deadline (epoch ms) until
+         * which the 415 fallback suppresses gzip compression. Mirrors the iOS
+         * `ConfigManager.compressionDisabledUntilKey` constant. Persists across
+         * process restarts so the 60-min suppression window survives the frequent
+         * process kills on mobile (Doze, OOM, foreground-service restart, force-stop,
+         * reboot). `0L` / absent means compression is allowed. Cleared on lazy
+         * expiry read or `resetCompressionFallback()`.
+         */
+        const val KEY_COMPRESSION_DISABLED_UNTIL_MS = "bg_compression_disabled_until_ms"
     }
 
     init {
@@ -107,17 +118,25 @@ class ConfigManager(context: Context) {
      */
     var compressRequests: Boolean = true
 
-    // -- 415 fallback (Q8 §4.2) -------------------------------------------
+    // -- 415 fallback ------------------------------------------------------
     //
     // Some intermediary proxies strip or double-encode `Content-Encoding:
     // gzip`, so the origin sees a body it cannot decompress and replies
-    // 415 Unsupported Media Type. The fix is operator override on
-    // [compressRequests], but a one-hour automatic fallback gives the
-    // caller a self-healing path without paging the on-call.
-    //
-    // State machine extracted to a Context-free helper so it's testable
-    // as plain JUnit (no Robolectric overhead). Thread-safe by design.
-    private val compressionFallback = CompressionFallbackState()
+    // 415. A one-hour automatic suppression gives the caller a self-healing
+    // path without paging the on-call; the operator can also override
+    // [compressRequests] directly.
+    private val compressionFallback = CompressionFallbackState(
+        loadDeadline = {
+            val stored = prefs.getLong(KEY_COMPRESSION_DISABLED_UNTIL_MS, 0L)
+            if (stored > 0L) stored else null
+        },
+        saveDeadline = { deadline ->
+            prefs.edit().apply {
+                if (deadline == null) remove(KEY_COMPRESSION_DISABLED_UNTIL_MS)
+                else putLong(KEY_COMPRESSION_DISABLED_UNTIL_MS, deadline)
+            }.apply()
+        },
+    )
 
     /** Disables gzip compression for [durationMs] ms from now. */
     fun disableCompressionFor(durationMs: Long) =

@@ -77,12 +77,9 @@ class ConfigManager {
     var queueMaxRecords = 0
     var idempotencyHeader = "Idempotency-Key"
 
-    /// Serializes reads/writes of [dynamicHeaders]. Headers are written from
-    /// the headers-refresh callback path (URLSession delegate queue under
-    /// §2 / Flutter platform thread for the public setter), and read from
-    /// `SyncManager.makeRequest` (which runs on its private serial queue).
-    /// Without serialization a concurrent write while the read is iterating
-    /// the dictionary can crash with `EXC_BAD_ACCESS`.
+    /// Serializes reads/writes of [dynamicHeaders] — without it, a concurrent
+    /// write while a reader is iterating the dictionary crashes with
+    /// `EXC_BAD_ACCESS`.
     private let dynamicHeadersQueue = DispatchQueue(label: "dev.locus.config.dynamicheaders")
     private var _dynamicHeaders: [String: String] = [:]
     var dynamicHeaders: [String: String] {
@@ -104,17 +101,33 @@ class ConfigManager {
         }
     }
 
-    // MARK: - 415 fallback (Q8 §4.2)
+    // MARK: - 415 fallback
     //
     // Some intermediary proxies strip or double-encode `Content-Encoding:
     // gzip`, so the origin sees a body it cannot decompress and replies
-    // 415 Unsupported Media Type. The fix is operator override on
-    // `compressRequests`, but a one-hour automatic fallback gives the
-    // caller a self-healing path without paging the on-call.
-    //
-    // State machine extracted to a plugin-free helper so it's testable
-    // as plain XCTest (no Flutter framework required).
-    private let compressionFallback = CompressionFallbackState()
+    // 415. A one-hour automatic suppression gives the caller a self-healing
+    // path without paging the on-call; the operator can also override
+    // `compressRequests` directly.
+    private let compressionFallback = CompressionFallbackState(
+        loadDeadline: {
+            let stored = UserDefaults.standard.double(
+                forKey: ConfigManager.compressionDisabledUntilKey
+            )
+            return stored > 0 ? Date(timeIntervalSince1970: stored) : nil
+        },
+        saveDeadline: { deadline in
+            if let deadline = deadline {
+                UserDefaults.standard.set(
+                    deadline.timeIntervalSince1970,
+                    forKey: ConfigManager.compressionDisabledUntilKey
+                )
+            } else {
+                UserDefaults.standard.removeObject(
+                    forKey: ConfigManager.compressionDisabledUntilKey
+                )
+            }
+        }
+    )
 
     /// Disables gzip compression for `duration` seconds from now.
     func disableCompressionFor(duration: TimeInterval) {
@@ -171,6 +184,15 @@ class ConfigManager {
     /// storms on cold start. `nil` means sync is active; value is the HTTP status as a
     /// string ("http_401", "http_403"). Cleared on any 2xx or resumeSync().
     static let syncPauseReasonKey = "bg_sync_pause_reason"
+
+    /// UserDefaults key recording the wall-clock deadline (seconds since 1970) until
+    /// which the 415 fallback suppresses gzip compression. Mirrors the Android
+    /// `ConfigManager.KEY_COMPRESSION_DISABLED_UNTIL_MS` constant. Persists across
+    /// process restarts so the 60-min suppression window survives the frequent
+    /// process kills on mobile (Doze, OOM, foreground-service restart, force-stop,
+    /// reboot, iOS background-launch). `0.0` / absent means compression is allowed.
+    /// Cleared on lazy expiry read or `resetCompressionFallback()`.
+    static let compressionDisabledUntilKey = "bg_compression_disabled_until"
 
     func setSyncPauseReason(_ reason: String?) {
         if let reason = reason {

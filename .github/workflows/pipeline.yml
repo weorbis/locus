@@ -26,13 +26,8 @@ jobs:
   code-quality:
     name: Code Quality
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: subosito/flutter-action@v2
         with:
           channel: ${{ env.FLUTTER_VERSION }}
@@ -44,14 +39,8 @@ jobs:
 
       - run: flutter pub get
 
-      - name: Format
-        run: dart format .
-
-      - name: Commit formatting changes
-        uses: stefanzweifel/git-auto-commit-action@v7
-        with:
-          commit_message: "style: auto-format code [skip ci]"
-          file_pattern: "*.dart"
+      - name: Format check
+        run: dart format --set-exit-if-changed --output=none .
 
       - name: Analyze
         run: flutter analyze --fatal-infos --fatal-warnings

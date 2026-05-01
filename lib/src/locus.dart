@@ -169,8 +169,7 @@ class Locus {
   /// process-local *and* per-isolate; persistence across app launches and
   /// cross-isolate aggregation are not provided by the default in-memory
   /// implementation. See [reliability] for the full discussion.
-  static LocusMetrics get metrics =>
-      LocusReliabilityRegistry.instance.metrics;
+  static LocusMetrics get metrics => LocusReliabilityRegistry.instance.metrics;
 
   // ============================================================
   // Lifecycle Methods

@@ -1,17 +1,12 @@
-/// Regression coverage for issue #34 — "Location tracking stops when app is closed
-/// despite foreground service being configured".
+/// Pins the plugin's public API contract that the native foreground-service
+/// resilience fix depends on:
 ///
-/// The native-level fix (LocusPlugin soft-detach + ForegroundService.onTaskRemoved +
-/// bg_tracking_active persistence) must be verified on-device because it spans
-/// process lifecycles and OS-level services. These Dart tests pin down the
-/// plugin's PUBLIC API CONTRACT that the fix relies on:
-///
-///   * [Locus.isTracking] must reflect the native tracker's `enabled` flag, not a
-///     Dart-side cache. If the native side is kept alive during engine detach and
-///     reports `enabled=true` after re-attach, isTracking() must propagate that.
-///   * [Locus.start] and [Locus.stop] must invoke the `start` / `stop` method calls
-///     verbatim — the native side uses these (not any Dart-side flag) to toggle the
-///     persisted `bg_tracking_active` key.
+///   * [Locus.isTracking] must reflect the native tracker's `enabled` flag, not
+///     a Dart-side cache. The native side stays alive across engine detach and
+///     reports `enabled=true` on re-attach; isTracking() must propagate that.
+///   * [Locus.start] and [Locus.stop] must invoke the `start` / `stop` method
+///     channel calls verbatim — the native side uses those (not any Dart-side
+///     flag) to toggle the persisted `bg_tracking_active` key.
 ///
 /// See also: docs/guides/headless-execution.md (Process Lifecycle section).
 @TestOn('vm')

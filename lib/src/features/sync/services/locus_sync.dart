@@ -122,7 +122,8 @@ class LocusSync {
   static Future<bool> sync() async {
     if (_isPaused) {
       _log.eventInfo('sync_skipped_paused', const {
-        'hint': 'Call Locus.dataSync.resume() to clear (e.g. after refreshing auth).',
+        'hint':
+            'Call Locus.dataSync.resume() to clear (e.g. after refreshing auth).',
       });
       return false;
     }
@@ -297,10 +298,14 @@ class LocusSync {
       // Only set the builder after successful native call
       _syncBodyBuilder = builder;
     } on PlatformException catch (e, stack) {
-      _log.eventSevere('set_sync_body_builder_native_failed', {
-        'code': e.code,
-        if (e.message != null) 'message': e.message,
-      }, e, stack);
+      _log.eventSevere(
+          'set_sync_body_builder_native_failed',
+          {
+            'code': e.code,
+            if (e.message != null) 'message': e.message,
+          },
+          e,
+          stack);
       // Ensure builder is not set on error
       _syncBodyBuilder = null;
       rethrow;
@@ -505,7 +510,8 @@ class LocusSync {
         final context = _extractSyncBodyContext(call.arguments);
         return await callback(context);
       } catch (e, stack) {
-        _log.eventSevere('headless_pre_sync_validator_threw', const {}, e, stack);
+        _log.eventSevere(
+            'headless_pre_sync_validator_threw', const {}, e, stack);
         return false;
       }
     });

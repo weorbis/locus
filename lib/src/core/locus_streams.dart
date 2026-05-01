@@ -110,12 +110,14 @@ class LocusStreams {
           .invokeMethod('setPrivacyMode', hasEnabledPrivacyZones);
     } catch (error, stack) {
       // Non-critical: log and continue without propagating.
-      _log.eventWarning('native_privacy_mode_sync_failed', const {}, error, stack);
+      _log.eventWarning(
+          'native_privacy_mode_sync_failed', const {}, error, stack);
     }
   }
 
   static Future<void> _onListen() async {
-    await _ensureNativeStreamStarted().catchError((Object error, StackTrace stack) {
+    await _ensureNativeStreamStarted()
+        .catchError((Object error, StackTrace stack) {
       _log.eventSevere('native_stream_start_failed', const {}, error, stack);
     });
   }

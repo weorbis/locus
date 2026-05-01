@@ -40,9 +40,8 @@ final class LocusEvent {
   @override
   String toString() {
     if (attributes.isEmpty) return name;
-    final pairs = attributes.entries
-        .map((e) => '${e.key}=${_format(e.value)}')
-        .join(' ');
+    final pairs =
+        attributes.entries.map((e) => '${e.key}=${_format(e.value)}').join(' ');
     return '$name $pairs';
   }
 

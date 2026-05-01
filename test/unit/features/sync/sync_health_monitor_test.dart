@@ -78,7 +78,8 @@ void main() {
       expect(monitor.consecutiveFailures, 1);
     });
 
-    test('failure crossing stalled threshold emits SyncStalled exactly once', () async {
+    test('failure crossing stalled threshold emits SyncStalled exactly once',
+        () async {
       final monitor = newMonitor();
       monitor.recordSuccess();
       clock.advance(const Duration(seconds: 65));
@@ -117,7 +118,8 @@ void main() {
       expect(monitor.state, SyncHealthState.unrecoverable);
     });
 
-    test('recordSuccess after stalled returns to healthy and re-arms emission', () async {
+    test('recordSuccess after stalled returns to healthy and re-arms emission',
+        () async {
       final monitor = newMonitor();
       monitor.recordSuccess();
       clock.advance(const Duration(minutes: 2));
@@ -136,7 +138,8 @@ void main() {
       expect(events.whereType<SyncStalled>(), hasLength(2));
     });
 
-    test('evaluate() escalates stalled → unrecoverable without a new failure', () async {
+    test('evaluate() escalates stalled → unrecoverable without a new failure',
+        () async {
       final monitor = newMonitor();
       monitor.recordSuccess();
       clock.advance(const Duration(minutes: 2));
@@ -151,8 +154,7 @@ void main() {
       expect(events.last, isA<SyncUnrecoverable>());
     });
 
-    test(
-        'M-5: never-succeeded process escalates from first failure baseline',
+    test('never-succeeded process escalates from first failure baseline',
         () async {
       // A fresh install with a bad token never produces a `recordSuccess`.
       // Pre-fix `evaluate` early-returned on a null `_lastSuccessAt` so the
@@ -179,8 +181,7 @@ void main() {
       expect(events.whereType<SyncUnrecoverable>(), hasLength(1));
     });
 
-    test(
-        'M-5: never-failed never-succeeded process escalates from process start',
+    test('never-failed never-succeeded process escalates from process start',
         () async {
       // Even with zero failures observed, a process that has been alive
       // for >= unrecoverableThreshold and has never recorded a success can
@@ -195,7 +196,7 @@ void main() {
       expect(events.whereType<SyncUnrecoverable>(), hasLength(1));
     });
 
-    test('M-5: recordSuccess clears the firstFailure baseline', () async {
+    test('recordSuccess clears the firstFailure baseline', () async {
       // After a recovery, the next failure streak must start its own clock
       // from scratch (otherwise a process that briefly failed an hour ago,
       // recovered, and is now failing for 30 seconds would trip stalled
@@ -215,7 +216,8 @@ void main() {
       expect(events.whereType<SyncUnrecoverable>(), isEmpty);
     });
 
-    test('attachTo bridges HttpEvent stream into success/failure paths', () async {
+    test('attachTo bridges HttpEvent stream into success/failure paths',
+        () async {
       final controller = StreamController<HttpEvent>();
       final monitor = newMonitor();
       monitor.attachTo(controller.stream);
@@ -233,7 +235,8 @@ void main() {
       await controller.close();
     });
 
-    test('emitted SyncStalled carries auto-classified lastErrorClass', () async {
+    test('emitted SyncStalled carries auto-classified lastErrorClass',
+        () async {
       final monitor = newMonitor();
       monitor.recordSuccess();
       clock.advance(const Duration(minutes: 2));

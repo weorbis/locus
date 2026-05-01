@@ -53,7 +53,9 @@ void main() {
       await emitter.tickNow();
 
       final heartbeat = records.singleWhere(
-        (r) => r.object is LocusEvent && (r.object! as LocusEvent).name == 'tracking_heartbeat',
+        (r) =>
+            r.object is LocusEvent &&
+            (r.object! as LocusEvent).name == 'tracking_heartbeat',
       );
       final attrs = (heartbeat.object! as LocusEvent).attributes;
       expect(attrs['points_captured'], 10);
@@ -97,13 +99,16 @@ void main() {
           reason: 'a failed backlog read must not zero the gauge');
     });
 
-    test('emits last_success_age_ms = null when no success has been recorded', () async {
+    test('emits last_success_age_ms = null when no success has been recorded',
+        () async {
       final emitter = HeartbeatEmitter(
         backlogReader: () async => const LocationSyncBacklog(),
       );
       await emitter.tickNow();
       final heartbeat = records.singleWhere(
-        (r) => r.object is LocusEvent && (r.object! as LocusEvent).name == 'tracking_heartbeat',
+        (r) =>
+            r.object is LocusEvent &&
+            (r.object! as LocusEvent).name == 'tracking_heartbeat',
       );
       final attrs = (heartbeat.object! as LocusEvent).attributes;
       expect(attrs['last_success_age_ms'], isNull);
@@ -116,14 +121,18 @@ void main() {
       await emitter.tickNow();
 
       final warnings = records.whereType<LogRecord>().where(
-            (r) => r.object is LocusEvent &&
-                (r.object! as LocusEvent).name == 'heartbeat_backlog_unavailable',
+            (r) =>
+                r.object is LocusEvent &&
+                (r.object! as LocusEvent).name ==
+                    'heartbeat_backlog_unavailable',
           );
       expect(warnings, hasLength(1));
 
       // The heartbeat itself still fires with default values.
       final heartbeat = records.singleWhere(
-        (r) => r.object is LocusEvent && (r.object! as LocusEvent).name == 'tracking_heartbeat',
+        (r) =>
+            r.object is LocusEvent &&
+            (r.object! as LocusEvent).name == 'tracking_heartbeat',
       );
       final attrs = (heartbeat.object! as LocusEvent).attributes;
       expect(attrs['points_pending'], 0);
@@ -137,7 +146,9 @@ void main() {
       );
       await emitter.tickNow();
       final heartbeat = records.singleWhere(
-        (r) => r.object is LocusEvent && (r.object! as LocusEvent).name == 'tracking_heartbeat',
+        (r) =>
+            r.object is LocusEvent &&
+            (r.object! as LocusEvent).name == 'tracking_heartbeat',
       );
       final attrs = (heartbeat.object! as LocusEvent).attributes;
       expect(attrs['sync_paused'], true);
@@ -156,7 +167,9 @@ void main() {
       expect(emitter.isRunning, isTrue);
 
       final heartbeats = records.where(
-        (r) => r.object is LocusEvent && (r.object! as LocusEvent).name == 'tracking_heartbeat',
+        (r) =>
+            r.object is LocusEvent &&
+            (r.object! as LocusEvent).name == 'tracking_heartbeat',
       );
       expect(heartbeats, hasLength(1));
 
@@ -164,8 +177,7 @@ void main() {
       expect(emitter.isRunning, isFalse);
     });
 
-    test('M-1: startIfNotRunning is idempotent and a no-op when running',
-        () async {
+    test('startIfNotRunning is idempotent and a no-op when running', () async {
       // The lifecycle path (LocusLifecycle.ready) calls `startIfNotRunning`
       // on every `ready()` so repeat invocations (hot reload, test setup,
       // re-attach after a transient detach) must not stack timers.
@@ -191,8 +203,7 @@ void main() {
       expect(emitter.isRunning, isFalse);
     });
 
-    test('M-1: never-started emitter does not emit until start is called',
-        () async {
+    test('never-started emitter does not emit until start is called', () async {
       // Apps that import the package without calling `Locus.ready` (test
       // suites, lazy-loaded bundles) must not start a background timer.
       // Pre-fix the constructor of `MethodChannelLocus` started the timer

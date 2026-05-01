@@ -43,7 +43,8 @@ void main() {
       expect(events, isEmpty);
     });
 
-    test('emits QuarantinePurged when the purger reports a positive count', () async {
+    test('emits QuarantinePurged when the purger reports a positive count',
+        () async {
       final janitor = QuarantineJanitor(
         purger: (ttl) async => 4,
         ttl: const Duration(days: 7),
