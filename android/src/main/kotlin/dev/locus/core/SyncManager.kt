@@ -121,6 +121,12 @@ class SyncManager(
      */
     private val drainExhaustedContexts = mutableMapOf<RouteContext, StrandedContextState>()
 
+    /** Signature of the most recently logged "all contexts stranded" state.
+     *  Empty means no warning is currently active. We re-log only when the
+     *  signature changes (a new context strands, a cooldown gets extended,
+     *  or a strand clears) to avoid spam during a multi-minute outage. */
+    private var lastLoggedStrandSignature: String = ""
+
     private data class StrandedContextState(
         /** [SystemClock.elapsedRealtime] at which the context is retryable. */
         val eligibleAtElapsedMs: Long,
@@ -349,6 +355,7 @@ class SyncManager(
         if (config.httpUrl.isNullOrEmpty() || isSyncPaused) return
 
         val effectiveLimit = if (limit <= 0) config.maxBatchSize else limit
+        var noBatchAvailable = false
         val batch = synchronized(locationSyncLock) {
             pendingLocationDrainRequested = true
             if (isLocationSyncInFlight) {
@@ -357,6 +364,7 @@ class SyncManager(
                 val nextBatch = selectNextLocationBatch(effectiveLimit)
                 if (nextBatch == null) {
                     pendingLocationDrainRequested = false
+                    noBatchAvailable = true
                     null
                 } else {
                     isLocationSyncInFlight = true
@@ -364,7 +372,12 @@ class SyncManager(
                     nextBatch
                 }
             }
-        } ?: return
+        }
+
+        if (batch == null) {
+            if (noBatchAvailable) maybeLogAllStranded()
+            return
+        }
 
         enqueueHttpBatch(batch.payloads, batch.ids, 0)
     }
@@ -487,6 +500,43 @@ class SyncManager(
         return if (payloads.isEmpty()) null else LocationBatch(payloads, ids)
     }
 
+    /**
+     * Logs a structured warning when [selectNextLocationBatch] yields no
+     * batch and at least one [RouteContext] is parked in
+     * [drainExhaustedContexts]. Without this, an operator watching logs
+     * sees `attemptBatchSync: pending=N` grow with no diagnostic — the
+     * SDK is silently waiting up to [drainStrandMaxCooldownMs] between
+     * tries even though there are records ready to send.
+     *
+     * The signature gate prevents the warning from spamming on every
+     * tick during a multi-minute outage; we re-emit only when the strand
+     * map shape changes (a context strands, an existing strand extends,
+     * or one clears).
+     */
+    private fun maybeLogAllStranded() {
+        val snapshot = synchronized(locationSyncLock) {
+            drainExhaustedContexts.toMap()
+        }
+        if (snapshot.isEmpty()) return
+
+        val now = SystemClock.elapsedRealtime()
+        val signature = snapshot.entries
+            .map { (ctx, state) -> "${ctx.taskId}@${state.eligibleAtElapsedMs}" }
+            .sorted()
+            .joinToString(",")
+        if (signature == lastLoggedStrandSignature) return
+        lastLoggedStrandSignature = signature
+
+        val nextEligibleMs = snapshot.values.minOf { it.eligibleAtElapsedMs }
+        val msUntilNext = (nextEligibleMs - now).coerceAtLeast(0L)
+        log(
+            "warn",
+            "drain idle: all ${snapshot.size} context(s) stranded; " +
+                "next attempt in ${msUntilNext}ms taskIds=" +
+                snapshot.keys.joinToString(",") { it.taskId }
+        )
+    }
+
     private fun buildBacklog(): BacklogSnapshot {
         val records = locationStore.readLocations(0)
         val groupedCounts = linkedMapOf<RouteContext, Int>()
@@ -581,6 +631,9 @@ class SyncManager(
         synchronized(locationSyncLock) {
             drainExhaustedContexts.clear()
         }
+        // Reset the strand-warning gate so a future outage re-emits the
+        // structured warning instead of being silenced by a stale signature.
+        lastLoggedStrandSignature = ""
     }
 
     private fun recordSyncFailure(reason: String) {

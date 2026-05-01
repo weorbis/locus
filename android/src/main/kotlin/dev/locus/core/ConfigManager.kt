@@ -180,7 +180,15 @@ class ConfigManager(context: Context) {
     fun applyConfig(config: Map<String, Any>?) {
         if (config == null) return
 
-        prefs.edit().putString("bg_last_config", JSONObject(config).toString()).apply()
+        // Persist the merge of any prior bg_last_config with the incoming
+        // config so omitted keys (e.g. `extras` when Locus.ready does not
+        // re-stamp them) preserve the last-known-good value across cold
+        // starts. Without this, an incoming config that legitimately omits
+        // a field would silently erase that field from disk and the next
+        // cold-start would init it to its in-memory default.
+        val merged = HashMap<String, Any>(buildConfigSnapshot())
+        for ((key, value) in config) merged[key] = value
+        prefs.edit().putString("bg_last_config", JSONObject(merged).toString()).apply()
 
         // Notification settings
         (config["foregroundService"] as? Boolean)?.let { foregroundService = it }

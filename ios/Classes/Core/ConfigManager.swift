@@ -222,7 +222,16 @@ class ConfigManager {
     }
     
     func apply(_ config: [String: Any]) {
-        UserDefaults.standard.setValue(config, forKey: ConfigManager.lastConfigKey)
+        // Persist the merge of any prior bg_last_config with the incoming
+        // config so omitted keys (e.g. `extras` when Locus.ready does not
+        // re-stamp them) preserve the last-known-good value across cold
+        // starts. Without this, an incoming config that legitimately omits
+        // a field would silently erase that field from disk and the next
+        // cold-start would init it to its in-memory default.
+        var merged: [String: Any] =
+            UserDefaults.standard.dictionary(forKey: ConfigManager.lastConfigKey) ?? [:]
+        for (key, value) in config { merged[key] = value }
+        UserDefaults.standard.setValue(merged, forKey: ConfigManager.lastConfigKey)
         
         // Location settings
         if let desired = config["desiredAccuracy"] as? String {

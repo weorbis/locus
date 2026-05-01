@@ -129,6 +129,12 @@ class SyncManager {
     }
     private var drainExhaustedContexts: [RouteContext: StrandedContextState] = [:]
 
+    /// Signature of the most recently logged "all contexts stranded" state.
+    /// Empty means no warning is currently active. Re-emitted only when the
+    /// signature changes (a new strand, an extended cooldown, or a clear)
+    /// to avoid spam during a multi-minute outage.
+    private var lastLoggedStrandSignature: String = ""
+
     private func createURLSession() -> URLSession {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = config.httpTimeout
@@ -287,6 +293,9 @@ class SyncManager {
 
     private func clearDrainContextLocked() {
         drainExhaustedContexts.removeAll()
+        // Reset the strand-warning gate so a future outage re-emits the
+        // structured warning instead of being silenced by a stale signature.
+        lastLoggedStrandSignature = ""
     }
 
     private func clearDrainContext() {
@@ -374,11 +383,13 @@ class SyncManager {
         guard let url = config.httpUrl, !url.isEmpty else { return }
         guard !isSyncPaused else { return }
 
+        var noBatchAvailable = false
         let batch: LocationBatch? = locationDrainStateQueue.sync {
             _pendingLocationDrainRequested = true
             guard !_isLocationSyncInFlight else { return nil }
             guard let nextBatch = selectNextLocationBatch(limit: limit) else {
                 _pendingLocationDrainRequested = false
+                noBatchAvailable = true
                 return nil
             }
             _isLocationSyncInFlight = true
@@ -386,8 +397,40 @@ class SyncManager {
             return nextBatch
         }
 
-        guard let batch else { return }
+        guard let batch else {
+            if noBatchAvailable { maybeLogAllStranded() }
+            return
+        }
         enqueueHttpBatch(payloads: batch.payloads, idsToDelete: batch.ids, attempt: 0)
+    }
+
+    /// Logs a structured warning when `selectNextLocationBatch` returns
+    /// nil and at least one `RouteContext` is parked in
+    /// `drainExhaustedContexts`. The signature gate prevents the warning
+    /// from spamming on every tick during a multi-minute outage; it
+    /// re-emits only when the strand map shape changes.
+    private func maybeLogAllStranded() {
+        let snapshot: [RouteContext: StrandedContextState] = locationDrainStateQueue.sync {
+            drainExhaustedContexts
+        }
+        guard !snapshot.isEmpty else { return }
+
+        let now = Date().timeIntervalSinceReferenceDate
+        let signature = snapshot
+            .map { (ctx, state) in "\(ctx.taskId)@\(state.eligibleAt)" }
+            .sorted()
+            .joined(separator: ",")
+        guard signature != lastLoggedStrandSignature else { return }
+        lastLoggedStrandSignature = signature
+
+        let nextEligible = snapshot.values.map { $0.eligibleAt }.min() ?? now
+        let secondsUntilNext = max(0, nextEligible - now)
+        delegate?.onLog(
+            level: "warn",
+            message: "drain idle: all \(snapshot.count) context(s) stranded; " +
+                "next attempt in \(Int(secondsUntilNext * 1000))ms taskIds=" +
+                snapshot.keys.map { $0.taskId }.joined(separator: ",")
+        )
     }
 
     private func completeLocationSync(continueDrain: Bool) {
