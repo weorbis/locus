@@ -21,7 +21,7 @@ import PackageDescription
 
 let package = Package(
     name: "Locus",
-    platforms: [.iOS(.v14)],
+    platforms: [.iOS(.v14), .macOS(.v10_14)],
     products: [
         .library(name: "Locus", targets: ["Locus"]),
     ],
@@ -37,9 +37,16 @@ let package = Package(
                 "SwiftLocusPlugin+Delegates.swift",
                 "SwiftLocusPlugin+Events.swift",
                 "SwiftLocusPlugin+Logging.swift",
+                "Core/LocationClient.swift",
+                "Motion/MotionManager.swift",
                 "Core/HeadlessHeadersDispatcher.swift",
                 "Core/HeadlessValidationDispatcher.swift",
             ]
+        ),
+        .testTarget(
+            name: "LocusTests",
+            dependencies: ["Locus"],
+            path: "Tests"
         ),
     ]
 )

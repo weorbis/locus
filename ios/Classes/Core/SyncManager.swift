@@ -784,7 +784,15 @@ class SyncManager {
                             self.advanceDrainAfterFailure(payloads: [locationPayload], retryScheduled: retryScheduled)
                             return
                         }
-                        guard let request = self.makeRequest(urlString, body: body) else { return }
+                        guard let request = self.makeRequest(urlString, body: body) else {
+                            self.handleLocationRequestBuildFailure(
+                                payloads: [locationPayload],
+                                idsToDelete: idsToDelete,
+                                attempt: attempt,
+                                isBatch: false
+                            )
+                            return
+                        }
                         
                         let task = self.urlSession.dataTask(with: request) { data, response, error in
                             self.handleResponse(data: data, response: response, error: error,
@@ -797,7 +805,15 @@ class SyncManager {
             } else {
                 self.queue.async {
                     let body = self.buildHttpBody(locationPayload: locationPayload, locations: nil)
-                    guard let request = self.makeRequest(urlString, body: body) else { return }
+                    guard let request = self.makeRequest(urlString, body: body) else {
+                        self.handleLocationRequestBuildFailure(
+                            payloads: [locationPayload],
+                            idsToDelete: idsToDelete,
+                            attempt: attempt,
+                            isBatch: false
+                        )
+                        return
+                    }
                     
                     let task = self.urlSession.dataTask(with: request) { data, response, error in
                         self.handleResponse(data: data, response: response, error: error,
@@ -863,7 +879,15 @@ class SyncManager {
                             self.advanceDrainAfterFailure(payloads: payloads, retryScheduled: retryScheduled)
                             return
                         }
-                        guard let request = self.makeRequest(urlString, body: body) else { return }
+                        guard let request = self.makeRequest(urlString, body: body) else {
+                            self.handleLocationRequestBuildFailure(
+                                payloads: payloads,
+                                idsToDelete: idsToDelete,
+                                attempt: attempt,
+                                isBatch: true
+                            )
+                            return
+                        }
                         
                         let task = self.urlSession.dataTask(with: request) { data, response, error in
                             self.handleResponse(data: data, response: response, error: error,
@@ -876,7 +900,15 @@ class SyncManager {
             } else {
                 self.queue.async {
                     let body = self.buildHttpBody(locationPayload: nil, locations: payloads)
-                    guard let request = self.makeRequest(urlString, body: body) else { return }
+                    guard let request = self.makeRequest(urlString, body: body) else {
+                        self.handleLocationRequestBuildFailure(
+                            payloads: payloads,
+                            idsToDelete: idsToDelete,
+                            attempt: attempt,
+                            isBatch: true
+                        )
+                        return
+                    }
                     
                     let task = self.urlSession.dataTask(with: request) { data, response, error in
                         self.handleResponse(data: data, response: response, error: error,
@@ -1022,6 +1054,45 @@ class SyncManager {
         } else {
             completeLocationSync(continueDrain: true)
         }
+    }
+
+    private func handleLocationRequestBuildFailure(
+        payloads: [[String: Any]],
+        idsToDelete: [String]?,
+        attempt: Int,
+        isBatch: Bool
+    ) {
+        delegate?.onHttpEvent([
+            "type": "http",
+            "data": [
+                "status": 0,
+                "ok": false,
+                "responseText": "request_build_failed"
+            ]
+        ])
+        delegate?.onLog(
+            level: "error",
+            message: "request build failed locations=\(payloads.count) extras=\(config.extras)"
+        )
+        recordSyncFailure("request_build_failed")
+
+        let retryScheduled: Bool
+        if isBatch {
+            retryScheduled = scheduleBatchRetry(
+                payloads: payloads,
+                idsToDelete: idsToDelete,
+                attempt: attempt + 1
+            )
+        } else if let payload = payloads.first {
+            retryScheduled = scheduleRetry(
+                payload: payload,
+                idsToDelete: idsToDelete,
+                attempt: attempt + 1
+            )
+        } else {
+            retryScheduled = false
+        }
+        advanceDrainAfterFailure(payloads: payloads, retryScheduled: retryScheduled)
     }
     
     private func handleQueueResponse(data: Data?, response: URLResponse?, error: Error?,

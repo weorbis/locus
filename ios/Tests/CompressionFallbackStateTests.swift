@@ -1,5 +1,5 @@
 import XCTest
-@testable import locus
+@testable import Locus
 
 /// Pins the 415-fallback contract: a one-hour suppression window blocks
 /// gzipping while a misbehaving proxy is live, then auto-clears so the
