@@ -11,6 +11,7 @@
 ///   --ios-only           Only configure iOS
 ///   --activity           Include activity recognition permissions
 ///   --no-activity        Skip activity recognition permissions
+///   --version            Show version
 ///   -h, --help           Show this help message
 library;
 
@@ -18,7 +19,7 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 
-const _version = '2.2.2';
+const _version = '2.3.0';
 
 const _header = '''
 ╔══════════════════════════════════════════════════════════════╗
@@ -42,6 +43,7 @@ void main(List<String> args) async {
     ..addFlag('ios-only', defaultsTo: false, help: 'Only configure iOS')
     ..addFlag('activity',
         defaultsTo: true, help: 'Include activity recognition')
+    ..addFlag('version', abbr: 'v', negatable: false, help: 'Show version')
     ..addFlag('help', abbr: 'h', negatable: false, help: 'Show help');
 
   ArgResults results;
@@ -63,6 +65,11 @@ void main(List<String> args) async {
     stdout.writeln('Usage: dart run locus:setup [options]');
     stdout.writeln('');
     stdout.writeln(parser.usage);
+    exit(0);
+  }
+
+  if (results['version'] as bool) {
+    stdout.writeln(_version);
     exit(0);
   }
 

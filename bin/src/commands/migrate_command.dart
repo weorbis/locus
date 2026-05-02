@@ -51,12 +51,6 @@ class MigrateCommand extends Command<void> {
         defaultsTo: false,
       )
       ..addFlag(
-        'help',
-        abbr: 'h',
-        help: 'Show this help message',
-        defaultsTo: false,
-      )
-      ..addFlag(
         'rollback',
         abbr: 'r',
         help: 'Restore from the most recent backup',

@@ -6,7 +6,7 @@ Add Locus to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  locus: ^1.2.0
+  locus: ^2.3.0
 ```
 
 Or install via command line:

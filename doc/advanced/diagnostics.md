@@ -48,6 +48,32 @@ final logs = await Locus.getLog();
 print('Log entries: ${logs.length}');
 ```
 
+## Reliability Events And Metrics
+
+For production monitoring, subscribe to `Locus.reliability` and snapshot `Locus.metrics`. Reliability events are intended for alerting and incident timelines; metrics are counters you can send to dashboards.
+
+```dart
+final reliabilitySub = Locus.reliability.listen((event) {
+  switch (event) {
+    case SyncStalled():
+      reportWarning('locus_sync_stalled', event.toString());
+    case SyncUnrecoverable():
+      reportCritical('locus_sync_unrecoverable', event.toString());
+    case QuarantineGrew():
+      reportWarning('locus_quarantine_grew', event.toString());
+    default:
+      reportInfo('locus_reliability', event.toString());
+  }
+});
+
+final metrics = await Locus.metrics.snapshot();
+print(metrics.toJson());
+```
+
+The SDK also emits `tracking_heartbeat` structured log entries while active. These include pending, sent, dropped, quarantined, pause-state, and last-success-age fields, which are useful for detecting silent stops.
+
+`Locus.reliability` and `Locus.metrics` are per Dart isolate. Foreground UI subscriptions do not automatically receive events emitted from a headless isolate; use the structured logs for cross-isolate monitoring.
+
 ## Error Recovery
 
 Locus automatically attempts to recover from errors:

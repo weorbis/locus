@@ -1,6 +1,6 @@
 # HTTP Synchronization Guide
 
-Last updated: January 7, 2026
+Last updated: May 2, 2026
 
 Configure reliable HTTP sync with batching, retries, headers, and offline queueing.
 
@@ -17,6 +17,7 @@ await Locus.ready(ConfigPresets.balanced.copyWith(
   retryDelay: const Duration(seconds: 10),
   retryDelayMultiplier: 2.0,
   maxRetry: 5,
+  compressRequests: true,
 ));
 ```
 
@@ -35,6 +36,12 @@ await Locus.ready(ConfigPresets.balanced.copyWith(
 - Body: JSON array of location payloads by default (each with coords, activity, extras).
 - Headers: `content-type: application/json`, auth header, optional idempotency key.
 - Success: 200/204 → remove batch from queue. Non-2xx → retry with backoff.
+
+## Request compression
+
+`compressRequests` defaults to `true`. On Android and iOS, Locus gzips sync POST bodies larger than 1 KB when the compressed body is smaller than the raw JSON body, and sends `Content-Encoding: gzip`.
+
+If a backend or proxy returns `415 Unsupported Media Type` for a possibly compressed request, Locus temporarily suppresses compression for 60 minutes and persists that suppression window across process restarts. This gives the queue a self-healing path through proxies that strip or mishandle compressed request bodies. Set `compressRequests: false` only when your backend cannot accept gzipped POST bodies at all.
 
 ## Batching and thresholds
 
@@ -62,6 +69,8 @@ Future<JsonMap?> buildBody(List<Location> locations, JsonMap extras) async {
 
 await Locus.dataSync.setSyncBodyBuilder(buildBody);
 ```
+
+If the builder throws or returns `null`, Locus treats the failed request construction as retryable. The original locations stay queued, an HTTP event is emitted with `responseText: 'request_build_failed'`, and the drain advances or schedules retry according to the configured retry policy.
 
 ## Sync Control
 
@@ -97,6 +106,7 @@ The `SyncPauseState` carries both the boolean and the reason, so the UI can diff
 - **401**: the native side attempts one in-line header refresh via `setHeadersCallback`. If the refresh yields a fresh `Authorization` header, the original request retries automatically. If not, sync pauses persistently — refresh credentials in your app and call `resume()` to clear.
 - **403**: treated identically to 401 (persistent pause) because refreshing credentials cannot fix a permission denial — your app must resolve the underlying authorization problem before calling `resume()`.
 - **Timeouts/DNS**: retry with backoff via the built-in retry policy; avoid tight retry loops in host code.
+- **Request construction failure**: `responseText == 'request_build_failed'` means a custom sync body builder failed before any network request was made. Fix the builder or its required context; the SDK keeps the locations queued.
 - Use server-side idempotency keys to prevent duplicates after retries.
 
 ## Testing checklist

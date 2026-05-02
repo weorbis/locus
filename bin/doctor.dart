@@ -7,6 +7,7 @@
 ///
 /// Options:
 ///   --fix    Attempt to automatically fix issues
+///   --version    Show version
 ///   -h, --help    Show this help message
 
 library;
@@ -15,11 +16,12 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 
-const _version = '2.2.2';
+const _version = '2.3.0';
 
 void main(List<String> args) async {
   final parser = ArgParser()
     ..addFlag('fix', defaultsTo: false, help: 'Attempt to fix issues')
+    ..addFlag('version', abbr: 'v', negatable: false, help: 'Show version')
     ..addFlag('help', abbr: 'h', negatable: false, help: 'Show help');
 
   ArgResults results;
@@ -40,6 +42,11 @@ void main(List<String> args) async {
     stdout.writeln('Usage: dart run locus:doctor [options]');
     stdout.writeln('');
     stdout.writeln(parser.usage);
+    exit(0);
+  }
+
+  if (results['version'] as bool) {
+    stdout.writeln(_version);
     exit(0);
   }
 

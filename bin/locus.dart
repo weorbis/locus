@@ -20,7 +20,7 @@ import 'package:args/command_runner.dart';
 
 import 'src/commands/migrate_command.dart';
 
-const _version = '2.2.2';
+const _version = '2.3.0';
 
 class LocusCLI extends CommandRunner<void> {
   LocusCLI() : super('locus', 'Locus SDK CLI - v$_version') {
@@ -30,12 +30,6 @@ class LocusCLI extends CommandRunner<void> {
       negatable: false,
       help: 'Show version',
     );
-    argParser.addFlag(
-      'help',
-      abbr: 'h',
-      negatable: false,
-      help: 'Show help',
-    );
 
     addCommand(SetupPlaceholderCommand());
     addCommand(DoctorPlaceholderCommand());
@@ -44,14 +38,6 @@ class LocusCLI extends CommandRunner<void> {
 }
 
 class SetupPlaceholderCommand extends Command<void> {
-  SetupPlaceholderCommand() {
-    argParser.addFlag(
-      'help',
-      abbr: 'h',
-      negatable: false,
-      help: 'Show help',
-    );
-  }
   @override
   final name = 'setup';
 
@@ -93,14 +79,6 @@ This is a placeholder. Run 'dart run locus:setup' for the full setup.
 }
 
 class DoctorPlaceholderCommand extends Command<void> {
-  DoctorPlaceholderCommand() {
-    argParser.addFlag(
-      'help',
-      abbr: 'h',
-      negatable: false,
-      help: 'Show help',
-    );
-  }
   @override
   final name = 'doctor';
 
@@ -145,6 +123,11 @@ Future<void> main(List<String> args) async {
   final cli = LocusCLI();
 
   try {
+    if (args.length == 1 && (args.first == '--version' || args.first == '-v')) {
+      stdout.writeln(_version);
+      exit(0);
+    }
+
     if (args.isEmpty || args.first == '--help' || args.first == '-h') {
       stdout.writeln('''
 ╔══════════════════════════════════════════════════════════════╗

@@ -58,6 +58,19 @@ final status = await PermissionAssistant.requestBackgroundWorkflow(
 );
 ```
 
+## Precise Location Checks
+
+`Locus.requestPermission()` tells you whether the required permission flow completed, but Android and iOS can still grant reduced accuracy. If your product requires high-accuracy tracking, check precise access before starting:
+
+```dart
+final precise = await Locus.hasPreciseLocationPermission();
+if (!precise) {
+  // Show app-specific guidance: enable Precise Location / exact location.
+}
+```
+
+On Android this checks `ACCESS_FINE_LOCATION`. On iOS it checks `accuracyAuthorization == fullAccuracy`.
+
 ---
 
 **Next:** [Testing Guide](../testing/unit-testing.md)

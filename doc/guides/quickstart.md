@@ -8,7 +8,7 @@ Add `locus` to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  locus: ^2.2.2
+  locus: ^2.3.0
 ```
 
 ## 2. Automated Setup

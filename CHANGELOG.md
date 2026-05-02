@@ -4,16 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-05-02
+
 ### Added
 
 - **Dart: `Locus.dataSync.pauseChanges` stream and `pauseReason` getter (#35)** — Reactive pause-state observation. A `syncPauseChange` event fires on every transition (explicit pause/resume, 401/403 auto-pause, 2xx recovery) plus an initial replay when a Dart listener attaches, so UI can render "re-authentication required" banners from `SyncPauseState.isAuthFailure` without polling.
+- **Dart: `Locus.reliability` and `Locus.metrics` observability APIs** — Embedders can subscribe to reliability events (`SyncStalled`, `SyncUnrecoverable`, quarantine/eviction/persistence events) and snapshot counters for captured, sent, dropped, quarantined, and failed sync attempts.
+- **Dart: `Locus.hasPreciseLocationPermission()`** — Apps can now distinguish precise location access from a broad granted/denied permission result before promising high-frequency tracking.
+- **Android/iOS/Dart: Gzip request compression for sync POSTs** — `Config.compressRequests` defaults to `true`; payloads larger than 1 KB are compressed when that makes the body smaller.
+- **Android/iOS: Tracking heartbeat and sync health monitoring** — Locus emits structured `tracking_heartbeat` logs and escalates long-running failures into reliability events so silent stops and stranded queues are observable.
 
 ### Changed
 
 - **Android/iOS/Dart: Sync is active by default when `Config.url` is set (#35)** — Was paused-by-default, which required every host app to call `Locus.dataSync.resume()` after `Locus.ready()` or see zero HTTP traffic. Pause is now reserved for transport-level outcomes: explicit `pause()` (in-memory) and HTTP 401/403 (persistent, see below). Domain-context gating moves to `setPreSyncValidator`.
+- **Android/iOS: 415 response suppresses compression for 60 minutes** — If a backend/proxy rejects a possibly gzipped request with 415, the SDK temporarily sends raw JSON and persists the suppression window across process restarts.
+- **Android: Native state moved into `LocusContainer`** — Process-lifetime state is no longer tied to a single Flutter engine attachment, reducing lifecycle coupling during app swipe-away/re-attach flows.
 
 ### Fixed
 
+- **Android/iOS: Sync body builder request construction failures can no longer wedge the queue** — When a custom body builder throws or returns no request, the SDK emits a `request_build_failed` HTTP event, records the failure, keeps the data queued, schedules retry when allowed, and continues the drain instead of stranding in-flight work.
 - **Android: Location/queue stores fail to open on Samsung's hardened SQLite** — Samsung rejects `db.execSQL("PRAGMA journal_mode=WAL")` because PRAGMA returns rows from `execSQL`, so every DB access re-ran `onConfigure` and threw, leaving the location store and offline queue silently dead on Samsung devices. Both PRAGMAs now use `rawQuery(...)`, matching the existing `checkpoint()` pattern.
 - **Android: 401-recovery retry crashes with `NetworkOnMainThreadException`** — `attemptLocationHeadersRecovery` ran the retry on whichever thread the headers callback delivered on (main, both for the bridge path and `HeadlessHeadersDispatcher`'s `mainHandler.post`), so the retry's blocking `HttpURLConnection` threw and the batch was silently dropped. The retry now dispatches onto the sync executor.
 - **Android/iOS: Backlog stalls after a transient backend outage** — `drainExhaustedContexts` was only cleared in `resumeSync()`, so an outage that flipped every active context into the exhausted set would leave the drain stuck after recovery. `recordSyncSuccess` now clears the set, making the drain self-healing on any 2xx.
@@ -21,6 +30,7 @@ All notable changes to this project will be documented in this file.
 - **Android: Tracking stops when app is closed despite `foregroundService: true` (#34)** — `LocusPlugin.onDetachedFromEngine` unconditionally tore down the foreground service on UI detach. Detach now picks *soft* (keep service + reclaim on next attach) vs *hard* (full teardown) based on tracking state, via `LocationTracker.releaseAll()` / `releaseListeners()` with an idempotent `resumeTracking()`.
 - **Android: `ForegroundService` did not survive task removal** — Added an `onTaskRemoved` no-op override; combined with `START_STICKY` and the soft-detach path, tracking survives swipe-away on Samsung One UI, Xiaomi MIUI, and other aggressive OEMs.
 - **Android/iOS: `Locus.isTracking()` returns `false` after process relaunch (#34)** — Tracking state lived in process-lifetime memory, so a reaped background process or a force-stop reset it. State now persists to `bg_tracking_active` and is reconciled on relaunch — Android `onAttachedToEngine` and iOS plugin init re-arm tracking automatically when the flag is set and permissions are intact.
+- **Android/iOS: Stranded route contexts retry too frequently** — Failed route contexts now use a bounded cooldown so a bad context cannot starve healthy contexts or hammer the backend.
 
 ## [2.2.2] - 2026-04-05
 

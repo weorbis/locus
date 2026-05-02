@@ -291,7 +291,7 @@ void main() {
 
 ### Sync no longer paused by default
 
-Prior versions of Locus started sync in a paused state; host apps had to call `Locus.dataSync.resume()` after `Locus.ready()` or no HTTP traffic would ever reach the backend. From the next release, sync is **active by default** when `Config.url` is set.
+Prior versions of Locus started sync in a paused state; host apps had to call `Locus.dataSync.resume()` after `Locus.ready()` or no HTTP traffic would ever reach the backend. From 2.3.0, sync is **active by default** when `Config.url` is set.
 
 **If your app previously relied on the paused default** (e.g. as a way to block sync until a separate `task_id` was established), replace the implicit behavior with one of:
 
