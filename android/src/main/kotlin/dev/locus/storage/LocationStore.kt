@@ -1,5 +1,6 @@
 package dev.locus.storage
 
+import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
@@ -60,30 +61,25 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
         event: String?,
         odometer: Double
     ) {
+        val values = ContentValues().apply {
+            put("id", UUID.randomUUID().toString())
+            put("timestamp", location.time)
+            put("latitude", location.latitude)
+            put("longitude", location.longitude)
+            put("accuracy", location.accuracy)
+            put("speed", location.speed)
+            put("heading", location.bearing)
+            put("altitude", location.altitude)
+            put("is_moving", if (isMoving) 1 else 0)
+            put("activity_type", activityType)
+            put("activity_confidence", activityConfidence)
+            put("event", event)
+            put("odometer", odometer)
+        }
+
         try {
             val db = writableDatabase
-            db.execSQL(
-                """
-                INSERT OR REPLACE INTO locations
-                (id, timestamp, latitude, longitude, accuracy, speed, heading, altitude, is_moving, activity_type, activity_confidence, event, odometer)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """.trimIndent(),
-                arrayOf<Any?>(
-                    UUID.randomUUID().toString(),
-                    location.time,
-                    location.latitude,
-                    location.longitude,
-                    location.accuracy,
-                    location.speed,
-                    location.bearing,
-                    location.altitude,
-                    if (isMoving) 1 else 0,
-                    activityType,
-                    activityConfidence,
-                    event,
-                    odometer
-                )
-            )
+            db.insertWithOnConflict("locations", null, values, SQLiteDatabase.CONFLICT_REPLACE)
             checkpoint(db)
         } catch (e: Exception) {
             android.util.Log.e("LocationStore", "Failed to insert location: ${e.message}", e)
@@ -127,32 +123,27 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
                 org.json.JSONObject(extras).toString()
             }
 
+            val values = ContentValues().apply {
+                put("id", UUID.randomUUID().toString())
+                put("timestamp", timestamp)
+                put("latitude", latitude)
+                put("longitude", longitude)
+                put("accuracy", accuracy)
+                put("speed", speed)
+                put("heading", heading)
+                put("altitude", altitude)
+                put("is_moving", if (isMoving) 1 else 0)
+                put("activity_type", activityType)
+                put("activity_confidence", activityConfidence)
+                put("event", event)
+                put("odometer", odometer)
+                put("extras_json", extrasJson)
+            }
+
             val db = writableDatabase
             db.beginTransaction()
             try {
-                db.execSQL(
-                    """
-                    INSERT OR REPLACE INTO locations
-                    (id, timestamp, latitude, longitude, accuracy, speed, heading, altitude, is_moving, activity_type, activity_confidence, event, odometer, extras_json)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """.trimIndent(),
-                    arrayOf<Any?>(
-                        UUID.randomUUID().toString(),
-                        timestamp,
-                        latitude,
-                        longitude,
-                        accuracy,
-                        speed,
-                        heading,
-                        altitude,
-                        if (isMoving) 1 else 0,
-                        activityType,
-                        activityConfidence,
-                        event,
-                        odometer,
-                        extrasJson
-                    )
-                )
+                db.insertWithOnConflict("locations", null, values, SQLiteDatabase.CONFLICT_REPLACE)
 
                 if (maxDays > 0) pruneByAge(maxDays)
                 if (maxRecords > 0) pruneByCount(maxRecords)

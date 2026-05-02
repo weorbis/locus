@@ -54,20 +54,18 @@ class LocationClient(
 
         stop()
 
-        locationRequest = buildLocationRequest(config.desiredAccuracy, config.stationaryRadius)
-        locationCallback = object : LocationCallback() {
+        val request = buildLocationRequest(config.desiredAccuracy, config.stationaryRadius)
+        val callback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 locationResult.lastLocation?.let { location ->
                     listener?.onLocation(location)
                 }
             }
         }
+        locationRequest = request
+        locationCallback = callback
 
-        fusedLocationClient.requestLocationUpdates(
-            locationRequest!!,
-            locationCallback!!,
-            Looper.getMainLooper()
-        )
+        fusedLocationClient.requestLocationUpdates(request, callback, Looper.getMainLooper())
         Log.i(TAG, "Location updates started")
     }
 
@@ -83,17 +81,13 @@ class LocationClient(
 
     @SuppressLint("MissingPermission")
     fun updateRequest(isMoving: Boolean) {
-        locationCallback ?: return
+        val callback = locationCallback ?: return
 
         val minDistance = if (isMoving) config.distanceFilter else config.stationaryRadius
         val newRequest = buildLocationRequest(config.desiredAccuracy, minDistance)
 
-        fusedLocationClient.removeLocationUpdates(locationCallback!!)
-        fusedLocationClient.requestLocationUpdates(
-            newRequest,
-            locationCallback!!,
-            Looper.getMainLooper()
-        )
+        fusedLocationClient.removeLocationUpdates(callback)
+        fusedLocationClient.requestLocationUpdates(newRequest, callback, Looper.getMainLooper())
 
         Log.i(TAG, "Location request updated. Moving: $isMoving, Distance: $minDistance")
     }

@@ -932,7 +932,7 @@ class SyncManager {
         guard !isSyncPaused else { return }
         
         queue.async {
-            var body = self.buildQueueBody(payload: payload, id: id, type: type, idempotencyKey: idempotencyKey)
+            let body = self.buildQueueBody(payload: payload, id: id, type: type, idempotencyKey: idempotencyKey)
             guard var request = self.makeRequest(urlString, body: body) else { return }
             
             let header = self.sanitizeHeaderKey(self.config.idempotencyHeader)
@@ -1288,10 +1288,10 @@ class SyncManager {
         
         // Add locations under the specified root property
         if let locations = locations {
-            let key = (config.httpRootProperty?.isEmpty == false) ? config.httpRootProperty! : "locations"
+            let key = config.httpRootProperty?.nonEmpty ?? "locations"
             body[key] = locations
         } else if let locationPayload = locationPayload {
-            let key = (config.httpRootProperty?.isEmpty == false) ? config.httpRootProperty! : "location"
+            let key = config.httpRootProperty?.nonEmpty ?? "location"
             body[key] = locationPayload
         }
         
@@ -1305,7 +1305,7 @@ class SyncManager {
     private func buildQueueBody(payload: [String: Any], id: String, type: String?, idempotencyKey: String) -> [String: Any] {
         var body: [String: Any] = [:]
         
-        let key = (config.httpRootProperty?.isEmpty == false) ? config.httpRootProperty! : "payload"
+        let key = config.httpRootProperty?.nonEmpty ?? "payload"
         body[key] = payload
         
         body["queueId"] = id
@@ -1315,7 +1315,13 @@ class SyncManager {
         for (k, v) in config.httpParams {
             body[k] = v
         }
-        
+
         return body
     }
+}
+
+private extension String {
+    /// `nil` for empty strings, otherwise `self`. Lets `httpRootProperty?.nonEmpty ?? "fallback"`
+    /// preserve the "treat empty as unset" rule the public config contract relies on.
+    var nonEmpty: String? { isEmpty ? nil : self }
 }

@@ -1,5 +1,6 @@
 package dev.locus.storage
 
+import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
@@ -57,18 +58,21 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
         val createdAt = System.currentTimeMillis()
         val payloadJson = JSONObject(payload).toString()
 
+        val values = ContentValues().apply {
+            put("id", id)
+            put("created_at", createdAt)
+            put("payload", payloadJson)
+            put("retry_count", 0)
+            putNull("next_retry_at")
+            put("idempotency_key", idempotencyKey)
+            put("type", type)
+        }
+
         try {
             val db = writableDatabase
             db.beginTransaction()
             try {
-                db.execSQL(
-                    """
-                    INSERT OR REPLACE INTO queue
-                    (id, created_at, payload, retry_count, next_retry_at, idempotency_key, type)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """.trimIndent(),
-                    arrayOf(id, createdAt, payloadJson, 0, null, idempotencyKey, type)
-                )
+                db.insertWithOnConflict("queue", null, values, SQLiteDatabase.CONFLICT_REPLACE)
 
                 if (maxDays > 0) pruneByAge(maxDays)
                 if (maxRecords > 0) pruneByCount(maxRecords)
@@ -124,12 +128,14 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
     }
 
     fun updateRetry(id: String, retryCount: Int, nextRetryAt: Long) {
+        val values = ContentValues().apply {
+            put("retry_count", retryCount)
+            put("next_retry_at", nextRetryAt)
+        }
+
         try {
             val db = writableDatabase
-            db.execSQL(
-                "UPDATE queue SET retry_count = ?, next_retry_at = ? WHERE id = ?",
-                arrayOf(retryCount, nextRetryAt, id)
-            )
+            db.update("queue", values, "id = ?", arrayOf(id))
             checkpoint(db)
         } catch (e: Exception) {
             android.util.Log.e("QueueStore", "Failed to update retry: ${e.message}", e)

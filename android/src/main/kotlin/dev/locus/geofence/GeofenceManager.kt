@@ -64,9 +64,10 @@ class GeofenceManager(
                 addGeofence(geofence)
             }.build()
 
-            geofencePendingIntent = createGeofencePendingIntent()
+            val pendingIntent = createGeofencePendingIntent()
+            geofencePendingIntent = pendingIntent
 
-            geofencingClient.addGeofences(request, geofencePendingIntent!!)
+            geofencingClient.addGeofences(request, pendingIntent)
                 .addOnSuccessListener {
                     storeGeofence(geofenceMap)
                     enforceMaxMonitoredGeofences()
@@ -118,9 +119,10 @@ class GeofenceManager(
                 }
             }.build()
 
-            geofencePendingIntent = createGeofencePendingIntent()
+            val pendingIntent = createGeofencePendingIntent()
+            geofencePendingIntent = pendingIntent
 
-            geofencingClient.addGeofences(request, geofencePendingIntent!!)
+            geofencingClient.addGeofences(request, pendingIntent)
                 .addOnSuccessListener {
                     writeGeofenceStore(stored)
                     enforceMaxMonitoredGeofences()
@@ -320,10 +322,11 @@ class GeofenceManager(
             }
         }.build()
 
-        geofencePendingIntent = createGeofencePendingIntent()
+        val pendingIntent = createGeofencePendingIntent()
+        geofencePendingIntent = pendingIntent
         val storedIds = extractIdentifiers(stored)
 
-        geofencingClient.addGeofences(request, geofencePendingIntent!!)
+        geofencingClient.addGeofences(request, pendingIntent)
             .addOnFailureListener {
                 // Clean up persisted store so Dart stays in sync when geofencing cannot start
                 writeGeofenceStore(JSONArray())

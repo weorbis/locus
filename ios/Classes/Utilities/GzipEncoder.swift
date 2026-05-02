@@ -85,6 +85,11 @@ public enum GzipEncoder {
     /// size for highly-redundant inputs is hard to predict ahead of time —
     /// streaming lets us grow the output buffer as needed.
     private static func deflateRaw(_ input: Data) throws -> Data {
+        // `encode` short-circuits on empty input; this assertion catches any
+        // future caller that bypasses that contract before we hit the
+        // `baseAddress!` below (which would otherwise NPE on empty buffers).
+        precondition(!input.isEmpty, "deflateRaw requires non-empty input")
+
         let streamPointer = UnsafeMutablePointer<compression_stream>.allocate(capacity: 1)
         defer { streamPointer.deallocate() }
 

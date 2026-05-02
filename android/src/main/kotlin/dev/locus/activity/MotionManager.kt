@@ -50,14 +50,13 @@ class MotionManager(
     fun start() {
         if (config.disableMotionActivityUpdates) return
 
-        activityPendingIntent = createActivityPendingIntent()
+        val pendingIntent = createActivityPendingIntent()
+        activityPendingIntent = pendingIntent
 
-        activityClient.requestActivityUpdates(
-            config.activityRecognitionInterval,
-            activityPendingIntent!!
-        ).addOnFailureListener { e ->
-            Log.e(TAG, "Activity recognition failed: ${e.message}")
-        }
+        activityClient.requestActivityUpdates(config.activityRecognitionInterval, pendingIntent)
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Activity recognition failed: ${e.message}")
+            }
 
         Log.i(TAG, "Activity recognition started")
     }

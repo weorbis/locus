@@ -25,8 +25,8 @@ class SystemMonitor(
 
     fun registerConnectivity() {
         if (connectivityManager == null || networkCallback != null) return
-        
-        networkCallback = object : ConnectivityManager.NetworkCallback() {
+
+        val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 notifyConnectivity()
             }
@@ -39,9 +39,10 @@ class SystemMonitor(
                 notifyConnectivity()
             }
         }
-        
+        networkCallback = callback
+
         runCatching {
-            connectivityManager?.registerDefaultNetworkCallback(networkCallback!!)
+            connectivityManager?.registerDefaultNetworkCallback(callback)
         }
     }
 

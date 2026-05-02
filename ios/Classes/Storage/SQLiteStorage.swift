@@ -60,18 +60,52 @@ class SQLiteStorage {
         sqlite3_exec(db, "PRAGMA wal_checkpoint(PASSIVE);", nil, nil, nil)
     }
 
-    /// Step a prepared statement, retrying on SQLITE_BUSY until the busy
-    /// timeout fires. Returns the final result code.
+    /// Steps a write statement (INSERT/UPDATE/DELETE/PRAGMA): retries on
+    /// SQLITE_BUSY, expects SQLITE_DONE, and logs `sqlite3_errmsg` for any
+    /// other result so DB failures aren't silent. Returns true on success.
     /// Caller must already hold `queue`.
     @discardableResult
-    private func stepWithBusyRetry(_ statement: OpaquePointer?) -> Int32 {
+    private func stepChecked(_ statement: OpaquePointer?, op: String) -> Bool {
         var rc = sqlite3_step(statement)
         var attempts = 0
         while rc == SQLITE_BUSY && attempts < 5 {
             attempts += 1
             rc = sqlite3_step(statement)
         }
-        return rc
+        if rc != SQLITE_DONE {
+            logSQLiteError("\(op) (rc=\(rc))")
+            return false
+        }
+        return true
+    }
+
+    /// Surfaces SQLite errors via NSLog so silent corruption doesn't go
+    /// undetected. Mirrors the visibility we get on Android via Log.e on
+    /// the storage layer. Caller must already hold `queue`.
+    private func logSQLiteError(_ operation: String) {
+        guard let db = self.db, let raw = sqlite3_errmsg(db) else {
+            NSLog("[locus.SQLiteStorage] %@ failed (no errmsg available)", operation)
+            return
+        }
+        NSLog("[locus.SQLiteStorage] %@ failed: %s", operation, raw)
+    }
+
+    /// Encodes `object` as a JSON string, logging on failure. Returns nil
+    /// when serialization or UTF-8 conversion fails so insert paths can
+    /// short-circuit instead of silently dropping rows on the floor.
+    private func serializeJSON(_ object: Any, op: String) -> String? {
+        let data: Data
+        do {
+            data = try JSONSerialization.data(withJSONObject: object)
+        } catch {
+            NSLog("[locus.SQLiteStorage] %@ JSON serialization failed: %@", op, error.localizedDescription)
+            return nil
+        }
+        guard let string = String(data: data, encoding: .utf8) else {
+            NSLog("[locus.SQLiteStorage] %@ JSON utf8 decode failed", op)
+            return nil
+        }
+        return string
     }
     
     private func createTables() {
@@ -150,9 +184,9 @@ class SQLiteStorage {
         guard let db = self.db else { return }
         var statement: OpaquePointer?
         if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
-            if sqlite3_step(statement) != SQLITE_DONE {
-                // Statement failed
-            }
+            stepChecked(statement, op: "execute (\(sql.prefix(60)))")
+        } else {
+            logSQLiteError("execute prepare (\(sql.prefix(60)))")
         }
         sqlite3_finalize(statement)
     }
@@ -220,8 +254,7 @@ class SQLiteStorage {
 
             let uuid = payload["uuid"] as? String ?? UUID().uuidString
             let timestamp = payload["timestamp"] as? String ?? ISO8601DateFormatter().string(from: Date())
-            guard let jsonData = try? JSONSerialization.data(withJSONObject: payload),
-                  let jsonString = String(data: jsonData, encoding: .utf8) else { return }
+            guard let jsonString = self.serializeJSON(payload, op: "insertLocation") else { return }
 
             let sql = "INSERT OR REPLACE INTO locations (uuid, payload, timestamp) VALUES (?, ?, ?)"
             var statement: OpaquePointer?
@@ -230,7 +263,9 @@ class SQLiteStorage {
                 sqlite3_bind_text(statement, 1, uuid, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_bind_text(statement, 2, jsonString, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_bind_text(statement, 3, timestamp, -1, SQLiteStorage.SQLITE_TRANSIENT)
-                self.stepWithBusyRetry(statement)
+                self.stepChecked(statement, op: "insertLocation")
+            } else {
+                self.logSQLiteError("insertLocation prepare")
             }
             sqlite3_finalize(statement)
             self.walCheckpointOnQueue()
@@ -284,7 +319,9 @@ class SQLiteStorage {
                 for (index, uuid) in uuids.enumerated() {
                     sqlite3_bind_text(statement, Int32(index + 1), uuid, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 }
-                self.stepWithBusyRetry(statement)
+                self.stepChecked(statement, op: "removeLocations")
+            } else {
+                self.logSQLiteError("removeLocations prepare")
             }
             sqlite3_finalize(statement)
             self.walCheckpointOnQueue()
@@ -312,7 +349,9 @@ class SQLiteStorage {
                 var statement: OpaquePointer?
                 if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                     sqlite3_bind_text(statement, 1, cutoffString, -1, SQLiteStorage.SQLITE_TRANSIENT)
-                    self.stepWithBusyRetry(statement)
+                    self.stepChecked(statement, op: "pruneLocations(age)")
+                } else {
+                    self.logSQLiteError("pruneLocations(age) prepare")
                 }
                 sqlite3_finalize(statement)
             }
@@ -327,7 +366,9 @@ class SQLiteStorage {
                 var statement: OpaquePointer?
                 if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                     sqlite3_bind_int(statement, 1, Int32(maxRecords))
-                    self.stepWithBusyRetry(statement)
+                    self.stepChecked(statement, op: "pruneLocations(count)")
+                } else {
+                    self.logSQLiteError("pruneLocations(count) prepare")
                 }
                 sqlite3_finalize(statement)
             }
@@ -357,10 +398,12 @@ class SQLiteStorage {
     func insertGeofence(_ payload: [String: Any]) {
         queue.async { [weak self] in
             guard let self = self, let db = self.db else { return }
-            
-            guard let identifier = payload["identifier"] as? String,
-                  let jsonData = try? JSONSerialization.data(withJSONObject: payload),
-                  let jsonString = String(data: jsonData, encoding: .utf8) else { return }
+
+            guard let identifier = payload["identifier"] as? String else {
+                NSLog("[locus.SQLiteStorage] insertGeofence skipped: missing 'identifier'")
+                return
+            }
+            guard let jsonString = self.serializeJSON(payload, op: "insertGeofence") else { return }
             
             let sql = "INSERT OR REPLACE INTO geofences (identifier, payload) VALUES (?, ?)"
             var statement: OpaquePointer?
@@ -368,12 +411,15 @@ class SQLiteStorage {
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                 sqlite3_bind_text(statement, 1, identifier, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_bind_text(statement, 2, jsonString, -1, SQLiteStorage.SQLITE_TRANSIENT)
-                sqlite3_step(statement)
+                self.stepChecked(statement, op: "insertGeofence")
+            } else {
+                self.logSQLiteError("insertGeofence prepare")
             }
             sqlite3_finalize(statement)
+            self.walCheckpointOnQueue()
         }
     }
-    
+
     func readGeofences() -> [[String: Any]] {
         var results: [[String: Any]] = []
         
@@ -401,15 +447,18 @@ class SQLiteStorage {
     func removeGeofence(_ identifier: String) {
         queue.async { [weak self] in
             guard let self = self, let db = self.db else { return }
-            
+
             let sql = "DELETE FROM geofences WHERE identifier = ?"
             var statement: OpaquePointer?
-            
+
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                 sqlite3_bind_text(statement, 1, identifier, -1, SQLiteStorage.SQLITE_TRANSIENT)
-                sqlite3_step(statement)
+                self.stepChecked(statement, op: "removeGeofence")
+            } else {
+                self.logSQLiteError("removeGeofence prepare")
             }
             sqlite3_finalize(statement)
+            self.walCheckpointOnQueue()
         }
     }
     
@@ -438,9 +487,11 @@ class SQLiteStorage {
             let nextRetryAt = item["nextRetryAt"] as? String
             let createdAt = item["created"] as? String ?? ISO8601DateFormatter().string(from: Date())
 
-            guard let payloadData = item["payload"],
-                  let jsonData = try? JSONSerialization.data(withJSONObject: payloadData),
-                  let jsonString = String(data: jsonData, encoding: .utf8) else { return }
+            guard let payloadData = item["payload"] else {
+                NSLog("[locus.SQLiteStorage] insertQueueItem skipped: missing 'payload'")
+                return
+            }
+            guard let jsonString = self.serializeJSON(payloadData, op: "insertQueueItem") else { return }
 
             let sql = """
                 INSERT OR REPLACE INTO queue
@@ -469,13 +520,15 @@ class SQLiteStorage {
                     sqlite3_bind_null(statement, 6)
                 }
                 sqlite3_bind_text(statement, 7, createdAt, -1, SQLiteStorage.SQLITE_TRANSIENT)
-                self.stepWithBusyRetry(statement)
+                self.stepChecked(statement, op: "insertQueueItem")
+            } else {
+                self.logSQLiteError("insertQueueItem prepare")
             }
             sqlite3_finalize(statement)
             self.walCheckpointOnQueue()
         }
     }
-    
+
     func readQueue() -> [[String: Any]] {
         var results: [[String: Any]] = []
         
@@ -534,7 +587,9 @@ class SQLiteStorage {
                 for (index, id) in ids.enumerated() {
                     sqlite3_bind_text(statement, Int32(index + 1), id, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 }
-                self.stepWithBusyRetry(statement)
+                self.stepChecked(statement, op: "removeQueueItems")
+            } else {
+                self.logSQLiteError("removeQueueItems prepare")
             }
             sqlite3_finalize(statement)
             self.walCheckpointOnQueue()
@@ -552,7 +607,9 @@ class SQLiteStorage {
                 sqlite3_bind_int(statement, 1, Int32(retryCount))
                 sqlite3_bind_text(statement, 2, nextRetryAt, -1, SQLiteStorage.SQLITE_TRANSIENT)
                 sqlite3_bind_text(statement, 3, id, -1, SQLiteStorage.SQLITE_TRANSIENT)
-                self.stepWithBusyRetry(statement)
+                self.stepChecked(statement, op: "updateQueueItem")
+            } else {
+                self.logSQLiteError("updateQueueItem prepare")
             }
             sqlite3_finalize(statement)
             self.walCheckpointOnQueue()
@@ -624,16 +681,20 @@ class SQLiteStorage {
                 }
                 sqlite3_bind_int(insertStatement, 5, Int32(retryCount))
                 sqlite3_bind_text(insertStatement, 6, failedAt, -1, SQLiteStorage.SQLITE_TRANSIENT)
-                sqlite3_step(insertStatement)
+                self.stepChecked(insertStatement, op: "moveToDeadLetter(insert)")
+            } else {
+                self.logSQLiteError("moveToDeadLetter(insert) prepare")
             }
             sqlite3_finalize(insertStatement)
-            
+
             // Remove from queue (parameterized to prevent SQL injection)
             let deleteSql = "DELETE FROM queue WHERE id = ?"
             var deleteStatement: OpaquePointer?
             if sqlite3_prepare_v2(db, deleteSql, -1, &deleteStatement, nil) == SQLITE_OK {
                 sqlite3_bind_text(deleteStatement, 1, id, -1, SQLiteStorage.SQLITE_TRANSIENT)
-                sqlite3_step(deleteStatement)
+                self.stepChecked(deleteStatement, op: "moveToDeadLetter(delete)")
+            } else {
+                self.logSQLiteError("moveToDeadLetter(delete) prepare")
             }
             sqlite3_finalize(deleteStatement)
             
@@ -711,7 +772,9 @@ class SQLiteStorage {
                 } else {
                     sqlite3_bind_null(statement, 4)
                 }
-                sqlite3_step(statement)
+                self.stepChecked(statement, op: "insertLog")
+            } else {
+                self.logSQLiteError("insertLog prepare")
             }
             sqlite3_finalize(statement)
         }
@@ -760,7 +823,9 @@ class SQLiteStorage {
             var statement: OpaquePointer?
             if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
                 sqlite3_bind_int64(statement, 1, cutoff)
-                sqlite3_step(statement)
+                self.stepChecked(statement, op: "pruneLogs")
+            } else {
+                self.logSQLiteError("pruneLogs prepare")
             }
             sqlite3_finalize(statement)
         }
