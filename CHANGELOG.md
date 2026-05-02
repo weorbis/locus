@@ -4,7 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [2.3.0] - 2026-05-02
+## [2.3.1] - 2026-05-02
+
+### Fixed
+
+- **Android: build fails on Kotlin 2.x with "intersection of `Comparable<*>` & `Serializable`" (#37)** — `QueueStore` and `LocationStore` passed mixed-typed positional bind arguments through `arrayOf(...)` to `db.execSQL`. Kotlin 2.x's stricter reified-generic inference resolved the array's element type to the intersection `Comparable<*> & Serializable`, which the compiler rejects. Both stores now use `ContentValues` with `db.insertWithOnConflict(... CONFLICT_REPLACE)` / `db.update(...)`, eliminating the reified call entirely. Existing consumers on Kotlin 1.9 continue to build unchanged.
+
+### Changed
+
+- **iOS: SQLite write failures are now observable via `NSLog`** — `SQLiteStorage` previously discarded the result of every `sqlite3_step` on INSERT/UPDATE/DELETE, so backend-write failures (corruption, disk-full, schema mismatch) silently dropped rows. All 14 write paths now route through `stepChecked(_:op:)` which checks for `SQLITE_DONE`, retries on `SQLITE_BUSY`, and logs `sqlite3_errmsg` on any other result. JSON serialization failures on insert paths log instead of dropping the row silently.
+- **iOS: `httpRootProperty` empty-string is now treated as unset consistently** — `SyncManager.buildHttpBody` / `buildQueueBody` collapsed the `(prop?.isEmpty == false) ? prop! : default` pattern to `prop?.nonEmpty ?? default` via a small private `String.nonEmpty` extension. Behavior unchanged; the force-unwrap is gone.
+- **Android: native lifecycle code uses local `val` captures instead of `!!`** — `LocationClient`, `MotionManager`, `SystemMonitor`, and `GeofenceManager` previously force-unwrapped class-level mutable properties (`locationCallback!!`, `geofencePendingIntent!!`, …) right after assigning them. Each site now captures into a local `val` first, then assigns and uses, removing the data race between guard and use.
+- **iOS: `GzipEncoder.deflateRaw` documents the non-empty invariant via `precondition`** — `encode()` short-circuits empty input, but `deflateRaw`'s `baseAddress!` would NPE if a future caller bypassed that contract. The precondition makes the requirement explicit and fails loudly on violation.
+
+
 
 ### Added
 

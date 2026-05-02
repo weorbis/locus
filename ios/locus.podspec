@@ -1,9 +1,14 @@
 #
 # To learn more about a Podspec see http://guides.cocoapods.org/syntax/podspec.html.
 #
+# Single source of truth: read the version straight out of pubspec.yaml so
+# the pod never drifts from the published package version.
+require 'yaml'
+pubspec = YAML.load_file(File.expand_path('../pubspec.yaml', __dir__))
+
 Pod::Spec.new do |s|
   s.name             = 'locus'
-  s.version          = '2.3.0'
+  s.version          = pubspec['version']
   s.summary          = 'Background geolocation SDK for Flutter.'
   s.description      = <<-DESC
     Background geolocation SDK for Flutter. Native tracking, geofencing, 

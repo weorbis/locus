@@ -39,6 +39,9 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Version pins in sync with pubspec
+        run: dart run tool/sync_version.dart --check
+
       - name: Format check
         run: dart format --set-exit-if-changed --output=none .
 
@@ -133,14 +136,12 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Check version and consistency
+      - name: Resolve version from pubspec.yaml
         id: check_version
         run: |
-          VERSION=$(cat VERSION | tr -d '[:space:]')
-          PUBSPEC_VERSION=$(grep 'version:' pubspec.yaml | sed 's/version: //' | tr -d '[:space:]')
-
-          if [ "$PUBSPEC_VERSION" != "$VERSION" ]; then
-            echo "::error::pubspec.yaml version ($PUBSPEC_VERSION) does not match VERSION file ($VERSION)"
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d '[:space:]')
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not parse version from pubspec.yaml"
             exit 1
           fi
 

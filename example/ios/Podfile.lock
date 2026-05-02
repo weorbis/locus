@@ -4,7 +4,7 @@ PODS:
   - Flutter (1.0.0)
   - integration_test (0.0.1):
     - Flutter
-  - locus (2.3.0):
+  - locus (2.3.1):
     - Flutter
   - permission_handler_apple (9.3.0):
     - Flutter
@@ -32,7 +32,7 @@ SPEC CHECKSUMS:
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
-  locus: 15acb0013fd0a4fb6fe27bd1408f5ba314e8e8aa
+  locus: 426f8bbaa5b1986ee84883f35a5e735d6fd36e07
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
 
 PODFILE CHECKSUM: c24c27344913105c54b95f33f73882923a0bd103

@@ -19,7 +19,7 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 
-const _version = '2.3.0';
+const _version = '2.3.1';
 
 const _header = '''
 ╔══════════════════════════════════════════════════════════════╗

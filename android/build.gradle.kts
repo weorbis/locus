@@ -4,7 +4,12 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 group = "dev.locus"
-version = "2.3.0"
+// Single source of truth: read the version straight out of pubspec.yaml so
+// the Gradle module never drifts from the published package version.
+version = file("../pubspec.yaml").readText()
+    .let { Regex("""^version:\s*(.+)$""", RegexOption.MULTILINE).find(it) }
+    ?.groupValues?.get(1)?.trim()
+    ?: error("Could not parse `version:` from pubspec.yaml")
 
 buildscript {
     repositories {

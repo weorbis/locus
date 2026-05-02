@@ -6,7 +6,7 @@ Add Locus to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  locus: ^2.3.0
+  locus: ^2.3.1
 ```
 
 Or install via command line:
@@ -31,10 +31,10 @@ import 'package:locus/locus.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize Locus
   await Locus.ready();
-  
+
   runApp(MyApp());
 }
 

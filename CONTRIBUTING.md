@@ -72,6 +72,24 @@ When adding or updating dependencies:
 - **Update regularly**: Keep dependencies up-to-date, especially for security patches.
 - **Testing**: Run the full test suite after dependency changes to ensure compatibility.
 
+## Releasing
+
+`pubspec.yaml`'s `version:` is the single source of truth for the SDK version.
+
+1. Bump `version:` in `pubspec.yaml`.
+2. Run `dart run tool/sync_version.dart` to propagate the new version to the
+   Dart constants (`lib/src/config/geolocation_config.dart` and `bin/*.dart`).
+3. Update `CHANGELOG.md`.
+4. Commit and push to `main`. CI tags `v<version>`, creates the GitHub
+   release, and the package is then published manually with
+   `flutter pub publish`.
+
+Native build files (`android/build.gradle.kts`, `ios/locus.podspec`) derive
+the version from `pubspec.yaml` automatically — no manual sync needed.
+
+CI runs `dart run tool/sync_version.dart --check` on every PR; if the Dart
+constants drift from `pubspec.yaml`, the build fails before merge.
+
 ## Reporting Issues
 
 When reporting an issue, please provide:

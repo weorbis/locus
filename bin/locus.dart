@@ -20,7 +20,7 @@ import 'package:args/command_runner.dart';
 
 import 'src/commands/migrate_command.dart';
 
-const _version = '2.3.0';
+const _version = '2.3.1';
 
 class LocusCLI extends CommandRunner<void> {
   LocusCLI() : super('locus', 'Locus SDK CLI - v$_version') {
