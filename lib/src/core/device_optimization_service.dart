@@ -58,7 +58,8 @@ class DeviceOptimizationService {
 
   static Future<String?> _readManufacturer() async {
     try {
-      return await LocusChannels.methods.invokeMethod<String>('getManufacturer');
+      return await LocusChannels.methods
+          .invokeMethod<String>('getManufacturer');
     } catch (_) {
       // Channel unreachable (e.g., plugin not registered in a headless engine).
       // Caller treats null as "unknown manufacturer" and falls back to a

@@ -43,8 +43,8 @@ void main() {
                 const MethodChannel('locus/methods'), null);
       });
 
-      final url = await DeviceOptimizationService
-          .getManufacturerInstructionsUrl();
+      final url =
+          await DeviceOptimizationService.getManufacturerInstructionsUrl();
 
       expect(url, isNull);
       expect(calls, isEmpty,
@@ -55,8 +55,8 @@ void main() {
         () async {
       expect(Platform.isAndroid, isFalse);
 
-      final result = await DeviceOptimizationService
-          .isIgnoringBatteryOptimizations();
+      final result =
+          await DeviceOptimizationService.isIgnoringBatteryOptimizations();
 
       expect(result, isFalse);
     });
