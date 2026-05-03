@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:locus/src/core/locus_channels.dart';
 
 /// Helpers for device-specific background execution behavior.
@@ -39,19 +38,11 @@ class DeviceOptimizationService {
     if (!Platform.isAndroid) {
       return null;
     }
-    String manufacturer = 'android';
     final diagnosticsManufacturer = await _readManufacturerFromDiagnostics();
-    if (diagnosticsManufacturer != null && diagnosticsManufacturer.isNotEmpty) {
-      manufacturer = diagnosticsManufacturer.toLowerCase();
-    } else {
-      final info = DeviceInfoPlugin();
-      try {
-        final android = await info.androidInfo;
-        manufacturer = android.manufacturer.toLowerCase();
-      } catch (_) {
-        // Fallback to generic page.
-      }
-    }
+    final manufacturer =
+        (diagnosticsManufacturer == null || diagnosticsManufacturer.isEmpty)
+            ? 'android'
+            : diagnosticsManufacturer.toLowerCase();
     return _manufacturerLinks[manufacturer] ?? 'https://dontkillmyapp.com/';
   }
 
@@ -78,7 +69,7 @@ class DeviceOptimizationService {
         }
       }
     } catch (_) {
-      // Ignore and fall back to device info.
+      // Ignore; caller treats null as "unknown manufacturer".
     }
     return null;
   }

@@ -79,11 +79,10 @@ Host apps import **only** `package:locus/locus.dart`. Everything under `lib/src/
 **Runtime** (see `pubspec.yaml`):
 
 - `permission_handler` — Runtime prompts for location (fine, coarse, background), notifications, activity recognition, and battery-optimization exemption.
-- `device_info_plus` — OS/device metadata (SDK level, manufacturer, model) used by `PermissionAssistant` and diagnostics to route around OEM quirks (Samsung, Xiaomi, Huawei power management).
-- `http` — HTTP client backing the sync queue in `lib/src/features/sync/`.
-- `uuid` — Stable IDs for queue items, geofence registrations, trip sessions, and log entries.
 - `logging` — Structured `Logger` tree exposed through `LocusDiagnostics` and the debug overlay.
-- `args` — Argument parsing for CLI executables (`bin/setup.dart`, `bin/doctor.dart`, `bin/migrate.dart`).
+- `args` — Argument parsing for CLI executables (`bin/setup.dart`, `bin/doctor.dart`, `bin/migrate.dart`). CLI-only; reachable from `bin/` only, so Flutter tree-shakes it from host app bundles.
+
+Anything previously delegated to a Dart-side helper now lives in native code: HTTP sync, queue/UUID generation, and OEM/manufacturer detection all run on the platform side and are exposed to Dart through `LocusChannels.methods` (e.g., `sync`, `getDiagnosticsMetadata`).
 
 **Dev / test**:
 
