@@ -886,7 +886,9 @@ class _DemosScreenState extends State<DemosScreen> {
                   child: TabBar(
                     isScrollable: true,
                     tabs: [
-                      Tab(icon: Icon(Icons.dashboard_rounded), text: 'Dashboard'),
+                      Tab(
+                          icon: Icon(Icons.dashboard_rounded),
+                          text: 'Dashboard'),
                       Tab(icon: Icon(Icons.list_alt_rounded), text: 'Events'),
                       Tab(icon: Icon(Icons.storage_rounded), text: 'Storage'),
                       Tab(icon: Icon(Icons.settings_rounded), text: 'Settings'),

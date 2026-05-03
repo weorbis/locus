@@ -120,7 +120,8 @@ class _MockBackendScreenState extends State<MockBackendScreen> {
             onReset: _onReset,
           ),
           const SizedBox(height: 16),
-          _RecentRequestsHeader(visible: requests.length, total: requests.length),
+          _RecentRequestsHeader(
+              visible: requests.length, total: requests.length),
           const SizedBox(height: 8),
           if (requests.isEmpty)
             const _EmptyRequestsHint()
@@ -564,8 +565,8 @@ class _BodyPreview extends StatelessWidget {
             ),
             child: SelectableText(
               text,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(fontFamily: 'monospace'),
+              style:
+                  theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
             ),
           ),
           const SizedBox(height: 12),

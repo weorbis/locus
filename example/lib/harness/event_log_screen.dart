@@ -214,8 +214,7 @@ class _EventLogBodyState extends State<_EventLogBody> {
     BuildContext context,
     RecordedEvent event,
   ) async {
-    final pretty =
-        const JsonEncoder.withIndent('  ').convert(event.toJson());
+    final pretty = const JsonEncoder.withIndent('  ').convert(event.toJson());
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -366,8 +365,7 @@ class _EventTile extends StatelessWidget {
   static String _payloadPreview(Map<String, Object?> payload) {
     if (payload.isEmpty) return '';
     final flat = payload.entries
-        .map((MapEntry<String, Object?> entry) =>
-            '${entry.key}=${entry.value}')
+        .map((MapEntry<String, Object?> entry) => '${entry.key}=${entry.value}')
         .join(' ');
     if (flat.length <= 80) return flat;
     return '${flat.substring(0, 80)}…';

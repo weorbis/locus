@@ -79,8 +79,7 @@ class HeadersRefreshOn401Scenario extends Scenario {
     // Wait until either the headers callback ran or the SDK gave up and
     // emitted a pause-state transition. Either is a terminating condition
     // for the execute phase; verify decides what passes.
-    final DateTime deadline =
-        DateTime.now().add(const Duration(seconds: 8));
+    final DateTime deadline = DateTime.now().add(const Duration(seconds: 8));
     while (DateTime.now().isBefore(deadline)) {
       if (_callbackInvocations > 0) {
         // Give the SDK a beat to apply the refreshed headers before we
@@ -140,8 +139,7 @@ class HeadersRefreshOn401Scenario extends Scenario {
         AssertionResult.fail(
           'A request carried the refreshed Authorization header, proving '
           'the headers callback output reached the wire',
-          failureDetail:
-              'Inspected ${backend.recentRequests.length} captured '
+          failureDetail: 'Inspected ${backend.recentRequests.length} captured '
               'request(s); none had Authorization=='
               '"Bearer scenario-refreshed-token". The callback fired '
               'but its return value did not flow through to the network '
@@ -159,8 +157,7 @@ class HeadersRefreshOn401Scenario extends Scenario {
     results.add(
       AssertionResult.skip(
         'Pause-vs-no-pause outcome is implementation-defined here',
-        failureDetail:
-            'isPaused=${Locus.dataSync.isPaused} '
+        failureDetail: 'isPaused=${Locus.dataSync.isPaused} '
             'pauseReason=${Locus.dataSync.pauseReason ?? "(none)"} — '
             'recorded for context, not asserted.',
       ),

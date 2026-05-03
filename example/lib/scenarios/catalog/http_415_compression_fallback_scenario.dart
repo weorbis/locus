@@ -95,8 +95,7 @@ class Http415CompressionFallbackScenario extends Scenario {
         DateTime.now().add(const Duration(seconds: 4));
     while (DateTime.now().isBefore(phase2Deadline)) {
       // Stop early if the queue fully drained.
-      final List<QueueItem> queue =
-          await Locus.dataSync.getQueue(limit: 10);
+      final List<QueueItem> queue = await Locus.dataSync.getQueue(limit: 10);
       if (queue.isEmpty) break;
       await Future<void>.delayed(const Duration(milliseconds: 300));
     }
@@ -165,8 +164,7 @@ class Http415CompressionFallbackScenario extends Scenario {
       results.add(
         const AssertionResult.fail(
           'A 2xx HTTP event followed the 415 (queue continued to drain)',
-          failureDetail:
-              'Only the leading 415 was recorded; no recovery 2xx '
+          failureDetail: 'Only the leading 415 was recorded; no recovery 2xx '
               'observed within the execute window.',
           expected: '>=1 http_response_ok after the 415',
           actual: '0',

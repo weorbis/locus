@@ -61,8 +61,7 @@ class Auth403PersistentPauseScenario extends Scenario {
     });
     await Locus.dataSync.syncQueue();
 
-    final DateTime deadline =
-        DateTime.now().add(const Duration(seconds: 5));
+    final DateTime deadline = DateTime.now().add(const Duration(seconds: 5));
     while (DateTime.now().isBefore(deadline)) {
       final List<RecordedEvent> events = ctx.recorder.since(ctx.startedAt);
       final bool sawError403 = events.any(
@@ -72,8 +71,7 @@ class Auth403PersistentPauseScenario extends Scenario {
       );
       final bool sawPauseTrue = events.any(
         (RecordedEvent e) =>
-            e.type == 'pause_state_changed' &&
-            e.payload['isPaused'] == true,
+            e.type == 'pause_state_changed' && e.payload['isPaused'] == true,
       );
       if (sawError403 && sawPauseTrue) break;
       await Future<void>.delayed(const Duration(milliseconds: 250));
@@ -111,16 +109,15 @@ class Auth403PersistentPauseScenario extends Scenario {
       );
     }
 
-    final List<RecordedEvent> pauseTrueWith403Reason = events
-        .where((RecordedEvent e) {
-          if (e.type != 'pause_state_changed') return false;
-          if (e.payload['isPaused'] != true) return false;
-          final Object? reason = e.payload['reason'];
-          if (reason == null) return false;
-          final String reasonStr = reason.toString();
-          return reasonStr == 'http_403' || reasonStr.contains('403');
-        })
-        .toList(growable: false);
+    final List<RecordedEvent> pauseTrueWith403Reason =
+        events.where((RecordedEvent e) {
+      if (e.type != 'pause_state_changed') return false;
+      if (e.payload['isPaused'] != true) return false;
+      final Object? reason = e.payload['reason'];
+      if (reason == null) return false;
+      final String reasonStr = reason.toString();
+      return reasonStr == 'http_403' || reasonStr.contains('403');
+    }).toList(growable: false);
 
     if (pauseTrueWith403Reason.isNotEmpty) {
       results.add(

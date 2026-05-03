@@ -315,7 +315,10 @@ class DiagnosticsCard extends StatelessWidget {
               title: 'Diagnostics',
               trailing: snapshot != null
                   ? Text(
-                      snapshot!.capturedAt.toLocal().toString().substring(0, 16),
+                      snapshot!.capturedAt
+                          .toLocal()
+                          .toString()
+                          .substring(0, 16),
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     )
                   : null,

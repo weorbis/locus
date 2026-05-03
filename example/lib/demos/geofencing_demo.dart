@@ -50,9 +50,7 @@ class GeofencingDemoCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 StatusIndicator(
                   active: workflowRegistered,
-                  label: workflowRegistered
-                      ? 'Workflow $workflowStatus'
-                      : 'No',
+                  label: workflowRegistered ? 'Workflow $workflowStatus' : 'No',
                 ),
               ],
             ),

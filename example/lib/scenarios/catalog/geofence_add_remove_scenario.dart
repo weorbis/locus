@@ -225,8 +225,7 @@ class GeofenceAddRemoveScenario implements Scenario {
       results.add(
         AssertionResult.fail(
           'No error-category events fired during the round-trip',
-          failureDetail:
-              '${errors.length} error event(s) recorded; first: '
+          failureDetail: '${errors.length} error event(s) recorded; first: '
               '${errors.first.type} (${errors.first.payload})',
           expected: 0,
           actual: errors.length,

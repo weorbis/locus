@@ -22,7 +22,7 @@ class AssertionResult {
     required this.failureDetail,
     this.expected,
     this.actual,
-  })  : status = AssertionStatus.fail;
+  }) : status = AssertionStatus.fail;
 
   const AssertionResult.skip(this.description, {required this.failureDetail})
       : status = AssertionStatus.skip,

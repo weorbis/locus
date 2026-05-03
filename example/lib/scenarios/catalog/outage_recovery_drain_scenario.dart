@@ -64,13 +64,11 @@ class OutageRecoveryDrainScenario extends Scenario {
     // Drive sync attempts in a bounded poll loop until the queue empties or
     // we hit the time budget. The mock returns 503 for the first 5 hits and
     // 200 thereafter, so the drain should self-heal once a 2xx lands.
-    final DateTime deadline =
-        DateTime.now().add(const Duration(seconds: 20));
+    final DateTime deadline = DateTime.now().add(const Duration(seconds: 20));
     while (DateTime.now().isBefore(deadline)) {
       await Locus.dataSync.syncQueue();
       await Future<void>.delayed(const Duration(seconds: 1));
-      final List<QueueItem> queue =
-          await Locus.dataSync.getQueue(limit: 10);
+      final List<QueueItem> queue = await Locus.dataSync.getQueue(limit: 10);
       if (queue.isEmpty) break;
     }
   }
@@ -132,8 +130,7 @@ class OutageRecoveryDrainScenario extends Scenario {
       );
     }
 
-    final List<QueueItem> finalQueue =
-        await Locus.dataSync.getQueue(limit: 50);
+    final List<QueueItem> finalQueue = await Locus.dataSync.getQueue(limit: 50);
     if (finalQueue.isEmpty) {
       results.add(
         const AssertionResult.pass(

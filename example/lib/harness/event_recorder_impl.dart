@@ -76,8 +76,7 @@ class DefaultEventRecorder implements EventRecorder {
   int get totalRecorded => _totalRecorded;
 
   @override
-  List<RecordedEvent> get events =>
-      List<RecordedEvent>.unmodifiable(_buffer);
+  List<RecordedEvent> get events => List<RecordedEvent>.unmodifiable(_buffer);
 
   @override
   Stream<RecordedEvent> get appended => _appended.stream;

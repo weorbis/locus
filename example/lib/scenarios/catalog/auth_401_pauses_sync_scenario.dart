@@ -60,8 +60,7 @@ class Auth401PausesSyncScenario extends Scenario {
     });
     await Locus.dataSync.syncQueue();
 
-    final DateTime deadline =
-        DateTime.now().add(const Duration(seconds: 8));
+    final DateTime deadline = DateTime.now().add(const Duration(seconds: 8));
     while (DateTime.now().isBefore(deadline)) {
       final List<RecordedEvent> events = ctx.recorder.since(ctx.startedAt);
       final bool sawError401 = events.any(
@@ -71,8 +70,7 @@ class Auth401PausesSyncScenario extends Scenario {
       );
       final bool sawPauseTrue = events.any(
         (RecordedEvent e) =>
-            e.type == 'pause_state_changed' &&
-            e.payload['isPaused'] == true,
+            e.type == 'pause_state_changed' && e.payload['isPaused'] == true,
       );
       if (sawError401 && sawPauseTrue) break;
       await Future<void>.delayed(const Duration(milliseconds: 250));
@@ -94,8 +92,7 @@ class Auth401PausesSyncScenario extends Scenario {
     final List<RecordedEvent> pauseTrueEvents = events
         .where(
           (RecordedEvent e) =>
-              e.type == 'pause_state_changed' &&
-              e.payload['isPaused'] == true,
+              e.type == 'pause_state_changed' && e.payload['isPaused'] == true,
         )
         .toList(growable: false);
 

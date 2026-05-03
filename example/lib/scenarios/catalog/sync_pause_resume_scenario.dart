@@ -85,8 +85,7 @@ class SyncPauseResumeScenario implements Scenario {
 
     final List<RecordedEvent> pauseStateEvents = trace
         .where((RecordedEvent e) =>
-            e.category == EventCategory.sync &&
-            e.type == 'pause_state_changed')
+            e.category == EventCategory.sync && e.type == 'pause_state_changed')
         .toList(growable: false);
 
     final int pausedTrueIndex = pauseStateEvents.indexWhere(
@@ -144,8 +143,7 @@ class SyncPauseResumeScenario implements Scenario {
               'in-memory flag without re-publishing on pauseChanges (issue #35).',
           expected: 'pause_state_changed(isPaused: false) after the '
               'isPaused: true transition',
-          actual:
-              'pauseStateEvents.length=${pauseStateEvents.length}, '
+          actual: 'pauseStateEvents.length=${pauseStateEvents.length}, '
               'pausedTrueIndex=$pausedTrueIndex, '
               'pausedFalseAfterTrueIndex=$pausedFalseAfterTrueIndex',
         ),

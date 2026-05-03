@@ -78,8 +78,7 @@ class TrackingLifecycleScenario implements Scenario {
       final List<RecordedEvent> recent = ctx.recorder.since(ctx.startedAt);
       final bool hasLocation = recent.any(
         (RecordedEvent e) =>
-            e.category == EventCategory.location &&
-            e.type == 'location_update',
+            e.category == EventCategory.location && e.type == 'location_update',
       );
       if (hasLocation) {
         sawLocation = true;
@@ -115,8 +114,7 @@ class TrackingLifecycleScenario implements Scenario {
 
     final List<RecordedEvent> locations = trace
         .where((RecordedEvent e) =>
-            e.category == EventCategory.location &&
-            e.type == 'location_update')
+            e.category == EventCategory.location && e.type == 'location_update')
         .toList(growable: false);
 
     final RecordedEvent? timeoutMarker = trace
@@ -184,8 +182,7 @@ class TrackingLifecycleScenario implements Scenario {
       results.add(
         AssertionResult.fail(
           'No error-category events fired during the lifecycle',
-          failureDetail:
-              '${errors.length} error event(s) recorded; first: '
+          failureDetail: '${errors.length} error event(s) recorded; first: '
               '${errors.first.type} (${errors.first.payload})',
           expected: 0,
           actual: errors.length,

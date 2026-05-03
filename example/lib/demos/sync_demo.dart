@@ -120,8 +120,7 @@ class SyncQueueCard extends StatelessWidget {
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (_, i) {
                   final item = queue[i];
-                  final shortIdLength =
-                      item.id.length > 6 ? 6 : item.id.length;
+                  final shortIdLength = item.id.length > 6 ? 6 : item.id.length;
                   return ListTile(
                     dense: true,
                     title: Text(
@@ -211,8 +210,8 @@ class SyncPolicyCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: ActionButton(
-                    onPressed: () => onSelectPolicy(
-                        SyncPolicy.conservative, 'Conservative'),
+                    onPressed: () =>
+                        onSelectPolicy(SyncPolicy.conservative, 'Conservative'),
                     icon: Icons.slow_motion_video,
                     label: 'Conservative',
                   ),

@@ -77,8 +77,7 @@ class TrackingStatusCard extends StatelessWidget {
               InfoRow(
                 icon: Icons.wifi_rounded,
                 label: 'Network',
-                value:
-                    data.lastConnectivity!.connected ? 'Online' : 'Offline',
+                value: data.lastConnectivity!.connected ? 'Online' : 'Offline',
               ),
             if (data.lastState?.odometer != null)
               InfoRow(

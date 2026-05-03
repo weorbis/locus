@@ -61,13 +61,11 @@ class FlakyRetrySucceedsScenario extends Scenario {
       });
     }
 
-    final DateTime deadline =
-        DateTime.now().add(const Duration(seconds: 25));
+    final DateTime deadline = DateTime.now().add(const Duration(seconds: 25));
     while (DateTime.now().isBefore(deadline)) {
       await Locus.dataSync.syncQueue();
       await Future<void>.delayed(const Duration(milliseconds: 1500));
-      final List<QueueItem> queue =
-          await Locus.dataSync.getQueue(limit: 50);
+      final List<QueueItem> queue = await Locus.dataSync.getQueue(limit: 50);
       if (queue.isEmpty) break;
     }
   }
@@ -128,8 +126,7 @@ class FlakyRetrySucceedsScenario extends Scenario {
       );
     }
 
-    final List<QueueItem> finalQueue =
-        await Locus.dataSync.getQueue(limit: 50);
+    final List<QueueItem> finalQueue = await Locus.dataSync.getQueue(limit: 50);
     if (finalQueue.isEmpty) {
       results.add(
         const AssertionResult.pass(

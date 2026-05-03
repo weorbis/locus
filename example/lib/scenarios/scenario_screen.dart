@@ -309,8 +309,7 @@ class _MockBackendChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(Icons.cloud_outlined,
-              size: 14, color: scheme.onSurfaceVariant),
+          Icon(Icons.cloud_outlined, size: 14, color: scheme.onSurfaceVariant),
           const SizedBox(width: 4),
           Text(
             'mock',
