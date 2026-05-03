@@ -1,0 +1,87 @@
+name: Update Dependencies
+
+# Bi-weekly dependency refresh. Runs `flutter pub upgrade` against the SDK
+# and the example app, then opens a single PR with the lockfile diff if
+# anything moved. Pinned to the same FLUTTER_VERSION as `pipeline.yml` so
+# the upgrade is constrained to deps compatible with CI's stable toolchain.
+#
+# `workflow_dispatch` lets a maintainer trigger the run on demand (handy
+# when reacting to an upstream advisory between scheduled runs).
+
+on:
+  schedule:
+    # 1st and 15th of every month at 06:00 UTC. Cron has no native
+    # "every two weeks" interval; this is the cleanest approximation
+    # without drifting across month boundaries.
+    - cron: "0 6 1,15 * *"
+  workflow_dispatch: {}
+
+env:
+  FLUTTER_VERSION: "3.41.9"
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Upgrade SDK dependencies
+        run: flutter pub upgrade
+
+      - name: Upgrade example app dependencies
+        run: cd example && flutter pub upgrade
+
+      - name: Run analyzer + tests as a smoke check
+        # Only checks that the upgraded constraints still pass static
+        # analysis and the unit suite. Real iOS/Android build coverage
+        # comes from `pipeline.yml` once the PR is opened.
+        run: |
+          flutter analyze --no-fatal-infos
+          flutter test
+
+      - name: Open PR if anything changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No dependency updates available."
+            exit 0
+          fi
+
+          BRANCH="chore/deps-$(date -u +%Y-%m-%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "chore(deps): bi-weekly dependency upgrade ($(date -u +%Y-%m-%d))"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore(deps): bi-weekly dependency upgrade" \
+            --body "$(cat <<'EOF'
+          Automated `flutter pub upgrade` for the SDK and the example app.
+
+          - Lockfile diffs in this PR show every package version moved.
+          - Analyzer + unit tests pass on the upgraded versions (smoke
+            check from the scheduled job; full iOS / Android builds run
+            via the `Pipeline` workflow on this PR).
+          - Major-version upgrades require explicit `pubspec.yaml`
+            edits and are therefore **not** included here. Bump them
+            in a separate PR after reviewing the changelog.
+
+          Review the diff, ensure CI is green, then merge.
+          EOF
+          )"
