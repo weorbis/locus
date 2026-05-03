@@ -14,9 +14,16 @@ concurrency:
 env:
   # Pinned for deterministic builds. Bumping is its own PR so the diff
   # surfaces toolchain changes and CI validates them before they land.
+  #
+  # Xcode is intentionally NOT pinned: GitHub's macOS runner images only
+  # fully provision platform support files for the runner's *default*
+  # Xcode. Forcing a non-default Xcode (e.g. via setup-xcode) has us
+  # build against a base SDK whose platform isn't installed, which
+  # surfaces as "iOS <X.Y> Platform Not Installed" errors. Pinning the
+  # macOS runner family (macos-15) is the level of determinism that
+  # works without paying for a multi-GB platform download per build.
   FLUTTER_VERSION: "3.41.9"
   JAVA_VERSION: "17"
-  XCODE_VERSION: "16.2"
 
 defaults:
   run:
@@ -92,9 +99,6 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
-      - uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: ${{ env.XCODE_VERSION }}
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
