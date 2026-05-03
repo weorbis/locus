@@ -434,6 +434,12 @@ internal class LocusContainer private constructor(private val context: Context) 
             }
             "getConfig" -> result.success(buildConfigSnapshot())
             "getDiagnosticsMetadata" -> result.success(buildDiagnosticsMetadata())
+            // Lean, single-purpose channel used by DeviceOptimizationService to
+            // map the device to a "Don't Kill My App" URL. Build.MANUFACTURER
+            // is a static constant — this handler cannot throw, which keeps
+            // the Dart-side fallback to a generic URL strictly unreachable
+            // unless the channel infrastructure itself is unavailable.
+            "getManufacturer" -> result.success(Build.MANUFACTURER)
             "registerHeadlessTask" -> handleRegisterHeadlessTask(call, result)
             "startGeofences" -> geofenceManager.startGeofences(result)
             "startSchedule" -> {

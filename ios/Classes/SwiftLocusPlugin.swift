@@ -335,6 +335,12 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, Lo
       result(UserDefaults.standard.dictionary(forKey: "bg_last_config") ?? [:])
     case "getDiagnosticsMetadata":
       result(buildDiagnosticsMetadata())
+    case "getManufacturer":
+      // Mirror of the Android handler used by DeviceOptimizationService.
+      // iOS hardware is single-vendor; the "Don't Kill My App" map is
+      // Android-only, so returning nil lets the Dart caller short-circuit
+      // without a platform check at the call site.
+      result(nil)
     case "startSchedule", "stopSchedule", "sync", "getLog", "emailLog", "playSound", "destroyLocations", "getLocations", "registerHeadlessTask":
       if call.method == "startSchedule" {
         configManager.scheduleEnabled = true

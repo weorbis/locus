@@ -38,12 +38,11 @@ class DeviceOptimizationService {
     if (!Platform.isAndroid) {
       return null;
     }
-    final diagnosticsManufacturer = await _readManufacturerFromDiagnostics();
-    final manufacturer =
-        (diagnosticsManufacturer == null || diagnosticsManufacturer.isEmpty)
-            ? 'android'
-            : diagnosticsManufacturer.toLowerCase();
-    return _manufacturerLinks[manufacturer] ?? 'https://dontkillmyapp.com/';
+    final manufacturer = await _readManufacturer();
+    final key = (manufacturer == null || manufacturer.isEmpty)
+        ? 'android'
+        : manufacturer.toLowerCase();
+    return _manufacturerLinks[key] ?? 'https://dontkillmyapp.com/';
   }
 
   /// High-level guidance about OS background limits.
@@ -57,20 +56,14 @@ class DeviceOptimizationService {
     };
   }
 
-  static Future<String?> _readManufacturerFromDiagnostics() async {
+  static Future<String?> _readManufacturer() async {
     try {
-      final result =
-          await LocusChannels.methods.invokeMethod('getDiagnosticsMetadata');
-      if (result is Map) {
-        final metadata = Map<String, dynamic>.from(result);
-        final manufacturer = metadata['manufacturer'] as String?;
-        if (manufacturer != null && manufacturer.isNotEmpty) {
-          return manufacturer;
-        }
-      }
+      return await LocusChannels.methods.invokeMethod<String>('getManufacturer');
     } catch (_) {
-      // Ignore; caller treats null as "unknown manufacturer".
+      // Channel unreachable (e.g., plugin not registered in a headless engine).
+      // Caller treats null as "unknown manufacturer" and falls back to a
+      // generic URL.
+      return null;
     }
-    return null;
   }
 }
