@@ -13,14 +13,18 @@ doc/api/
 ios/.symlinks/
 example/ios/Pods/
 example/ios/Podfile.lock
+example/ios/Flutter/Flutter.podspec
 example/ios/Flutter/Generated.xcconfig
 example/ios/Flutter/flutter_export_environment.sh
 example/ios/Flutter/ephemeral/
 example/ios/Runner/GeneratedPluginRegistrant.*
+example/ios/**/xcshareddata/swiftpm/
 
 # Android/Gradle artifacts
+android/gradle/
 example/android/.gradle/
 example/android/local.properties
+example/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 
 # IDE/editor junk
 .DS_Store
@@ -37,4 +41,5 @@ CLAUDE.md
 GEMINI.md
 .github/
 doc/roadmap/
+/docs/
 .spec-workflow/

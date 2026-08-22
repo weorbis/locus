@@ -19,7 +19,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:locus/src/cli/ios_permission_macros.dart';
 
-const _version = '2.4.0';
+const _version = '2.4.1';
 
 void main(List<String> args) async {
   final parser = ArgParser()
