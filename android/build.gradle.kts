@@ -17,8 +17,14 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("com.android.tools.build:gradle:9.3.1")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.10")
+        // Pinned to match the current Flutter plugin ecosystem baseline (e.g.
+        // permission_handler_android 14.0.0) instead of a version pair that
+        // diverges from consuming apps' own AGP/Kotlin plugin pins — the
+        // mismatch loads AndroidLibrarySourceSet from two different
+        // classloaders and fails with a ClassCastException at sync time.
+        // See https://github.com/weorbis/locus/issues/57
+        classpath("com.android.tools.build:gradle:9.0.1")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.20")
     }
 }
 
