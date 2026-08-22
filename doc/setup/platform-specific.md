@@ -19,9 +19,7 @@ Detailed iOS and Android setup instructions for the Locus SDK, including permiss
 - **Minimum SDK**: 26 (Android 8.0 Oreo)
 - **Target SDK**: Set by the host application; the Locus library does not override it
 - **Compile SDK**: 37+
-- **Gradle**: 9.5.0+
-- **Android Gradle Plugin**: 9.3.1+
-- **Kotlin**: 2.4.10+
+- **Gradle / Android Gradle Plugin / Kotlin**: Use the versions supplied by the consuming Flutter app
 - **Java**: 17+
 
 ### 1. AndroidManifest.xml Permissions
@@ -72,28 +70,10 @@ Add required permissions to `android/app/src/main/AndroidManifest.xml`:
 
 ### 2. Gradle Configuration
 
-**android/build.gradle.kts** (project-level):
-
-```kotlin
-buildscript {
-    ext.kotlin_version = '2.4.10'
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:9.3.1'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-    }
-}
-
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-```
+Locus inherits the Android and Kotlin Gradle plugins from the consuming Flutter
+project. Keep the versions generated or recommended by your Flutter SDK. Do not
+add a separate Locus-specific plugin classpath: loading a second AGP or Kotlin
+plugin version can create incompatible Gradle classloaders.
 
 **android/app/build.gradle.kts** (app-level):
 
@@ -466,9 +446,9 @@ Fix issues based on output.
 
 | Component | Minimum Version | Recommended |
 |-----------|----------------|-------------|
-| Gradle | 9.5.0 | 9.5.0+ |
-| Android Gradle Plugin | 9.3.1 | 9.3.1+ |
-| Kotlin | 2.4.10 | 2.4.10+ |
+| Gradle | Host-controlled | Version supported by the host Flutter SDK |
+| Android Gradle Plugin | Host-controlled | Version supported by the host Flutter SDK |
+| Kotlin | Host-controlled | Version supported by the host Flutter SDK |
 | compileSdk | 37 | 37+ |
 | minSdk | 26 | 26+ |
 | targetSdk | Host-controlled | Host-controlled |
@@ -532,12 +512,14 @@ await Locus.requestPermission();
 
 #### Gradle build fails
 
-**Cause**: Version incompatibility.
+**Cause**: The host's Gradle, Android Gradle Plugin, and Kotlin versions are not
+compatible with its Flutter SDK, or a plugin-local classpath loads a second copy.
 
-**Solution**: Update Gradle and dependencies:
+**Solution**: Keep the versions generated or recommended by the host Flutter
+SDK, then check the project for compatibility guidance:
+
 ```bash
-cd android
-./gradlew wrapper --gradle-version 8.1
+flutter analyze --suggestions
 ```
 
 ### iOS Issues

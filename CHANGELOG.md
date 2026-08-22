@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Android: host AGP/Kotlin mismatches no longer create duplicate Gradle classloaders (#57)** — The Android module now inherits both build plugins from the consuming Flutter app instead of pinning private copies that can fail with cross-classloader `ClassCastException`s.
+
 ## [2.4.0] - 2026-08-16
 
 ### Added
