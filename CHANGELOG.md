@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ## [2.4.1] - 2026-08-23
 
+### Changed
+
+- **Tooling: current SDK version surfaces now share `pubspec.yaml` as their enforced source** — Dart and CLI consumers use one generated internal constant, native builds and release automation read the pubspec directly, and CI checks current documentation for drift.
+
 ### Fixed
 
 - **Android: host AGP/Kotlin mismatches no longer create duplicate Gradle classloaders (#57)** — The Android module now inherits both build plugins from the consuming Flutter app instead of pinning private copies that can fail with cross-classloader `ClassCastException`s.

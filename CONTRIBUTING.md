@@ -78,7 +78,7 @@ When adding or updating dependencies:
 
 1. Bump `version:` in `pubspec.yaml`.
 2. Run `dart run tool/sync_version.dart` to propagate the new version to the
-   Dart constants (`lib/src/config/geolocation_config.dart` and `bin/*.dart`).
+   shared Dart constant and current-version documentation.
 3. Update `CHANGELOG.md`.
 4. Commit and push to `main`. CI tags `v<version>`, creates the GitHub
    release, and the package is then published manually with
@@ -87,8 +87,10 @@ When adding or updating dependencies:
 Native build files (`android/build.gradle.kts`, `ios/locus.podspec`) derive
 the version from `pubspec.yaml` automatically — no manual sync needed.
 
-CI runs `dart run tool/sync_version.dart --check` on every PR; if the Dart
-constants drift from `pubspec.yaml`, the build fails before merge.
+CI runs `dart run tool/sync_version.dart --check` on every PR; if a generated
+constant or current-version documentation surface drifts from `pubspec.yaml`,
+the build fails before merge. Historical changelog entries and generated lock
+files remain owned by their release and dependency workflows.
 
 ## Reporting Issues
 

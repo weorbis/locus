@@ -6,6 +6,7 @@ import 'package:locus/src/config/permission_rationale.dart';
 import 'package:locus/src/features/location/services/spoof_detection.dart'
     show SpoofDetectionConfig;
 import 'package:locus/src/models.dart';
+import 'package:locus/src/version.dart';
 
 /// Main configuration class for the background geolocation service.
 class Config {
@@ -243,7 +244,7 @@ class Config {
   }
 
   /// The current SDK version.
-  static const String version = '2.4.1';
+  static const String version = locusVersion;
 
   // Location settings
   /// Desired location accuracy level.
