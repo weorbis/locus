@@ -17,13 +17,12 @@ library;
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
+import 'package:locus/src/version.dart';
 
 import 'src/commands/migrate_command.dart';
 
-const _version = '2.4.0';
-
 class LocusCLI extends CommandRunner<void> {
-  LocusCLI() : super('locus', 'Locus SDK CLI - v$_version') {
+  LocusCLI() : super('locus', 'Locus SDK CLI - v$locusVersion') {
     argParser.addFlag(
       'version',
       abbr: 'v',
@@ -51,7 +50,7 @@ class SetupPlaceholderCommand extends Command<void> {
   Future<void> run() async {
     if (argResults?['help'] as bool? ?? false) {
       stdout.writeln('''
-Locus Setup v$_version
+Locus Setup v$locusVersion
 
 Configure native permissions and dependencies for Locus SDK.
 
@@ -92,7 +91,7 @@ class DoctorPlaceholderCommand extends Command<void> {
   Future<void> run() async {
     if (argResults?['help'] as bool? ?? false) {
       stdout.writeln('''
-Locus Doctor v$_version
+Locus Doctor v$locusVersion
 
 Diagnose configuration and platform issues with Locus SDK.
 
@@ -124,14 +123,14 @@ Future<void> main(List<String> args) async {
 
   try {
     if (args.length == 1 && (args.first == '--version' || args.first == '-v')) {
-      stdout.writeln(_version);
+      stdout.writeln(locusVersion);
       exit(0);
     }
 
     if (args.isEmpty || args.first == '--help' || args.first == '-h') {
       stdout.writeln('''
 ╔══════════════════════════════════════════════════════════════╗
-║                    Locus SDK CLI v$_version                     ║
+║                    Locus SDK CLI v$locusVersion                     ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  A battle-tested background geolocation SDK for Flutter      ║
 ╠══════════════════════════════════════════════════════════════╣

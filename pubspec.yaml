@@ -2,10 +2,10 @@ name: locus
 description: Core background geolocation SDK of the WeOrbis ecosystem for Flutter. Native tracking, geofencing, activity recognition, and sync.
 # Single source of truth for the SDK version. After bumping, run:
 #   dart run tool/sync_version.dart
-# to propagate to the Dart constants (lib/src/config/geolocation_config.dart,
-# bin/*.dart). Gradle (android/build.gradle.kts) and CocoaPods
-# (ios/locus.podspec) read this line directly at build time.
-version: 2.4.0
+# to propagate the shared Dart constant and current documentation. Gradle
+# (android/build.gradle.kts) and CocoaPods (ios/locus.podspec) read this line
+# directly at build time.
+version: 2.4.1
 homepage: https://github.com/weorbis/locus
 repository: https://github.com/weorbis/locus
 issue_tracker: https://github.com/weorbis/locus/issues

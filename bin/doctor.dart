@@ -18,8 +18,7 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:locus/src/cli/ios_permission_macros.dart';
-
-const _version = '2.4.0';
+import 'package:locus/src/version.dart';
 
 void main(List<String> args) async {
   final parser = ArgParser()
@@ -43,7 +42,7 @@ void main(List<String> args) async {
   }
 
   if (results['help'] as bool) {
-    stdout.writeln('Locus Doctor v$_version');
+    stdout.writeln('Locus Doctor v$locusVersion');
     stdout.writeln('');
     stdout.writeln('Diagnoses Locus configuration and platform setup issues.');
     stdout.writeln('');
@@ -54,7 +53,7 @@ void main(List<String> args) async {
   }
 
   if (results['version'] as bool) {
-    stdout.writeln(_version);
+    stdout.writeln(locusVersion);
     exit(0);
   }
 

@@ -11,17 +11,6 @@ version = file("../pubspec.yaml").readText()
     ?.groupValues?.get(1)?.trim()
     ?: error("Could not parse `version:` from pubspec.yaml")
 
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath("com.android.tools.build:gradle:9.3.1")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.10")
-    }
-}
-
 allprojects {
     repositories {
         google()
@@ -29,6 +18,9 @@ allprojects {
     }
 }
 
+// Android and Kotlin plugin versions belong to the consuming Flutter app.
+// Local classpath pins create incompatible duplicate plugin types when the
+// host uses a different supported toolchain.
 apply(plugin = "com.android.library")
 apply(plugin = "org.jetbrains.kotlin.android")
 extensions.configure<LibraryExtension>("android") {

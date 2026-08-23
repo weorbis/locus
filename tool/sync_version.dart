@@ -1,5 +1,5 @@
-// Propagates pubspec.yaml's `version:` to the Dart constants the SDK
-// exposes to host apps and CLI tools.
+// Propagates pubspec.yaml's `version:` to the generated Dart constant and
+// current-version documentation surfaces.
 //
 // Native build files (android/build.gradle.kts, ios/locus.podspec) read
 // pubspec.yaml directly at build time, so they're not listed here. CI
@@ -27,31 +27,37 @@ void main(List<String> args) {
     exit(2);
   }
 
-  // Each target is a (path, regex-with-2-capturing-groups). The version
+  // Each target is a (path, regex-with-3-capturing-groups). The version
   // string sits between the two captures. Updating preserves whatever
   // prefix/suffix surrounds it (single quotes, spaces, etc.) so the file
   // diff stays minimal and readable.
+  final dependencyVersionPattern = RegExp(
+    r'(  locus: \^)(\S+)([ \t]*$)',
+    multiLine: true,
+  );
   final targets = <_Target>[
     _Target.line(
-      path: 'lib/src/config/geolocation_config.dart',
-      pattern: RegExp(r"(static const String version = ')([^']+)(';)"),
+      path: 'lib/src/version.dart',
+      pattern: RegExp(r"(const String locusVersion = ')([^']+)(';)"),
+    ),
+    _Target.line(path: 'README.md', pattern: dependencyVersionPattern),
+    _Target.line(
+      path: 'README.md',
+      pattern: RegExp(r'(- Current release: \*\*v)([^*]+)(\*\*)'),
     ),
     _Target.line(
-      path: 'bin/doctor.dart',
-      pattern: RegExp(r"(const _version = ')([^']+)(';)"),
+      path: 'doc/guides/quickstart.md',
+      pattern: dependencyVersionPattern,
     ),
     _Target.line(
-      path: 'bin/setup.dart',
-      pattern: RegExp(r"(const _version = ')([^']+)(';)"),
-    ),
-    _Target.line(
-      path: 'bin/locus.dart',
-      pattern: RegExp(r"(const _version = ')([^']+)(';)"),
+      path: 'doc/setup/installation.md',
+      pattern: dependencyVersionPattern,
     ),
   ];
 
   var stale = 0;
   var written = 0;
+  var missing = 0;
   for (final target in targets) {
     final result = target.apply(version, checkOnly: checkOnly);
     switch (result) {
@@ -66,7 +72,15 @@ void main(List<String> args) {
         written++;
       case _Outcome.missing:
         stderr.writeln('  missing: ${target.path} (skipped)');
+        missing++;
     }
+  }
+
+  if (missing > 0) {
+    stderr.writeln(
+      '$missing target(s) missing or unmatched; version sync incomplete.',
+    );
+    exit(2);
   }
 
   if (checkOnly) {
