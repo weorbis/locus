@@ -1249,90 +1249,96 @@ class SyncManager(
         listener.onLog(level, message)
     }
 
-    fun buildPayloadFromRecord(record: Map<String, Any>?): Map<String, Any> {
-        if (record == null) return emptyMap()
-        
-        val id = record["id"]
-        val timestampValue = record["timestamp"]
-        val latitude = record["latitude"]
-        val longitude = record["longitude"]
-        val accuracy = record["accuracy"]
-        val speed = record["speed"]
-        val heading = record["heading"]
-        val altitude = record["altitude"]
-        
-        if (latitude == null || longitude == null || accuracy == null || timestampValue == null) {
-            return emptyMap()
-        }
-        
-        val coords = mapOf(
-            "latitude" to latitude,
-            "longitude" to longitude,
-            "accuracy" to accuracy,
-            "speed" to speed,
-            "heading" to heading,
-            "altitude" to altitude
-        )
+    companion object {
+        private const val TAG = "locus"
 
-        val activity = buildMap<String, Any> {
-            (record["activity_type"] as? String)?.let { put("type", it) }
-            (record["activity_confidence"] as? Number)?.toInt()?.let { put("confidence", it) }
-        }
+        internal fun buildPayloadFromRecord(record: Map<String, Any>?): Map<String, Any> {
+            if (record == null) return emptyMap()
 
-        val timestamp = (timestampValue as? Number)?.toLong() ?: System.currentTimeMillis()
-        
-        return buildMap {
-            put("uuid", (id as? String) ?: UUID.randomUUID().toString())
-            put("timestamp", Instant.ofEpochMilli(timestamp).toString())
-            put("coords", coords)
-            if (activity.isNotEmpty()) put("activity", activity)
-            record["event"]?.let { put("event", it) }
-            record["is_moving"]?.let { put("is_moving", it) }
-            record["odometer"]?.let { put("odometer", it) }
-            when (val rawExtras = record["extras"]) {
-                is Map<*, *> -> put("extras", rawExtras)
-                else -> (record["extras_json"] as? String)?.takeIf { it.isNotBlank() }?.let { extrasJson ->
-                    try {
-                        put("extras", JSONObject(extrasJson).toMap())
-                    } catch (_: JSONException) {
+            if (record["coords"] is Map<*, *>) {
+                return record
+            }
+
+            val id = record["id"]
+            val timestampValue = record["timestamp"]
+            val latitude = record["latitude"]
+            val longitude = record["longitude"]
+            val accuracy = record["accuracy"]
+            val speed = record["speed"]
+            val heading = record["heading"]
+            val altitude = record["altitude"]
+
+            if (latitude == null || longitude == null || accuracy == null || timestampValue == null) {
+                Log.w(TAG, "buildPayloadFromRecord: dropping record without coordinates/timestamp (keys=${record.keys})")
+                return emptyMap()
+            }
+
+            val coords = mapOf(
+                "latitude" to latitude,
+                "longitude" to longitude,
+                "accuracy" to accuracy,
+                "speed" to speed,
+                "heading" to heading,
+                "altitude" to altitude
+            )
+
+            val activity = buildMap<String, Any> {
+                (record["activity_type"] as? String)?.let { put("type", it) }
+                (record["activity_confidence"] as? Number)?.toInt()?.let { put("confidence", it) }
+            }
+
+            val timestamp = (timestampValue as? Number)?.toLong() ?: System.currentTimeMillis()
+
+            return buildMap {
+                put("uuid", (id as? String) ?: UUID.randomUUID().toString())
+                put("timestamp", Instant.ofEpochMilli(timestamp).toString())
+                put("coords", coords)
+                if (activity.isNotEmpty()) put("activity", activity)
+                record["event"]?.let { put("event", it) }
+                record["is_moving"]?.let { put("is_moving", it) }
+                record["odometer"]?.let { put("odometer", it) }
+                when (val rawExtras = record["extras"]) {
+                    is Map<*, *> -> put("extras", rawExtras)
+                    else -> (record["extras_json"] as? String)?.takeIf { it.isNotBlank() }?.let { extrasJson ->
+                        try {
+                            put("extras", JSONObject(extrasJson).toMap())
+                        } catch (_: JSONException) {
+                        }
                     }
                 }
             }
         }
-    }
 
-    private fun JSONObject.toMap(): Map<String, Any> {
-        val map = mutableMapOf<String, Any>()
-        val keys = keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            when (val value = get(key)) {
-                JSONObject.NULL -> {
+        private fun JSONObject.toMap(): Map<String, Any> {
+            val map = mutableMapOf<String, Any>()
+            val keys = keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                when (val value = get(key)) {
+                    JSONObject.NULL -> {
+                    }
+                    is JSONObject -> map[key] = value.toMap()
+                    is JSONArray -> map[key] = value.toList()
+                    else -> map[key] = value
                 }
-                is JSONObject -> map[key] = value.toMap()
-                is JSONArray -> map[key] = value.toList()
-                else -> map[key] = value
             }
+            return map
         }
-        return map
-    }
 
-    private fun JSONArray.toList(): List<Any> {
-        val list = mutableListOf<Any>()
-        for (index in 0 until length()) {
-            when (val value = get(index)) {
-                JSONObject.NULL -> {
+        private fun JSONArray.toList(): List<Any> {
+            val list = mutableListOf<Any>()
+            for (index in 0 until length()) {
+                when (val value = get(index)) {
+                    JSONObject.NULL -> {
+                    }
+                    is JSONObject -> list.add(value.toMap())
+                    is JSONArray -> list.add(value.toList())
+                    else -> list.add(value)
                 }
-                is JSONObject -> list.add(value.toMap())
-                is JSONArray -> list.add(value.toList())
-                else -> list.add(value)
             }
+            return list
         }
-        return list
-    }
 
-    companion object {
-        private const val TAG = "locus"
         private const val KEY_LAST_LOCATION_SYNC_SUCCESS_AT =
             "bg_last_location_sync_success_at"
         private const val KEY_LAST_LOCATION_SYNC_FAILURE_REASON =
