@@ -4,11 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [2.4.1] - 2026-08-22
+## [2.4.1] - 2026-08-23
 
 ### Fixed
 
 - **Android: host AGP/Kotlin mismatches no longer create duplicate Gradle classloaders (#57)** — The Android module now inherits both build plugins from the consuming Flutter app instead of pinning private copies that can fail with cross-classloader `ClassCastException`s.
+- **Android: immediate sync no longer drops live location payloads (#56)** — Non-batched auto-sync now preserves the nested `coords` payload produced by the location and geofence pipelines instead of treating it as a flat SQLite record and silently returning without an HTTP request.
 
 ## [2.4.0] - 2026-08-16
 

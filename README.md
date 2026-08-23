@@ -145,7 +145,7 @@ dart run locus:migrate --dry-run
 
 - Current release: **v2.4.1**
 - Supports Flutter 3.x / Dart 3.x
-- See [CHANGELOG.md](CHANGELOG.md#241---2026-08-22) for release details
+- See [CHANGELOG.md](CHANGELOG.md#241---2026-08-23) for release details
 
 ## Tree Shaking
 
