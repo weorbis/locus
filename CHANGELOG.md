@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Permissions: preserve the settings fallback after permanent denial** — Use the permission request result when deciding whether to offer settings, as updated Android permission status queries no longer report permanent denial.
+
 ## [2.4.1] - 2026-08-23
 
 ### Changed
