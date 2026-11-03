@@ -118,3 +118,6 @@ ios/Package.resolved
 
 # local-agent-setup: personal/machine-local agent overrides (gitignored)
 AGENTS.override.md
+
+# SwiftPM/SourceKit build output for the plugin package itself.
+ios/locus/.build/
