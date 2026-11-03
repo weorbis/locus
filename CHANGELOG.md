@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - **Permissions: preserve the settings fallback after permanent denial** — Use the permission request result when deciding whether to offer settings, as updated Android permission status queries no longer report permanent denial.
 
+### Changed
+
+- Raise the `permission_handler` patch minimum to 13.0.2 and refresh its example resolution; update the example's AndroidX core overrides to 1.19.1.
+
 ## [2.4.1] - 2026-08-23
 
 ### Changed
