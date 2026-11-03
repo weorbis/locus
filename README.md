@@ -29,6 +29,7 @@
 - **Battery Optimization**: Adaptive profiles based on speed, activity, and battery level.
 - **Automated Sync**: HTTP synchronization with retry logic and batching.
 - **Offline Reliability**: SQLite persistence to prevent data loss.
+- **History Queries**: Filter and sort stored locations before native pagination.
 - **Headless Execution**: Process eligible background events while the Flutter UI engine is absent.
 
 ## Documentation
@@ -50,6 +51,8 @@ For full documentation, visit the [Locus GitHub repository](https://github.com/w
 - **[Platform Behaviors](https://github.com/weorbis/locus/blob/main/doc/guides/platform-specific-behaviors.md)** - Android/iOS runtime differences.
 - **[HTTP Synchronization](https://github.com/weorbis/locus/blob/main/doc/guides/http-synchronization.md)** - Request formats, retry, and batching.
 - **[Performance Optimization](https://github.com/weorbis/locus/blob/main/doc/guides/performance-optimization.md)** - Tuning for battery and accuracy.
+- **[Querying Stored History](https://github.com/weorbis/locus/blob/main/doc/guides/querying-history.md)** - Native filtering, ordering, pagination, and the example's storage controls.
+- **[Testing](https://github.com/weorbis/locus/blob/main/doc/testing/unit-testing.md)** - Host-app mocks and SDK regression suites.
 - **[Activity Recognition](https://github.com/weorbis/locus/blob/main/doc/guides/activity-recognition.md)** - Activity types and best practices.
 - **[Event Streams Reference](https://github.com/weorbis/locus/blob/main/doc/reference/event-streams.md)** - When streams emit and how to subscribe safely.
 - **[Error Codes](https://github.com/weorbis/locus/blob/main/doc/reference/error-codes.md)** - Exception types and recovery guidance.

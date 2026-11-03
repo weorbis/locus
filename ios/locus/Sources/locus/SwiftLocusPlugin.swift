@@ -422,6 +422,20 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
       result(configManager.persistedConfig)
     case "getDiagnosticsMetadata":
       result(buildDiagnosticsMetadata())
+    case "queryLocations":
+      do {
+        let query = try StoredLocationQuery(arguments: call.arguments)
+        storage.queryLocations(query) { outcome in
+          switch outcome {
+          case .success(let locations):
+            result(locations)
+          case .failure(let error):
+            result(FlutterError(code: "LOCATION_QUERY_ERROR", message: error.localizedDescription, details: nil))
+          }
+        }
+      } catch {
+        result(FlutterError(code: "INVALID_ARGUMENT", message: error.localizedDescription, details: nil))
+      }
     case "getManufacturer":
       // Mirror of the Android handler used by DeviceOptimizationService.
       // iOS hardware is single-vendor; the "Don't Kill My App" map is

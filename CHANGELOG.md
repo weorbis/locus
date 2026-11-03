@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **iOS: safely close storage after asynchronous history queries** — Releasing the last storage reference on its own database queue no longer synchronously dispatches back onto that queue.
+- **History queries: native filtering, sorting and pagination (#47)** — All current query predicates are applied before paging on Android and iOS. Limited calls return only the selected page to Dart, and mixed native/Dart versions request a host rebuild instead of fetching all history. On iOS, queries run on a separate read-only connection so they never delay location writes, time ranges and paging use the indexed timestamp column, and an unreadable stored record is logged and excluded before paging instead of failing the query.
+
 ## [2.4.1] - 2026-08-23
 
 ### Changed

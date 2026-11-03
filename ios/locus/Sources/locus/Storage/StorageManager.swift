@@ -41,6 +41,11 @@ class StorageManager {
         return sqliteStorage.readLocations()
     }
     
+    func queryLocations(_ query: StoredLocationQuery,
+                        completion: @escaping (Result<[[String: Any]], Error>) -> Void) {
+        sqliteStorage.queryLocations(query, completion: completion)
+    }
+
     func writeLocations(_ locations: [[String: Any]]) {
         // Clear and re-write all locations (thread-safe via SQLiteStorage queue)
         sqliteStorage.clearLocations()

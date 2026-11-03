@@ -8,6 +8,7 @@ import dev.locus.location.Odometer
 import dev.locus.storage.LocationStore
 import dev.locus.storage.LogStore
 import dev.locus.storage.QueueStore
+import dev.locus.storage.StoredLocationQuery
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -41,6 +42,9 @@ class StateManager(context: Context) {
     fun getStoredLocations(limit: Int): List<Map<String, Any>> =
         locationStore.readLocations(limit)
             .mapNotNull { record -> buildPayloadFromRecord(record).takeIf { it.isNotEmpty() } }
+
+    internal fun queryStoredLocations(query: StoredLocationQuery): List<Map<String, Any>> =
+        locationStore.queryLocations(query).map { record -> buildPayloadFromRecord(record) }
 
     fun storeLocationPayload(payload: Map<String, Any>, maxDays: Int, maxRecords: Int) {
         locationStore.insertPayload(payload, maxDays, maxRecords)
