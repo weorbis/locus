@@ -83,8 +83,9 @@ When adding or updating dependencies:
    shared Dart constant and current-version documentation.
 3. Update `CHANGELOG.md`.
 4. Commit and push to `main`. CI tags `v<version>`, creates the GitHub
-   release, and the package is then published manually with
-   `flutter pub publish`.
+   release, and starts the Publish workflow on that tag. A maintainer
+   approves the `pub.dev` environment, and CI publishes the package to
+   pub.dev with GitHub's OIDC token. No pub.dev credentials are stored.
 
 Native build files (`android/build.gradle.kts`, `ios/locus.podspec`) derive
 the version from `pubspec.yaml` automatically — no manual sync needed.

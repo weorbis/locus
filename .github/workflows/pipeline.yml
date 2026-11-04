@@ -280,6 +280,7 @@ jobs:
     environment: production
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -321,5 +322,11 @@ jobs:
           body: |
             Release v${{ steps.check_version.outputs.VERSION }}
 
-            Note: pub.dev publishing must be performed manually.
+            Publishing to pub.dev starts after approval in the pub.dev environment.
             See CHANGELOG.md for details.
+
+      - name: Start pub.dev publishing
+        if: steps.check_version.outputs.do_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run publish.yml --ref "v${{ steps.check_version.outputs.VERSION }}"

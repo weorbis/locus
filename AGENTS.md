@@ -25,7 +25,7 @@ cd example && flutter run                         # the plugin has no runnable e
 
 `.github/workflows/pipeline.yml` is the real gate: code quality, `pana` score threshold 130,
 Android unit/lint/instrumentation on API 26/29/34/36, and iOS built under **both** CocoaPods and
-SwiftPM. Release is tag-only; publishing to pub.dev is manual.
+SwiftPM. Release is tag-only; `publish.yml` publishes the tag to pub.dev after approval.
 
 ## Structure
 
