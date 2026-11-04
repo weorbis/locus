@@ -16,9 +16,11 @@ updates:
       - "github-actions"
     open-pull-requests-limit: 5
 
-  # Pub (Dart/Flutter)
+  # Pub (Dart/Flutter): the plugin and the example app
   - package-ecosystem: "pub"
-    directory: "/"
+    directories:
+      - "/"
+      - "/example"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -28,7 +30,29 @@ updates:
       - "dependencies"
       - "dart"
     open-pull-requests-limit: 5
+    groups:
+      pub-minor-and-patch:
+        update-types: ["minor", "patch"]
     ignore:
       # Ignore major version updates for stability
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+
+  # Gradle: the plugin's Android libraries, the example's build plugins and
+  # the Gradle wrapper
+  - package-ecosystem: "gradle"
+    directories:
+      - "/android"
+      - "/example/android"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "build"
+    labels:
+      - "dependencies"
+      - "android"
+    open-pull-requests-limit: 5
+    groups:
+      gradle-minor-and-patch:
+        update-types: ["minor", "patch"]
