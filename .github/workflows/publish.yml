@@ -1,0 +1,46 @@
+name: Publish
+
+# pub.dev only accepts tokens from runs on a version tag. The Pipeline's
+# release job starts this workflow on the tag it creates, because tags pushed
+# with GITHUB_TOKEN do not trigger workflows.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.47.0"
+
+jobs:
+  publish:
+    name: Publish to pub.dev
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    environment: pub.dev
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Check tag matches pubspec version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d '[:space:]')
+          if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match pubspec version $VERSION"
+            exit 1
+          fi
+
+      - run: flutter pub get
+      - run: flutter pub publish --dry-run
+
+      # Last before publishing, so the short-lived OIDC token is still valid.
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+      - run: flutter pub publish --force
