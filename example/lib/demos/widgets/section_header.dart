@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Header row used at the top of each demo card. Renders an icon, a title,
 /// and an optional trailing widget (typically a chip or count).

@@ -6,7 +6,7 @@ By participating, you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Development Environment
 
-1. Ensure you have the Flutter SDK (stable channel) installed.
+1. Ensure you have the Flutter SDK (stable channel, 3.47 or newer for the example app) installed.
 2. Clone the repository and fetch dependencies:
    ```bash
    flutter pub get

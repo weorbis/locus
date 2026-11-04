@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Tap-target tile rendered inside a horizontal row of tracking-profile
 /// options. Wraps itself in [Expanded] so it consumes equal width inside

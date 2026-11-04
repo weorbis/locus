@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:locus/locus.dart';
 import 'package:locus_example/demos/widgets/action_button.dart';
 import 'package:locus_example/demos/widgets/info_row.dart';
@@ -111,9 +111,9 @@ class StoredLocationsCard extends StatelessWidget {
                 return ListTile(
                   leading: CircleAvatar(
                     radius: 16,
-                    backgroundColor: Theme.of(
-                      context,
-                    ).colorScheme.primaryContainer,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .primaryContainer,
                     child: Text(
                       '${i + 1}',
                       style: TextStyle(

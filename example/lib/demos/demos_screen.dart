@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:locus/locus.dart';
 import 'package:locus_example/demos/battery_demo.dart';
 import 'package:locus_example/demos/diagnostics_demo.dart';

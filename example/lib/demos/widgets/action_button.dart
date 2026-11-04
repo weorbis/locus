@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Standard action button used across the demo screens. Renders either a
 /// filled or outlined button depending on [filled], and disables itself

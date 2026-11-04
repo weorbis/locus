@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Pill-shaped indicator showing whether something is active, with a label.
 class StatusIndicator extends StatelessWidget {
