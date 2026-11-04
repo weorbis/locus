@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.util.Log
 import dev.locus.LocusPlugin
 import dev.locus.activity.ActivityPendingIntentChecks
+import dev.locus.storage.NativeHistoryQueryChecks
 
 /** Runs the persisted-config parser contract against Android's real org.json. */
 class ConfigSnapshotInstrumentation : Instrumentation() {
@@ -24,7 +25,8 @@ class ConfigSnapshotInstrumentation : Instrumentation() {
             "testConfigSnapshotIsEncryptedAndRestored" to ::verifyEncryptedPersistence,
             "testLegacyPlaintextSnapshotIsReadAndMigrated" to ::verifyLegacyMigration,
             "testReadyConfigPreservesPreexistingPrivacyGuard" to ::verifyPrivacyGuardMerge,
-        ) + ActivityPendingIntentChecks(targetContext).checks()
+        ) + ActivityPendingIntentChecks(targetContext).checks() +
+            NativeHistoryQueryChecks(targetContext).checks()
         val failures = checks.mapIndexedNotNull { index, (name, check) ->
             reportCheckStarted(name, index + 1, checks.size)
             try {

@@ -11,9 +11,14 @@ class SQLiteStorage {
 
     private var db: OpaquePointer?
     private static let dbName = "locus_storage.sqlite"
+    private static let busyTimeoutMilliseconds: Int32 = 5_000
     private let databaseURL: URL?
     private let userDefaults: UserDefaults
     private let queue = DispatchQueue(label: "dev.locus.sqlite", qos: .utility)
+    private let queryQueue = DispatchQueue(label: "dev.locus.sqlite.query", qos: .utility)
+    /// Only used on `queryQueue`.
+    private var readDb: OpaquePointer?
+    private var readSupportsJSON = false
 
     init(
         databaseURL: URL? = nil,
@@ -27,10 +32,12 @@ class SQLiteStorage {
     }
 
     deinit {
-        queue.sync {
-            if let db = self.db {
-                sqlite3_close(db)
-                self.db = nil
+        // Every user of the connections holds `self`, so none is running now.
+        for connection in [db, readDb] {
+            guard let connection else { continue }
+            let closeResult = sqlite3_close(connection)
+            if closeResult != SQLITE_OK {
+                NSLog("[locus.SQLiteStorage] Database close failed: %d", closeResult)
             }
         }
     }
@@ -64,7 +71,7 @@ class SQLiteStorage {
         sqlite3_exec(db, "PRAGMA journal_mode=WAL;", nil, nil, nil)
         sqlite3_exec(db, "PRAGMA synchronous=FULL;", nil, nil, nil)
         // Wait up to 5s on contention rather than failing fast with SQLITE_BUSY.
-        sqlite3_busy_timeout(db, 5_000)
+        sqlite3_busy_timeout(db, Self.busyTimeoutMilliseconds)
         protectDatabaseFiles()
     }
 
@@ -433,6 +440,146 @@ class SQLiteStorage {
         return results
     }
     
+    /// Uses a separate read-only connection so long scans never block writes.
+    func queryLocations(_ query: StoredLocationQuery,
+                        completion: @escaping (Result<[[String: Any]], Error>) -> Void) {
+        // Hop through the write queue so earlier writes are visible.
+        queue.async {
+            self.queryQueue.async {
+                let result = Result { try self.queryLocationsOnQueryQueue(query) }
+                DispatchQueue.main.async { completion(result) }
+            }
+        }
+    }
+
+    /// Caller must hold `queryQueue`.
+    private func readConnectionOnQueryQueue() -> OpaquePointer? {
+        if let readDb { return readDb }
+        guard let databaseURL else { return nil }
+        var connection: OpaquePointer?
+        guard sqlite3_open_v2(databaseURL.path, &connection, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            let message = connection.map { String(cString: sqlite3_errmsg($0)) } ?? "out of memory"
+            NSLog("[locus.SQLiteStorage] Read connection open failed: %@", message)
+            sqlite3_close(connection)
+            return nil
+        }
+        sqlite3_busy_timeout(connection, Self.busyTimeoutMilliseconds)
+        // Without JSON functions every row takes the per-row parser.
+        readSupportsJSON = sqlite3_exec(connection, "SELECT json_valid('{}')", nil, nil, nil) == SQLITE_OK
+        readDb = connection
+        return connection
+    }
+
+    /// Rows whose payload timestamp equals the whole-second UTC `timestamp` column
+    /// filter and sort on that column; all others use the per-row parser.
+    /// Binds: from, to, limit, offset.
+    private func locationQuerySQL(for query: StoredLocationQuery) -> String {
+        // json_extract raises an error on malformed JSON.
+        let canonical = readSupportsJSON ? """
+            CASE WHEN json_valid(payload) THEN
+                json_extract(payload, '$.timestamp') IS timestamp
+                AND strftime('%Y-%m-%dT%H:%M:%SZ', timestamp) IS timestamp
+            ELSE 0 END
+            """ : "0"
+        let columnMicros = "CAST(strftime('%s', timestamp) AS INTEGER) * \(StoredLocationQuery.microsPerSecond)"
+        let parsed = "locus_query_timestamp(payload)"
+        // LIMIT -1 stops SQLite inlining sort_key and evaluating it twice.
+        return """
+            SELECT payload FROM (
+                SELECT id, payload,
+                    CASE WHEN \(canonical) THEN
+                        CASE WHEN \(columnMicros) BETWEEN ? AND ?
+                            THEN \(query.filtersPayload ? parsed : columnMicros) END
+                    ELSE \(parsed) END AS sort_key
+                FROM locations
+                LIMIT -1
+            )
+            WHERE sort_key IS NOT NULL
+            ORDER BY sort_key \(query.ascending ? "ASC" : "DESC"), id ASC
+            LIMIT ? OFFSET ?
+            """
+    }
+
+    private func queryLocationsOnQueryQueue(_ query: StoredLocationQuery) throws -> [[String: Any]] {
+        if let limit = query.limit, limit <= 0 { return [] }
+        guard let db = readConnectionOnQueryQueue() else {
+            throw StoredLocationQuery.error("Location database is unavailable")
+        }
+        func databaseError(_ operation: String) -> NSError {
+            StoredLocationQuery.error("\(operation): \(String(cString: sqlite3_errmsg(db)))")
+        }
+        // SQLite owns the retained query until the function is unregistered. v2
+        // also invokes the destructor if registration fails.
+        let context = Unmanaged.passRetained(query).toOpaque()
+        let registration = sqlite3_create_function_v2(
+            db, "locus_query_timestamp", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC,
+            context, { context, _, values in
+                // Release JSON/regex Foundation temporaries after each row,
+                // rather than retaining them until a large scan completes.
+                autoreleasepool {
+                    guard let context, let values, let userData = sqlite3_user_data(context) else {
+                        sqlite3_result_error(context, "Missing location query context", -1)
+                        return
+                    }
+                    let query = Unmanaged<StoredLocationQuery>.fromOpaque(userData).takeUnretainedValue()
+                    if let timestamp = query.matchingTimestamp(values[0]) {
+                        sqlite3_result_int64(context, timestamp)
+                    } else {
+                        sqlite3_result_null(context)
+                    }
+                }
+            }, nil, nil, { context in
+                if let context {
+                    Unmanaged<StoredLocationQuery>.fromOpaque(context).release()
+                }
+            }
+        )
+        guard registration == SQLITE_OK else { throw databaseError("Register location query") }
+        let result: Result<[[String: Any]], Error> = Result {
+            let sql = locationQuerySQL(for: query)
+            let bindings: [Int64] = [
+                query.from ?? Int64.min,
+                query.to ?? Int64.max,
+                query.limit ?? -1,
+                query.offset,
+            ]
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+                sqlite3_finalize(statement)
+                throw databaseError("Prepare location query")
+            }
+            defer { sqlite3_finalize(statement) }
+            for (index, value) in bindings.enumerated() {
+                guard sqlite3_bind_int64(statement, Int32(index + 1), value) == SQLITE_OK else {
+                    throw databaseError("Bind location query")
+                }
+            }
+            var rows: [[String: Any]] = []
+            while true {
+                let step = sqlite3_step(statement)
+                if step == SQLITE_DONE { break }
+                guard step == SQLITE_ROW else { throw databaseError("Read location query") }
+                guard let bytes = sqlite3_column_text(statement, 0),
+                      let payload = try? JSONSerialization.jsonObject(
+                        with: Data(bytes: bytes, count: Int(sqlite3_column_bytes(statement, 0)))
+                      ) as? [String: Any] else {
+                    NSLog("[locus.SQLiteStorage] queryLocations skipped an undecodable stored location")
+                    continue
+                }
+                rows.append(payload)
+            }
+            return rows
+        }
+        // The statement has been finalized before unregistering and releasing its
+        // callback context, including on bind, step, and JSON decoding failures.
+        let unregistration = sqlite3_create_function_v2(
+            db, "locus_query_timestamp", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC,
+            nil, nil, nil, nil, nil
+        )
+        guard unregistration == SQLITE_OK else { throw databaseError("Unregister location query") }
+        return try result.get()
+    }
+
     func removeLocations(_ uuids: [String]) {
         guard !uuids.isEmpty else { return }
 

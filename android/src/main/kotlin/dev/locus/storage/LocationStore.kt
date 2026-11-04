@@ -2,6 +2,8 @@ package dev.locus.storage
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
+import android.database.sqlite.SQLiteCursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.location.Location
@@ -172,30 +174,110 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
                 "timestamp ASC",
                 limitValue
             ).use { cursor ->
+                val columns = LocationColumns(cursor)
                 while (cursor.moveToNext()) {
-                    val record = mutableMapOf<String, Any>(
-                        "id" to cursor.getString(cursor.getColumnIndexOrThrow("id")),
-                        "timestamp" to cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
-                        "latitude" to cursor.getDouble(cursor.getColumnIndexOrThrow("latitude")),
-                        "longitude" to cursor.getDouble(cursor.getColumnIndexOrThrow("longitude")),
-                        "accuracy" to cursor.getDouble(cursor.getColumnIndexOrThrow("accuracy")),
-                        "speed" to cursor.getDouble(cursor.getColumnIndexOrThrow("speed")),
-                        "heading" to cursor.getDouble(cursor.getColumnIndexOrThrow("heading")),
-                        "altitude" to cursor.getDouble(cursor.getColumnIndexOrThrow("altitude")),
-                        "is_moving" to (cursor.getInt(cursor.getColumnIndexOrThrow("is_moving")) == 1),
-                        "activity_confidence" to cursor.getInt(cursor.getColumnIndexOrThrow("activity_confidence")),
-                        "odometer" to cursor.getDouble(cursor.getColumnIndexOrThrow("odometer"))
-                    )
-                    cursor.getString(cursor.getColumnIndexOrThrow("activity_type"))?.let { record["activity_type"] = it }
-                    cursor.getString(cursor.getColumnIndexOrThrow("event"))?.let { record["event"] = it }
-                    cursor.getString(cursor.getColumnIndexOrThrow("extras_json"))?.let { record["extras_json"] = it }
-                    results.add(record)
+                    results.add(columns.read(cursor))
                 }
             }
         } catch (e: Exception) {
             android.util.Log.e("LocationStore", "Failed to read locations: ${e.message}", e)
         }
         return results
+    }
+
+    /** Apply every predicate before ordering and paging; read errors propagate to the caller. */
+    internal fun queryLocations(query: StoredLocationQuery): List<Map<String, Any>> {
+        if (query.limit?.let { it <= 0L } == true || query.bounds?.hasNaN == true) {
+            return emptyList()
+        }
+
+        // Match Cursor's null-to-zero conversion and Dart's invalid-coordinate fallback.
+        val latitude = "COALESCE(latitude, 0)"
+        val longitude = "COALESCE(longitude, 0)"
+        val invalidCoords = "($latitude < -90 OR $latitude > 90 OR $longitude < -180 OR $longitude > 180)"
+        val normalizedLatitude = "CASE WHEN $invalidCoords THEN 0 ELSE $latitude END"
+        val normalizedLongitude = "CASE WHEN $invalidCoords THEN 0 ELSE $longitude END"
+        val accuracy = "CASE WHEN $invalidCoords THEN -1 ELSE COALESCE(accuracy, 0) END"
+        val predicates = mutableListOf<String>()
+        val bindings = mutableListOf<Number>()
+        fun predicate(sql: String, value: Number) {
+            predicates.add(sql)
+            bindings.add(value)
+        }
+
+        query.from?.let { micros ->
+            val millis = Math.floorDiv(micros, MICROS_PER_MILLISECOND)
+            val roundUp = if (Math.floorMod(micros, MICROS_PER_MILLISECOND) == 0L) 0L else 1L
+            predicate("COALESCE(timestamp, 0) >= ?", millis + roundUp)
+        }
+        query.to?.let { predicate("COALESCE(timestamp, 0) <= ?", Math.floorDiv(it, MICROS_PER_MILLISECOND)) }
+        query.minAccuracy?.takeUnless { it.isNaN() }?.let { predicate("($accuracy) <= ?", it) }
+        query.maxAccuracy?.takeUnless { it.isNaN() }?.let { predicate("($accuracy) >= ?", it) }
+        query.isMoving?.let { predicate("CASE WHEN is_moving = 1 THEN 1 ELSE 0 END = ?", if (it) 1L else 0L) }
+        query.bounds?.let { bounds ->
+            predicates.add("($normalizedLatitude) BETWEEN ? AND ?")
+            bindings.addAll(listOf(bounds.south, bounds.north))
+            predicates.add("($normalizedLongitude) BETWEEN ? AND ?")
+            bindings.addAll(listOf(bounds.west, bounds.east))
+        }
+        val direction = if (query.oldestFirst) "ASC" else "DESC"
+        val selection = if (predicates.isEmpty()) "" else " WHERE ${predicates.joinToString(" AND ")}"
+        val sql = "SELECT * FROM locations$selection ORDER BY COALESCE(timestamp, 0) $direction, rowid ASC LIMIT ? OFFSET ?"
+        bindings.add(query.limit ?: -1L)
+        bindings.add(query.offset)
+        val records = mutableListOf<Map<String, Any>>()
+        // Bind numerically: string selectionArgs would change comparison affinity for CASE
+        // expressions, and string conversion would lose IEEE infinity semantics.
+        readableDatabase.rawQueryWithFactory({ _, driver, editTable, statement ->
+            bindings.forEachIndexed { index, value ->
+                when (value) {
+                    is Double -> statement.bindDouble(index + 1, value)
+                    else -> statement.bindLong(index + 1, value.toLong())
+                }
+            }
+            SQLiteCursor(driver, editTable, statement)
+        }, sql, emptyArray(), "locations").use { cursor ->
+            val columns = LocationColumns(cursor)
+            while (cursor.moveToNext()) records.add(columns.read(cursor))
+        }
+        return records
+    }
+
+    private class LocationColumns(cursor: Cursor) {
+        private val id = cursor.getColumnIndexOrThrow("id")
+        private val timestamp = cursor.getColumnIndexOrThrow("timestamp")
+        private val latitude = cursor.getColumnIndexOrThrow("latitude")
+        private val longitude = cursor.getColumnIndexOrThrow("longitude")
+        private val accuracy = cursor.getColumnIndexOrThrow("accuracy")
+        private val speed = cursor.getColumnIndexOrThrow("speed")
+        private val heading = cursor.getColumnIndexOrThrow("heading")
+        private val altitude = cursor.getColumnIndexOrThrow("altitude")
+        private val isMoving = cursor.getColumnIndexOrThrow("is_moving")
+        private val activityConfidence = cursor.getColumnIndexOrThrow("activity_confidence")
+        private val odometer = cursor.getColumnIndexOrThrow("odometer")
+        private val activityType = cursor.getColumnIndexOrThrow("activity_type")
+        private val event = cursor.getColumnIndexOrThrow("event")
+        private val extrasJson = cursor.getColumnIndexOrThrow("extras_json")
+
+        fun read(cursor: Cursor): Map<String, Any> {
+            val record = mutableMapOf<String, Any>(
+                "id" to cursor.getString(id),
+                "timestamp" to cursor.getLong(timestamp),
+                "latitude" to cursor.getDouble(latitude),
+                "longitude" to cursor.getDouble(longitude),
+                "accuracy" to cursor.getDouble(accuracy),
+                "speed" to cursor.getDouble(speed),
+                "heading" to cursor.getDouble(heading),
+                "altitude" to cursor.getDouble(altitude),
+                "is_moving" to (cursor.getInt(isMoving) == 1),
+                "activity_confidence" to cursor.getInt(activityConfidence),
+                "odometer" to cursor.getDouble(odometer)
+            )
+            cursor.getString(activityType)?.let { record["activity_type"] = it }
+            cursor.getString(event)?.let { record["event"] = it }
+            cursor.getString(extrasJson)?.let { record["extras_json"] = it }
+            return record
+        }
     }
 
     fun deleteLocations(ids: List<String>?) {
@@ -243,6 +325,7 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
     }
 
     companion object {
+        private const val MICROS_PER_MILLISECOND = 1000L
         private const val DB_NAME = "locus.db"
         private const val DB_VERSION = 3
     }

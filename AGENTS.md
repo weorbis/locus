@@ -15,17 +15,23 @@ flutter test --coverage
 dart run tool/sync_version.dart --check           # version pins in sync with pubspec
 
 # Native lanes run from the example app, not from the plugin root
-cd example/android && ./gradlew :locus:testDebugUnitTest :locus:lintDebug
-cd example/android && ./gradlew :locus:connectedDebugAndroidTest   # needs a running emulator
+example/android/gradlew --project-dir example/android :locus:testDebugUnitTest :locus:lintDebug
+example/android/gradlew --project-dir example/android :locus:assembleDebugAndroidTest
+# Install the resulting dev.locus.test APK on a dedicated emulator, then:
+adb shell am instrument -w dev.locus.test/dev.locus.core.ConfigSnapshotInstrumentation
 swift test --package-path ios
+LOCUS_NATIVE_TEST_MODULE=locus swift test --package-path ios --scratch-path ios/.build-lowercase
+cd example && flutter test                        # example widgets and harness
 bash tool/android_process_recovery_smoke.sh       # process-death recovery smoke
 
 cd example && flutter run                         # the plugin has no runnable entry point
 ```
 
 `.github/workflows/pipeline.yml` is the real gate: code quality, `pana` score threshold 130,
-Android unit/lint/instrumentation on API 26/29/34/36, and iOS built under **both** CocoaPods and
-SwiftPM. Release is tag-only; `publish.yml` publishes the tag to pub.dev after approval.
+Android JVM tests/lint, instrumentation on API 26/29/34/36 emulators, and iOS helper tests plus
+builds under **both** CocoaPods and SwiftPM. The release job runs on main/master pushes and creates
+a release only when the pubspec version has no remote tag; `publish.yml` then publishes that tag to
+pub.dev after approval.
 
 ## Structure
 
@@ -62,7 +68,7 @@ background location delegates, persistent queue, geofence registration, activity
 emits typed events that `lib/src/core/event_mapper.dart` translates for Dart.
 
 - **Platform Interface pattern** — `LocusInterface` + `MethodChannelLocus` let host apps swap in
-  `MockLocus` via `Locus.setInstance(...)` for their own tests.
+  `MockLocus` via `Locus.setMockInstance(...)` for their own tests.
 - **Event-sourced state** — native is the source of truth. `Locus.isTracking()` calls the
   platform; Dart never caches tracking state.
 - **Headless execution** — callbacks registered via `Locus.registerHeadlessTask` run in a second
@@ -94,6 +100,9 @@ Non-negotiables:
   read the line directly at build time.
 - **HTTP sync, queue/UUID generation, and OEM detection live in native code,** not Dart — reach
   them through `LocusChannels.methods` (`sync`, `getDiagnosticsMetadata`, …).
+- **History queries filter and page natively.** The private `queryLocations` channel uses UTC
+  epoch microseconds, applies every predicate before LIMIT/OFFSET, and leaves legacy
+  `getLocations` unchanged. Do not add a fetch-all Dart fallback. See `doc/guides/querying-history.md`.
 - **iOS ships under two module names** (`locus` and `Locus`); native tests run against both.
 - `dart format` run directly may print package-resolution warnings; they are expected and the
   lints resolve correctly under `flutter analyze`.

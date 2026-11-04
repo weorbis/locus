@@ -18,10 +18,12 @@ import dev.locus.LocusPlugin
 import dev.locus.activity.MotionManager
 import dev.locus.geofence.GeofenceManager
 import dev.locus.location.LocationClient
+import dev.locus.storage.StoredLocationQuery
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
 import java.util.UUID
+import java.util.concurrent.Executors
 
 /**
  * Process-lifetime holder for every long-lived native resource Locus owns:
@@ -100,6 +102,7 @@ internal class LocusContainer private constructor(
     private val prefs: SharedPreferences =
         context.getSharedPreferences(LocusPlugin.PREFS_NAME, Context.MODE_PRIVATE)
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val locationQueryExecutor = Executors.newSingleThreadExecutor()
     private val callbackBroker by lazy {
         EngineCallbackBroker(
             bindings = bridgeRegistry,
@@ -479,6 +482,7 @@ internal class LocusContainer private constructor(
                 val limit = (call.arguments.asMap()?.get("limit") as? Number)?.toInt() ?: 0
                 result.success(stateManager.getStoredLocations(limit))
             }
+            "queryLocations" -> queryLocations(call, result)
             "enqueue" -> handleEnqueue(call, result)
             "getQueue" -> {
                 val limit = (call.arguments.asMap()?.get("limit") as? Number)?.toInt() ?: 0
@@ -721,6 +725,26 @@ internal class LocusContainer private constructor(
     // -------------------------------------------------------------------------
     //  Command helpers (split out to keep handleMethodCall readable)
     // -------------------------------------------------------------------------
+
+    private fun queryLocations(call: MethodCall, result: MethodChannel.Result) {
+        val query = try {
+            StoredLocationQuery.fromArguments(call.arguments)
+        } catch (error: IllegalArgumentException) {
+            result.error("INVALID_ARGUMENT", error.message, null)
+            return
+        }
+        locationQueryExecutor.execute {
+            try {
+                val locations = stateManager.queryStoredLocations(query)
+                mainHandler.post { result.success(locations) }
+            } catch (error: Exception) {
+                Log.e(TAG, "Failed to query stored locations", error)
+                mainHandler.post {
+                    result.error("LOCATION_QUERY_ERROR", "Failed to query stored locations", error.message)
+                }
+            }
+        }
+    }
 
     private fun handleEnqueue(call: MethodCall, result: MethodChannel.Result) {
         val args = call.arguments.asMap()

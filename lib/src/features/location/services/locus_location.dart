@@ -56,31 +56,53 @@ class LocusLocation {
 
   /// Queries stored locations with filtering and pagination.
   static Future<List<Location>> queryLocations(LocationQuery query) async {
-    // Pull only what is needed based on limit/offset to reduce memory use
     final limit = query.limit;
-    final offset = query.offset;
-    final fetchLimit = limit != null ? limit + offset : null;
+    if (limit != null && limit <= 0) return const [];
 
-    final fetched = await getLocations(limit: fetchLimit);
-    final clampedOffset = offset.clamp(0, fetched.length);
-    final end = limit != null
-        ? (clampedOffset + limit).clamp(0, fetched.length)
-        : fetched.length;
-    final sliced = fetched.sublist(clampedOffset, end);
+    final arguments = <String, Object?>{
+      ...query.toMap(),
+      // Integer instants preserve inclusive microsecond edges and local dates.
+      if (query.from case final from?)
+        'from': from.toUtc().microsecondsSinceEpoch,
+      if (query.to case final to?) 'to': to.toUtc().microsecondsSinceEpoch,
+      'offset': query.offset < 0 ? 0 : query.offset,
+      'timestampFallback': DateTime.now().toUtc().microsecondsSinceEpoch,
+    };
 
-    final adjustedQuery = LocationQuery(
-      from: query.from,
-      to: query.to,
-      minAccuracy: query.minAccuracy,
-      maxAccuracy: query.maxAccuracy,
-      isMoving: query.isMoving,
-      bounds: query.bounds,
-      sortOrder: query.sortOrder,
-      offset: 0,
-      limit: null,
-    );
+    final Object? response;
+    try {
+      response = await LocusChannels.methods.invokeMethod<Object?>(
+        'queryLocations',
+        arguments,
+      );
+    } on MissingPluginException {
+      throw PlatformException(
+        code: 'UNSUPPORTED_NATIVE_QUERY',
+        message:
+            'Native location queries are unavailable. Rebuild the host app '
+            'with the current Locus Android or iOS plugin.',
+      );
+    }
 
-    return adjustedQuery.apply(sliced);
+    if (response is! List<Object?>) {
+      throw PlatformException(
+        code: 'INVALID_RESULT',
+        message: 'Expected a native location query result list.',
+      );
+    }
+
+    return response
+        .map((item) {
+          if (item is! Map<Object?, Object?> ||
+              item.keys.any((key) => key is! String)) {
+            throw PlatformException(
+              code: 'INVALID_RESULT',
+              message: 'Expected a location map in the native query result.',
+            );
+          }
+          return Location.fromMap(JsonMap.from(item));
+        })
+        .toList(growable: false);
   }
 
   /// Gets a summary of location history.

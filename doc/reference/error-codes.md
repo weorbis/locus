@@ -1,6 +1,6 @@
 # Error Codes Reference
 
-Last updated: January 7, 2026
+Last updated: November 3, 2026
 
 Common exceptions and native error codes with causes and fixes.
 
@@ -45,6 +45,22 @@ Common exceptions and native error codes with causes and fixes.
 - **4:** Storage error → Check disk space; clear/prune queue; retry after recovery.
 - **5:** Invalid request → Validate payload and required fields.
 - **6:** Missing manifest permission → Add required `<uses-permission>` declarations.
+
+## History query errors
+
+`Locus.location.query` and `Locus.location.getSummary` can report these
+`PlatformException.code` values:
+
+| Code | Cause | Recovery |
+| --- | --- | --- |
+| `UNSUPPORTED_NATIVE_QUERY` | The installed native plugin does not implement the query method. | Rebuild and reinstall the Android/iOS host with the updated SDK; hot reload is insufficient. |
+| `INVALID_ARGUMENT` | Native query arguments have malformed fields, such as a wrong type or unsupported sort order. | Check the query fields and report the error if a valid public query produces it. |
+| `INVALID_RESULT` | The native reply is not a list of valid location maps. | Rebuild matching Dart/native SDK versions and report the malformed response. |
+| `LOCATION_QUERY_ERROR` | The SQLite query itself failed. Individual unreadable records are skipped, not reported here. | Surface the failure, check storage health, and retry after recovery. Preserve the data while investigating. |
+
+These calls do not silently retry through a full-history read. A nonpositive
+public query limit returns an empty result without calling native storage.
+See [Querying stored history](../guides/querying-history.md).
 
 ## Event stream error codes
 - **ERR_MISSING_MANIFEST:** Permission not declared in the manifest. Emitted during `Locus.ready()` on Android when required permissions are missing from `AndroidManifest.xml`.

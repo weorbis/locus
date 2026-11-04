@@ -8,11 +8,14 @@ All notable changes to this project will be documented in this file.
 
 - **Android: activity recognition can deliver results on Android 12+ (#61)** — The explicitly targeted activity PendingIntent is mutable so Google Play services can attach activity result extras.
 - **Permissions: preserve the settings fallback after permanent denial** — Use the permission request result when deciding whether to offer settings, as updated Android permission status queries no longer report permanent denial.
+- **iOS: safely close storage after asynchronous history queries** — Releasing the last storage reference on its own database queue no longer synchronously dispatches back onto that queue.
+- **History queries: native filtering, sorting and pagination (#47)** — All current query predicates are applied before paging on Android and iOS. Limited calls return only the selected page to Dart, and mixed native/Dart versions request a host rebuild instead of fetching all history. On iOS, queries run on a separate read-only connection so they never delay location writes, time ranges and paging use the indexed timestamp column, and an unreadable stored record is logged and excluded before paging instead of failing the query.
 
 ### Changed
 
 - Raise the `permission_handler` patch minimum to 13.0.2 and refresh its example resolution; update the example's AndroidX core overrides to 1.19.1.
 - The example app now uses `material_ui` and `google_fonts` 9 and requires Flutter 3.47 or newer; its Android build uses Gradle 9.8.2, the Android Gradle Plugin 9.5.0 and Kotlin 2.4.21. The plugin's own requirements are unchanged.
+- Add example history filters, bounded paging, validation, and retry states; document query semantics and add Dart, widget, Android SQLite, and iOS SQLite regression coverage.
 
 ## [2.4.1] - 2026-08-23
 

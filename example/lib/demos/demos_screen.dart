@@ -5,6 +5,7 @@ import 'package:locus/locus.dart';
 import 'package:locus_example/demos/battery_demo.dart';
 import 'package:locus_example/demos/diagnostics_demo.dart';
 import 'package:locus_example/demos/geofencing_demo.dart';
+import 'package:locus_example/demos/history_query_card.dart';
 import 'package:locus_example/demos/privacy_demo.dart';
 import 'package:locus_example/demos/sync_demo.dart';
 import 'package:locus_example/demos/tracking_demo.dart';
@@ -48,7 +49,6 @@ class _DemosScreenState extends State<DemosScreen> {
   AdaptiveSettings? _adaptiveSettings;
   AdaptiveTrackingConfig? _adaptiveTrackingConfig;
   PowerStateChangeEvent? _lastPowerEvent;
-  List<Location> _storedLocations = [];
   LocationSummary? _locationSummary;
   List<QueueItem> _syncQueue = [];
   DiagnosticsSnapshot? _diagnostics;
@@ -446,16 +446,9 @@ class _DemosScreenState extends State<DemosScreen> {
     }
   }
 
-  Future<void> _loadLocations() async {
-    final locs = await Locus.location.getLocations(limit: 50);
-    setState(() => _storedLocations = locs);
-    _showSnackbar('Loaded ${locs.length} location(s)');
-  }
-
   Future<void> _clearLocations() async {
     await Locus.location.destroyLocations();
-    setState(() => _storedLocations = []);
-    _showSnackbar('Locations cleared');
+    if (mounted) _showSnackbar('All stored locations cleared');
   }
 
   Future<void> _loadLogs() async {
@@ -1112,11 +1105,7 @@ class _DemosScreenState extends State<DemosScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        StoredLocationsCard(
-          locations: _storedLocations,
-          onLoad: _loadLocations,
-          onClear: _clearLocations,
-        ),
+        StoredLocationsCard(onClear: _clearLocations),
         const SizedBox(height: 16),
         SyncQueueCard(
           queue: _syncQueue,
