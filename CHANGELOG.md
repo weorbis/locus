@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Android: activity recognition can deliver results on Android 12+ (#61)** — The explicitly targeted activity PendingIntent is mutable so Google Play services can attach activity result extras.
 - **Permissions: preserve the settings fallback after permanent denial** — Use the permission request result when deciding whether to offer settings, as updated Android permission status queries no longer report permanent denial.
 
 ### Changed

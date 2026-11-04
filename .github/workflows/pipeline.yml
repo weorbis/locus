@@ -39,6 +39,9 @@ jobs:
   code-quality:
     name: Code Quality
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
@@ -69,6 +72,9 @@ jobs:
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: coverage/lcov.info
+          # Fork PRs get no OIDC token; Codecov accepts their uploads without one.
+          use_oidc: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) }}
+          fail_ci_if_error: true
 
       - name: Install pana
         run: |
@@ -108,6 +114,50 @@ jobs:
 
       - name: Build Example APK
         run: cd example && flutter build apk --debug
+
+  android-device-check:
+    name: Android Device Check (API ${{ matrix.api-level }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [26, 29, 34, 36]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: "temurin"
+          java-version: ${{ env.JAVA_VERSION }}
+      - run: flutter pub get
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Build Instrumentation APK
+        working-directory: example/android
+        run: ./gradlew :locus:assembleDebugAndroidTest
+
+      - name: Run Device Checks
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          # Each line runs separately; am instrument exits 0 even when checks fail.
+          script: |
+            adb install -r example/build/locus/outputs/apk/androidTest/debug/locus-debug-androidTest.apk
+            adb shell am instrument -w dev.locus.test/dev.locus.core.ConfigSnapshotInstrumentation | tee instrumentation.log
+            grep -q "Config snapshot instrumentation passed" instrumentation.log
 
   ios-check:
     name: iOS CocoaPods Check
@@ -191,7 +241,7 @@ jobs:
   # -----------------------------------------------------------------
   quality-gate:
     name: Quality Gate
-    needs: [code-quality, android-check, ios-check, ios-swiftpm-check]
+    needs: [code-quality, android-check, android-device-check, ios-check, ios-swiftpm-check]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -203,6 +253,10 @@ jobs:
           fi
           if [ "${{ needs.android-check.result }}" != "success" ]; then
             echo "::error::Android check failed"
+            exit 1
+          fi
+          if [ "${{ needs.android-device-check.result }}" != "success" ]; then
+            echo "::error::Android device check failed"
             exit 1
           fi
           if [ "${{ needs.ios-check.result }}" != "success" ]; then
@@ -226,6 +280,7 @@ jobs:
     environment: production
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -267,5 +322,11 @@ jobs:
           body: |
             Release v${{ steps.check_version.outputs.VERSION }}
 
-            Note: pub.dev publishing must be performed manually.
+            Publishing to pub.dev starts after approval in the pub.dev environment.
             See CHANGELOG.md for details.
+
+      - name: Start pub.dev publishing
+        if: steps.check_version.outputs.do_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run publish.yml --ref "v${{ steps.check_version.outputs.VERSION }}"
