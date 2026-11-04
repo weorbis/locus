@@ -124,6 +124,8 @@ jobs:
       matrix:
         api-level: [26, 29, 34, 36]
     steps:
+      - name: Free disk space for the emulator
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
@@ -145,6 +147,12 @@ jobs:
       - name: Build Instrumentation APK
         working-directory: example/android
         run: ./gradlew :locus:assembleDebugAndroidTest
+
+      - name: Cache emulator system image
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-${{ matrix.api-level }}/google_apis/x86_64
+          key: system-image-${{ matrix.api-level }}-google_apis-x86_64
 
       - name: Run Device Checks
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
