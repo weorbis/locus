@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A label/value row prefixed by an icon, used inside cards to surface
 /// SDK state at a glance.

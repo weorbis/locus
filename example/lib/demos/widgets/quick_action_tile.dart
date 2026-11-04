@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Square tap target used inside the dashboard's quick-action grid.
 class QuickActionTile extends StatelessWidget {

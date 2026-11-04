@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - Raise the `permission_handler` patch minimum to 13.0.2 and refresh its example resolution; update the example's AndroidX core overrides to 1.19.1.
+- The example app now uses `material_ui` and `google_fonts` 9 and requires Flutter 3.47 or newer; its Android build uses Gradle 9.8.2, the Android Gradle Plugin 9.5.0 and Kotlin 2.4.21. The plugin's own requirements are unchanged.
 
 ## [2.4.1] - 2026-08-23
 

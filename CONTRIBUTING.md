@@ -4,7 +4,7 @@ Thank you for your interest in contributing to Locus, a core component of the **
 
 ## Development Environment
 
-1. Ensure you have the Flutter SDK (stable channel) installed.
+1. Ensure you have the Flutter SDK (stable channel, 3.47 or newer for the example app) installed.
 2. Clone the repository and fetch dependencies:
    ```bash
    flutter pub get

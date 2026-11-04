@@ -9,7 +9,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:locus_example/harness/event_log_exporter.dart';
 import 'package:locus_example/harness/event_recorder.dart';
 import 'package:locus_example/harness/recorded_event.dart';
