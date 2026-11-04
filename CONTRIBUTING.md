@@ -2,6 +2,8 @@
 
 Thank you for your interest in contributing to Locus, a core component of the **WeOrbis** ecosystem. We welcome contributions from the community to help improve the SDK.
 
+By participating, you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md). Ask questions in [GitHub Discussions](https://github.com/weorbis/locus/discussions), and report security issues as described in [SECURITY.md](SECURITY.md).
+
 ## Development Environment
 
 1. Ensure you have the Flutter SDK (stable channel) installed.

@@ -2,12 +2,13 @@
 
 ## Supported Versions
 
-We provide security updates for the following versions of Locus:
+Security fixes ship in the latest 2.x release. Upgrade to it to receive them.
 
-| Version | Supported | Notes                         |
-| :------ | :-------- | :---------------------------- |
-| 1.x.x   | Yes       | Current stable release        |
-| 2.0.x   | No        | Unreleased (work in progress) |
+| Version             | Supported |
+| :------------------ | :-------- |
+| Latest 2.x release  | Yes       |
+| Older 2.x releases  | No        |
+| 1.x and earlier     | No        |
 
 ## Reporting a Vulnerability
 
@@ -16,7 +17,7 @@ We value the security of our users. If you discover a potential security vulnera
 ### How to Report
 
 1. **Do not** open a public issue for security-related findings.
-2. Email your report to **info@weorbis.com**.
+2. Report it privately through [GitHub private vulnerability reporting](https://github.com/weorbis/locus/security/advisories/new). If you cannot use GitHub, email **info@weorbis.com**.
 3. Include as much detail as possible to help us reproduce and resolve the issue:
    - Vulnerability description
    - Reproduction steps
@@ -63,16 +64,14 @@ We maintain security through continuous monitoring:
 
 ### Automated Scanning
 
-- **Dependency auditing**: All dependencies are regularly scanned for known vulnerabilities.
-- **CI/CD integration**: Security checks are integrated into our continuous integration pipeline.
-- **GitHub Dependabot**: Automated dependency updates with security patches.
-- **Flutter analyze**: Static analysis runs on every commit to catch potential issues.
+- **Dependabot alerts and security updates**: Dependencies are checked against the GitHub Advisory Database, and fixes are proposed automatically.
+- **CodeQL**: Kotlin, Swift, and workflow code is scanned on every pull request and push to `main`.
+- **Secret scanning with push protection**: Pushes that contain known credential formats are blocked.
+- **Flutter analyze**: Static analysis runs on every pull request.
 
 ### Manual Review
 
-- **Code review**: All changes undergo security-focused code review.
-- **Third-party audit**: Critical releases undergo external security audits.
-- **Penetration testing**: Regular testing of network communication and data storage.
+- **Code review**: Every change to `main` requires an approving review.
 
 ### For Contributors
 
