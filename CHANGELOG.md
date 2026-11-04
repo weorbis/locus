@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-11-04
+
 ### Fixed
 
 - **Android: activity recognition can deliver results on Android 12+ (#61)** — The explicitly targeted activity PendingIntent is mutable so Google Play services can attach activity result extras.
