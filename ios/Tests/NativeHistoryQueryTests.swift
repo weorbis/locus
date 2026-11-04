@@ -245,20 +245,31 @@ final class NativeHistoryQueryTests: XCTestCase {
     }
 
     func testSuffixlessHistoricalTimestampUsesDartEquivalentYearOffset() async throws {
-        let originalTimeZone = NSTimeZone.default
-        NSTimeZone.default = try XCTUnwrap(TimeZone(identifier: "Europe/Amsterdam"))
-        defer { NSTimeZone.default = originalTimeZone }
+        let restoreTimeZone = useSystemTimeZone("Europe/Amsterdam")
+        defer { restoreTimeZone() }
         // Dart uses the equivalent modern year's +01:00 offset, not the
         // historical Amsterdam local mean time recorded in the zone database.
         try await assertTimestamp("1500-01-01T00:00:00", equals: -14_831_773_200_000_000)
     }
 
     func testSuffixlessDstGapAndOverlapMatchDartInstantSelection() async throws {
-        let originalTimeZone = NSTimeZone.default
-        NSTimeZone.default = try XCTUnwrap(TimeZone(identifier: "Europe/Amsterdam"))
-        defer { NSTimeZone.default = originalTimeZone }
+        let restoreTimeZone = useSystemTimeZone("Europe/Amsterdam")
+        defer { restoreTimeZone() }
         try await assertTimestamp("2026-03-29T02:30:00", equals: 1_774_747_800_000_000)
         try await assertTimestamp("2026-10-25T02:30:00", equals: 1_792_888_200_000_000)
+    }
+
+    // Dart reads the system zone, so the test sets TZ rather than NSTimeZone.default.
+    private func useSystemTimeZone(_ identifier: String) -> () -> Void {
+        let original = getenv("TZ").map { String(cString: $0) }
+        setenv("TZ", identifier, 1)
+        tzset()
+        NSTimeZone.resetSystemTimeZone()
+        return {
+            if let original { setenv("TZ", original, 1) } else { unsetenv("TZ") }
+            tzset()
+            NSTimeZone.resetSystemTimeZone()
+        }
     }
 
     private func assertTimestamp(_ timestamp: String, equals expected: Int64) async throws {
