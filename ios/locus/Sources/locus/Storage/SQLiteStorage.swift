@@ -537,7 +537,7 @@ class SQLiteStorage {
         guard registration == SQLITE_OK else { throw databaseError("Register location query") }
         let result: Result<[[String: Any]], Error> = Result {
             let sql = locationQuerySQL(for: query)
-            let bindings = [
+            let bindings: [Int64] = [
                 query.from ?? Int64.min,
                 query.to ?? Int64.max,
                 query.limit ?? -1,
