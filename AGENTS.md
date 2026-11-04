@@ -28,10 +28,10 @@ cd example && flutter run                         # the plugin has no runnable e
 ```
 
 `.github/workflows/pipeline.yml` is the real gate: code quality, `pana` score threshold 130,
-Android JVM tests/lint/instrumentation compilation, and iOS helper tests plus builds under
-**both** CocoaPods and SwiftPM. It does not currently execute an Android emulator matrix.
-The release job runs on main/master pushes and creates a release only when the pubspec version
-has no remote tag; publishing to pub.dev is manual.
+Android JVM tests/lint, instrumentation on API 26/29/34/36 emulators, and iOS helper tests plus
+builds under **both** CocoaPods and SwiftPM. The release job runs on main/master pushes and creates
+a release only when the pubspec version has no remote tag; `publish.yml` then publishes that tag to
+pub.dev after approval.
 
 ## Structure
 

@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:locus/locus.dart';
 import 'package:locus_example/demos/history_query_card.dart';
+import 'package:material_ui/material_ui.dart';
 
 List<Location> points(int count) => List.generate(
   count,

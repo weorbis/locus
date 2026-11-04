@@ -34,8 +34,7 @@ class PermissionAssistant {
 
     final always = await PermissionService.requestAlways();
     if (!always.isGranted) {
-      if (delegate?.onOpenSettings != null &&
-          await Permission.locationAlways.isPermanentlyDenied) {
+      if (delegate?.onOpenSettings != null && always.isPermanentlyDenied) {
         await delegate!.onOpenSettings!();
       }
       return false;

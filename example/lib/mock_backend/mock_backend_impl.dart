@@ -31,11 +31,9 @@ class HttpMockBackend implements MockBackend {
   HttpMockBackend._(
     this._server, {
     required MockMode initialMode,
-    required Duration slowResponseDelay,
-    required int outageRequestCount,
-  }) : _mode = initialMode,
-       _slowResponseDelay = slowResponseDelay,
-       _outageRequestCount = outageRequestCount {
+    required this._slowResponseDelay,
+    required this._outageRequestCount,
+  }) : _mode = initialMode {
     _subscription = _server.listen(
       _handle,
       onError: (Object _, StackTrace _) {

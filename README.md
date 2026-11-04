@@ -5,8 +5,11 @@
 <h1 align="center">Locus</h1>
 
 <p align="center">
+  <a href="https://pub.dev/packages/locus"><img src="https://img.shields.io/pub/v/locus?style=flat-square" alt="pub version"></a>
+  <a href="https://pub.dev/packages/locus/score"><img src="https://img.shields.io/pub/points/locus?style=flat-square" alt="pub points"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License"></a>
   <a href="https://github.com/weorbis/locus/actions"><img src="https://img.shields.io/github/actions/workflow/status/weorbis/locus/pipeline.yml?style=flat-square&logo=github" alt="Build Status"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/weorbis/locus"><img src="https://api.scorecard.dev/projects/github.com/weorbis/locus/badge?style=flat-square" alt="OpenSSF Scorecard"></a>
 </p>
 
 <p align="center">

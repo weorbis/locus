@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:locus/locus.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A bounded native history query, with a fixed time window across its pages.
 class StoredLocationsCard extends StatefulWidget {

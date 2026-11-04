@@ -175,8 +175,9 @@ class MotionManager(
 
     private fun createActivityPendingIntent(): PendingIntent {
         val intent = Intent(context, ActivityRecognizedBroadcastReceiver::class.java)
-        val flags = if (Build.VERSION.SDK_INT >= 31) {
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Activity recognition must attach its result extras at delivery.
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         } else {
             PendingIntent.FLAG_UPDATE_CURRENT
         }

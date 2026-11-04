@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:locus_example/demos/widgets/action_button.dart';
 import 'package:locus_example/demos/widgets/section_header.dart';
 

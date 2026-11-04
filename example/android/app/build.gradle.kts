@@ -65,7 +65,7 @@ flutter {
 configurations.all {
     resolutionStrategy {
         force("androidx.browser:browser:1.10.0")
-        force("androidx.core:core:1.19.0")
-        force("androidx.core:core-ktx:1.19.0")
+        force("androidx.core:core:1.19.1")
+        force("androidx.core:core-ktx:1.19.1")
     }
 }
