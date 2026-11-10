@@ -15,9 +15,17 @@ let package = Package(
     ],
     targets: [
         .target(
+            name: "LocusSQLCipher",
+            exclude: ["vendor", "LICENSE.md", "README.md"],
+            publicHeadersPath: "include",
+            cSettings: [.define("NDEBUG", to: "1")],
+            linkerSettings: [.linkedFramework("Security"), .linkedFramework("Foundation")]
+        ),
+        .target(
             name: "locus",
             dependencies: [
                 .product(name: "FlutterFramework", package: "FlutterFramework"),
+                "LocusSQLCipher",
             ],
             exclude: [
                 "LocusPlugin.h",
@@ -25,9 +33,6 @@ let package = Package(
             ],
             swiftSettings: [
                 .define("LOCUS_SWIFT_PACKAGE"),
-            ],
-            linkerSettings: [
-                .linkedLibrary("sqlite3"),
             ]
         ),
     ]

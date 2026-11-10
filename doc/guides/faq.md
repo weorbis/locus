@@ -511,7 +511,10 @@ await Locus.ready(ConfigPresets.balanced.copyWith(
 
 ### Can I encrypt location data?
 
-Locus stores data in plain SQLite. For encryption:
+iOS encrypts the SDK's entire SQLite database automatically with SQLCipher.
+There is no opt-in setting or host-supplied key. See
+[Data protection](data-protection.md) for migration, Keychain access,
+packaging, and recovery details.
 
 On Android, this is separate from the process-recovery configuration snapshot:
 that snapshot (including HTTP headers, params, and extras) is encrypted at rest
@@ -519,9 +522,9 @@ with an AndroidKeyStore-backed AES-GCM key. Legacy plaintext snapshots from olde
 Locus versions are migrated after their first valid read. Location and queue rows
 in SQLite are still plaintext unless the host app adds database-level protection.
 
-1. Use Flutter's `sqflite_cipher` or similar
-2. Encrypt location payload before sending to server
-3. Use secure storage for sensitive extras
+Transport encryption and server-side storage protection remain the host app's
+responsibility. A separate Flutter database package cannot encrypt Locus's
+native SQLite connection.
 
 ### How do I comply with GDPR?
 

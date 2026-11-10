@@ -1,6 +1,8 @@
 import Foundation
 import CoreFoundation
-import SQLite3
+#if canImport(LocusSQLCipher)
+import LocusSQLCipher
+#endif
 
 /// Arguments of the private `queryLocations` channel.
 final class StoredLocationQuery {
@@ -98,12 +100,12 @@ final class StoredLocationQuery {
 
     /// nil excludes the row; malformed rows are logged and skipped.
     func matchingTimestamp(_ value: OpaquePointer?) -> Int64? {
-        guard let bytes = sqlite3_value_text(value) else {
+        guard let bytes = locus_sqlite3_value_text(value) else {
             NSLog("[locus.SQLiteStorage] queryLocations skipped a non-text payload")
             return nil
         }
         do {
-            return try matchingTimestamp(payloadData: Data(bytes: bytes, count: Int(sqlite3_value_bytes(value))))
+            return try matchingTimestamp(payloadData: Data(bytes: bytes, count: Int(locus_sqlite3_value_bytes(value))))
         } catch {
             NSLog("[locus.SQLiteStorage] queryLocations skipped a malformed stored location: %@",
                   error.localizedDescription)

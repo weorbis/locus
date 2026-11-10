@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **iOS: always-on SQLite encryption at rest (#49)** — The whole local database now uses SQLCipher with a random Keychain key, and existing plaintext databases are migrated in the background after launch. Failures keep the original files and retry next launch; see the data protection guide.
+
 ## [2.5.0] - 2026-11-04
 
 ### Fixed

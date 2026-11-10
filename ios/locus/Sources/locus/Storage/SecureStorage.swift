@@ -35,6 +35,8 @@ class SecureStorage {
     static let headersHandlesKey = "bg_headers_handles_v1"
 
     static let shared = SecureStorage()
+    static let databaseKeyByteCount = 32
+    private static let databaseKeyAccount = "locus_database_key_v1"
 
     init(serviceName: String = "dev.locus.secureStorage", accessGroup: String? = nil) {
         self.serviceName = serviceName
@@ -110,6 +112,42 @@ class SecureStorage {
     }
 
     // MARK: - Data Operations
+
+    func databaseKey() throws -> Data {
+        let read = readKeychainData(forKey: Self.databaseKeyAccount)
+        if read.status == errSecSuccess {
+            guard let data = read.data, data.count == Self.databaseKeyByteCount else {
+                throw NSError(domain: "dev.locus.storage", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "Database Keychain key has an invalid length"
+                ])
+            }
+            return data
+        }
+        guard read.status == errSecItemNotFound else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(read.status))
+        }
+
+        var bytes = [UInt8](repeating: 0, count: Self.databaseKeyByteCount)
+        let randomStatus = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        guard randomStatus == errSecSuccess else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(randomStatus))
+        }
+        let key = Data(bytes)
+        var query = lookupQuery(forKey: Self.databaseKeyAccount)
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        query[kSecAttrSynchronizable as String] = false
+        query[kSecValueData as String] = key
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecSuccess { return key }
+        if status == errSecDuplicateItem {
+            let existing = readKeychainData(forKey: Self.databaseKeyAccount)
+            if existing.status == errSecSuccess,
+               let data = existing.data, data.count == Self.databaseKeyByteCount {
+                return data
+            }
+        }
+        throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+    }
 
     func setData(_ data: Data, forKey key: String) -> Bool {
         let lookup = lookupQuery(forKey: key)

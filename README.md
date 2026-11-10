@@ -55,6 +55,7 @@ For full documentation, visit the [Locus GitHub repository](https://github.com/w
 - **[HTTP Synchronization](https://github.com/weorbis/locus/blob/main/doc/guides/http-synchronization.md)** - Request formats, retry, and batching.
 - **[Performance Optimization](https://github.com/weorbis/locus/blob/main/doc/guides/performance-optimization.md)** - Tuning for battery and accuracy.
 - **[Querying Stored History](https://github.com/weorbis/locus/blob/main/doc/guides/querying-history.md)** - Native filtering, ordering, pagination, and the example's storage controls.
+- **[Data Protection](https://github.com/weorbis/locus/blob/main/doc/guides/data-protection.md)** - Encryption at rest, keys, and plaintext migration.
 - **[Testing](https://github.com/weorbis/locus/blob/main/doc/testing/unit-testing.md)** - Host-app mocks and SDK regression suites.
 - **[Activity Recognition](https://github.com/weorbis/locus/blob/main/doc/guides/activity-recognition.md)** - Activity types and best practices.
 - **[Event Streams Reference](https://github.com/weorbis/locus/blob/main/doc/reference/event-streams.md)** - When streams emit and how to subscribe safely.
