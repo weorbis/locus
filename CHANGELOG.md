@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Geofence workflows: saves can no longer overwrite newer state (#44)** — `GeofenceWorkflowEngine` now runs state-store writes one at a time and writes only the newest pending state. `dispose()` waits for the final save, and a failing store is logged instead of raising an uncaught error.
+
 ## [2.5.0] - 2026-11-04
 
 ### Fixed
