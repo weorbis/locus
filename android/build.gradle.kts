@@ -72,6 +72,8 @@ tasks.withType<KotlinCompile>().configureEach {
 }
 
 dependencies {
+    add("implementation", "net.zetetic:sqlcipher-android:4.20.0")
+    add("implementation", "androidx.sqlite:sqlite:2.7.0")
     add("implementation", "com.google.android.gms:play-services-location:21.4.0")
     add("implementation", "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 

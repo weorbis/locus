@@ -3,57 +3,20 @@ package dev.locus.storage
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
-import android.database.sqlite.SQLiteCursor
-import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteOpenHelper
 import android.location.Location
+import net.zetetic.database.sqlcipher.SQLiteCursor
+import net.zetetic.database.sqlcipher.SQLiteDatabase
+import net.zetetic.database.sqlcipher.SQLiteOpenHelper
+import java.io.Closeable
 import java.time.Instant
 import java.util.UUID
 
-class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
+class LocationStore(context: Context) : Closeable {
+    private val helper = LazyHelper(context, ::Helper)
+    internal val writableDatabase: SQLiteDatabase get() = helper.get().writableDatabase
+    internal val readableDatabase: SQLiteDatabase get() = helper.get().readableDatabase
 
-    override fun onConfigure(db: SQLiteDatabase) {
-        // Durability: WAL keeps the journal independent of the main DB, and
-        // synchronous=FULL fsyncs both files on commit. Together they survive
-        // process kills between commit and checkpoint without data loss.
-        //
-        // Use rawQuery instead of execSQL: Samsung's hardened SQLite (seen on
-        // SM A346E / Android 16) treats `PRAGMA journal_mode=WAL` as a query
-        // because it returns the resulting mode, and rejects it from execSQL
-        // with "Queries can be performed using SQLiteDatabase query or
-        // rawQuery methods only." rawQuery works on AOSP and Samsung alike.
-        db.rawQuery("PRAGMA journal_mode=WAL", null).use { it.moveToFirst() }
-        db.rawQuery("PRAGMA synchronous=FULL", null).use { it.moveToFirst() }
-    }
-
-    override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL(
-            """
-            CREATE TABLE locations (
-                id TEXT PRIMARY KEY,
-                timestamp INTEGER,
-                latitude REAL,
-                longitude REAL,
-                accuracy REAL,
-                speed REAL,
-                heading REAL,
-                altitude REAL,
-                is_moving INTEGER,
-                activity_type TEXT,
-                activity_confidence INTEGER,
-                event TEXT,
-                odometer REAL,
-                extras_json TEXT
-            )
-            """.trimIndent()
-        )
-    }
-
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 3) {
-            db.execSQL("ALTER TABLE locations ADD COLUMN extras_json TEXT")
-        }
-    }
+    override fun close() = helper.close()
 
     fun insertLocation(
         location: Location,
@@ -321,6 +284,61 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
             db.rawQuery("PRAGMA wal_checkpoint(PASSIVE)", null).use { it.moveToFirst() }
         } catch (e: Exception) {
             android.util.Log.w("LocationStore", "wal_checkpoint failed: ${e.message}")
+        }
+    }
+
+    private class Helper(context: EncryptedDatabaseContext) : SQLiteOpenHelper(
+        context,
+        DB_NAME,
+        context.password,
+        null,
+        DB_VERSION,
+        EncryptedStorage.MINIMUM_SUPPORTED_VERSION,
+        EncryptedStorage.errorHandler,
+        null,
+        false
+    ) {
+        override fun onConfigure(db: SQLiteDatabase) {
+            // Durability: WAL keeps the journal independent of the main DB, and
+            // synchronous=FULL fsyncs both files on commit. Together they survive
+            // process kills between commit and checkpoint without data loss.
+            //
+            // Use rawQuery instead of execSQL: Samsung's hardened SQLite (seen on
+            // SM A346E / Android 16) treats `PRAGMA journal_mode=WAL` as a query
+            // because it returns the resulting mode, and rejects it from execSQL
+            // with "Queries can be performed using SQLiteDatabase query or
+            // rawQuery methods only." rawQuery works on AOSP and Samsung alike.
+            db.rawQuery("PRAGMA journal_mode=WAL", null).use { it.moveToFirst() }
+            db.rawQuery("PRAGMA synchronous=FULL", null).use { it.moveToFirst() }
+        }
+
+        override fun onCreate(db: SQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE locations (
+                    id TEXT PRIMARY KEY,
+                    timestamp INTEGER,
+                    latitude REAL,
+                    longitude REAL,
+                    accuracy REAL,
+                    speed REAL,
+                    heading REAL,
+                    altitude REAL,
+                    is_moving INTEGER,
+                    activity_type TEXT,
+                    activity_confidence INTEGER,
+                    event TEXT,
+                    odometer REAL,
+                    extras_json TEXT
+                )
+                """.trimIndent()
+            )
+        }
+
+        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+            if (oldVersion < 3) {
+                db.execSQL("ALTER TABLE locations ADD COLUMN extras_json TEXT")
+            }
         }
     }
 

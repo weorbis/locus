@@ -18,6 +18,8 @@ import dev.locus.LocusPlugin
 import dev.locus.activity.MotionManager
 import dev.locus.geofence.GeofenceManager
 import dev.locus.location.LocationClient
+import dev.locus.storage.EncryptedStorage
+import dev.locus.storage.StorageUnavailableException
 import dev.locus.storage.StoredLocationQuery
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -147,6 +149,14 @@ internal class LocusContainer private constructor(
         }
         Log.d(TAG, "LocusContainer initialized - privacyModeEnabled=${configManager.privacyModeEnabled}")
 
+        EncryptedStorage.failureListener = { failure ->
+            emitPermissionError(
+                "STORAGE_UNAVAILABLE",
+                "Encrypted storage could not be prepared; stored data is preserved and preparation will be retried",
+                mapOf("cause" to (failure.message ?: failure.javaClass.simpleName)),
+            )
+        }
+        EncryptedStorage.start(context)
         stateManager = StateManager(context)
         trackingStats = TrackingStats(context)
         logManager = LogManager(configManager, stateManager.logStore)
@@ -361,6 +371,20 @@ internal class LocusContainer private constructor(
      * thread (matches MethodChannel dispatch convention).
      */
     fun handleMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        // Calls queue (in order) while encrypted storage is still preparing, so the main thread never waits for it.
+        EncryptedStorage.runWhenReady(context) { dispatchMethodCall(call, result) }
+    }
+
+    private fun dispatchMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        try {
+            routeMethodCall(call, result)
+        } catch (error: StorageUnavailableException) {
+            Log.e(TAG, "Storage unavailable for ${call.method}", error)
+            result.error("STORAGE_UNAVAILABLE", "Encrypted storage is unavailable", error.message)
+        }
+    }
+
+    private fun routeMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "ready" -> {
                 val missing = validateManifestPermissions()

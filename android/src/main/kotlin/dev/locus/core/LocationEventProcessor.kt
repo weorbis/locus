@@ -27,6 +27,10 @@ class LocationEventProcessor(
             return
         }
         
+        stateManager.whenStorageReady { persistAndSync(eventName, payload) }
+    }
+
+    private fun persistAndSync(eventName: String, payload: Map<String, Any>) {
         val shouldPersist = PersistencePolicy.shouldPersist(config, eventName)
         Log.d("locus.EventProcessor", ">>> shouldPersist=$shouldPersist, batchSync=${config.batchSync}, persistMode=${config.persistMode}")
         if (shouldPersist) {

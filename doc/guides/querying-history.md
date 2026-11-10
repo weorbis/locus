@@ -57,6 +57,8 @@ errors propagate to the caller.
 The older `Locus.location.getLocations(limit: ...)` operation keeps its
 existing platform behavior. Prefer `query` when ordering or filtering matters.
 
+On Android the history database is encrypted at rest; see [Data protection](data-protection.md).
+
 ## Try it in the example
 
 Open **Demos → Storage → Stored Locations**. Choose the window, order, motion,

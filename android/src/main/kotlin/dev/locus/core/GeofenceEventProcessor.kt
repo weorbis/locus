@@ -31,14 +31,16 @@ class GeofenceEventProcessor(
         val privacyGuardEnabled = config.privacyModeEnabled
 
         if (!privacyGuardEnabled) locationPayload?.let { payload ->
-            if (PersistencePolicy.shouldPersist(config, "geofence")) {
-                stateManager.storeLocationPayload(payload, config.maxDaysToPersist, config.maxRecordsToPersist)
-            }
-            if (config.autoSync && !config.httpUrl.isNullOrEmpty() && autoSyncChecker.isAutoSyncAllowed()) {
-                if (config.batchSync) {
-                    syncManager.attemptBatchSync()
-                } else {
-                    syncManager.syncNow(payload)
+            stateManager.whenStorageReady {
+                if (PersistencePolicy.shouldPersist(config, "geofence")) {
+                    stateManager.storeLocationPayload(payload, config.maxDaysToPersist, config.maxRecordsToPersist)
+                }
+                if (config.autoSync && !config.httpUrl.isNullOrEmpty() && autoSyncChecker.isAutoSyncAllowed()) {
+                    if (config.batchSync) {
+                        syncManager.attemptBatchSync()
+                    } else {
+                        syncManager.syncNow(payload)
+                    }
                 }
             }
         }

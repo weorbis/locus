@@ -2,21 +2,29 @@ package dev.locus.storage
 
 import android.content.ContentValues
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteOpenHelper
+import net.zetetic.database.sqlcipher.SQLiteDatabase
+import net.zetetic.database.sqlcipher.SQLiteOpenHelper
 import dev.locus.LocusPlugin
 
-class LogStore(context: Context) {
+class LogStore(private val context: Context) {
 
     private val prefs = context.getSharedPreferences(LocusPlugin.PREFS_NAME, Context.MODE_PRIVATE)
-    private val dbHelper = LogDbHelper(context)
+    private val dbHelper = LazyHelper(context, ::LogDbHelper)
 
-    init {
-        migrateLegacyLog()
+    /** Opens the log database, importing the legacy preferences log the first time. */
+    private fun database(): SQLiteDatabase {
+        val db = dbHelper.get().writableDatabase
+        migrateLegacyLog(db)
+        return db
     }
 
+    /** Never waits for storage preparation: queued until the encrypted store is ready, dropped if it is unavailable. */
     fun append(level: String, message: String, maxDays: Int) {
-        val db = dbHelper.writableDatabase
+        EncryptedStorage.runWhenReady(context) { appendNow(level, message, maxDays) }
+    }
+
+    private fun appendNow(level: String, message: String, maxDays: Int) {
+        val db = database()
         val values = ContentValues().apply {
             put("timestamp", System.currentTimeMillis())
             put("level", level)
@@ -34,7 +42,7 @@ class LogStore(context: Context) {
         val entries = mutableListOf<Map<String, Any>>()
         val limitClause = if (limit > 0) limit.toString() else null
 
-        dbHelper.readableDatabase.query(
+        database().query(
             TABLE_LOGS,
             arrayOf("timestamp", "level", "message", "tag"),
             null,
@@ -64,11 +72,10 @@ class LogStore(context: Context) {
         db.delete(TABLE_LOGS, "timestamp < ?", arrayOf(cutoff.toString()))
     }
 
-    private fun migrateLegacyLog() {
+    private fun migrateLegacyLog(db: SQLiteDatabase) {
         if (prefs.getBoolean(KEY_LOG_MIGRATED, false)) return
 
         prefs.getString(KEY_LOG, "")?.takeIf { it.isNotEmpty() }?.let { existing ->
-            val db = dbHelper.writableDatabase
             existing.split("\n").forEach { line ->
                 val parts = line.split("|", limit = 3)
                 if (parts.size >= 3) {
@@ -90,8 +97,17 @@ class LogStore(context: Context) {
             .apply()
     }
 
-    private class LogDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
-
+    private class LogDbHelper(context: EncryptedDatabaseContext) : SQLiteOpenHelper(
+        context,
+        DB_NAME,
+        context.password,
+        null,
+        DB_VERSION,
+        EncryptedStorage.MINIMUM_SUPPORTED_VERSION,
+        EncryptedStorage.errorHandler,
+        null,
+        false
+    ) {
         override fun onCreate(db: SQLiteDatabase) {
             db.execSQL(
                 """

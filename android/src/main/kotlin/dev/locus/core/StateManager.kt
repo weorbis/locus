@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.location.Location
 import dev.locus.LocusPlugin
 import dev.locus.location.Odometer
+import dev.locus.storage.EncryptedStorage
 import dev.locus.storage.LocationStore
 import dev.locus.storage.LogStore
 import dev.locus.storage.QueueStore
@@ -15,7 +16,7 @@ import org.json.JSONObject
 import java.time.Instant
 import java.util.UUID
 
-class StateManager(context: Context) {
+class StateManager(private val context: Context) {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences(LocusPlugin.PREFS_NAME, Context.MODE_PRIVATE)
@@ -33,6 +34,14 @@ class StateManager(context: Context) {
 
     fun updateOdometer(location: Location) {
         odometer.update(location)
+    }
+
+    /**
+     * Runs [block] once the encrypted stores are ready, without ever blocking the caller.
+     * Use it at main-thread entry points that persist or sync location data.
+     */
+    fun whenStorageReady(block: () -> Unit) {
+        EncryptedStorage.runWhenReady(context, block)
     }
 
     fun clearLocations() {
