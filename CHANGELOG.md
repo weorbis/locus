@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Developer route replay (#48)** — Add the pure-Dart `locus:replay` CLI for GPX, JSON and example recorder exports through Android emulator and iOS simulator location tools, with timing controls, looping, dry runs and a route replay guide.
+
 ## [2.5.0] - 2026-11-04
 
 ### Fixed
