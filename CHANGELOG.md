@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Spoof detection now sees the OS "simulated location" flag** — Android (`Location.isMock`) and iOS 15+ (`isSimulatedBySoftware`) report it as the new nullable `Location.isMockProvider`, and `checkMockProvider` uses it. Location payloads and sync bodies gain an optional `is_mock_provider` field; Android's stored history does not keep it.
+
 ## [2.5.0] - 2026-11-04
 
 ### Fixed

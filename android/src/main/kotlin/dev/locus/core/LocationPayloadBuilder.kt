@@ -1,6 +1,7 @@
 package dev.locus.core
 
 import android.location.Location
+import android.os.Build
 import dev.locus.activity.MotionManager
 import java.time.Instant
 import java.util.UUID
@@ -32,8 +33,17 @@ class LocationPayloadBuilder(
             "activity" to activity,
             "event" to eventName,
             "is_moving" to motionManager.isMoving,
+            "is_mock_provider" to location.isMockProvider(),
             "odometer" to stateManager.odometerValue,
             "extras" to configManager.extras.toMap()
         )
     }
 }
+
+internal fun Location.isMockProvider(): Boolean =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        isMock
+    } else {
+        @Suppress("DEPRECATION")
+        isFromMockProvider
+    }

@@ -147,22 +147,30 @@ Real-world accuracy varies based on:
 
 ### Can I detect if location is spoofed/mocked?
 
-Yes, enable spoof detection:
+Yes, enable spoof detection after configuring Locus:
 
 ```dart
-await Locus.ready(ConfigPresets.balanced.copyWith(
-  spoofDetection: SpoofDetectionConfig(
-    action: SpoofDetectionAction.flag, // or ignore, stop
-    strictMode: true,
-  ),
+await Locus.ready(ConfigPresets.balanced);
+await Locus.setSpoofDetection(const SpoofDetectionConfig(
+  checkMockProvider: true,
+  minFactorsForDetection: 1,
+  blockMockLocations: false,
 ));
 
 Locus.location.stream.listen((location) {
-  if (location.isSpoofed) {
+  if (location.isMock) {
     print('Warning: Location may be spoofed');
   }
 });
 ```
+
+`Location.isMockProvider` is the operating system's own "simulated location"
+flag: `Location.isMock` on Android (API 26+) and
+`CLLocation.sourceInformation.isSimulatedBySoftware` on iOS 15+. It is `null`
+when the OS did not report it. With `checkMockProvider: true`, a `true` value
+counts as one spoof factor; detection triggers once `minFactorsForDetection`
+factors (two by default) are present. Spoof detection filters the Dart streams
+only; native persistence and HTTP sync still send the location.
 
 ### Does Locus support polygon geofences?
 

@@ -21,6 +21,14 @@ await Locus.ready(ConfigPresets.balanced.copyWith(
 ));
 ```
 
+## Location simulation flag
+
+Each location in the default sync body may include an optional top-level
+boolean `is_mock_provider`, set when the OS marks the fix as simulated. It is
+omitted when unknown: on iOS 14, and for Android locations sent from stored
+history (Android's history table does not keep the flag). Accept or ignore it
+at your endpoint.
+
 ## Quick testing
 
 For testing without a backend, use [webhook.site](https://webhook.site) to get a test endpoint:
