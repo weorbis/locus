@@ -375,12 +375,29 @@ internal class LocusContainer private constructor(
         EncryptedStorage.runWhenReady(context) { dispatchMethodCall(call, result) }
     }
 
+    /**
+     * Queued calls replay later, outside Flutter's handler, so every failure is reported through [result]
+     * here instead of escaping to the main looper.
+     */
     private fun dispatchMethodCall(call: MethodCall, result: MethodChannel.Result) {
         try {
             routeMethodCall(call, result)
         } catch (error: StorageUnavailableException) {
             Log.e(TAG, "Storage unavailable for ${call.method}", error)
-            result.error("STORAGE_UNAVAILABLE", "Encrypted storage is unavailable", error.message)
+            replyError(call, result, "STORAGE_UNAVAILABLE", "Encrypted storage is unavailable", error.message)
+        } catch (error: RuntimeException) {
+            // Same code and details as Flutter's own handler uses for an uncaught exception.
+            Log.e(TAG, "Method call ${call.method} failed", error)
+            replyError(call, result, "error", error.message, Log.getStackTraceString(error))
+        }
+    }
+
+    private fun replyError(call: MethodCall, result: MethodChannel.Result, code: String, message: String?, details: String?) {
+        try {
+            result.error(code, message, details)
+        } catch (error: IllegalStateException) {
+            // The handler had already replied before it failed.
+            Log.e(TAG, "Could not report failure of ${call.method}; reply already submitted", error)
         }
     }
 
@@ -757,10 +774,14 @@ internal class LocusContainer private constructor(
             result.error("INVALID_ARGUMENT", error.message, null)
             return
         }
+        stateManager.flushHeldLocations()
         locationQueryExecutor.execute {
             try {
                 val locations = stateManager.queryStoredLocations(query)
                 mainHandler.post { result.success(locations) }
+            } catch (error: StorageUnavailableException) {
+                Log.e(TAG, "Storage unavailable for stored locations query", error)
+                mainHandler.post { result.error("STORAGE_UNAVAILABLE", "Encrypted storage is unavailable", error.message) }
             } catch (error: Exception) {
                 Log.e(TAG, "Failed to query stored locations", error)
                 mainHandler.post {

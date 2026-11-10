@@ -22,18 +22,13 @@ internal class EncryptedDatabaseContext(context: Context, val password: ByteArra
     override fun getDatabasePath(name: String): File = File(noBackupFilesDir, name)
 }
 
-/** Thrown when the encrypted stores cannot be used right now: still preparing on the main thread, or preparation failed. */
+/**
+ * Thrown when the encrypted stores cannot be used right now: still preparing on the main thread, or preparation failed.
+ * Store reads, inserts and clears let it propagate so callers never report success or empty data for it;
+ * only sync bookkeeping (deleting sent rows, retry counters) stays best-effort.
+ */
 internal class StorageUnavailableException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
 
-/**
- * Prepares the encrypted databases (SQLCipher load, Keystore key unwrap, one-time plaintext migration).
- *
- * Preparation runs at most once per process and directory, on its own thread. A failed attempt is kept
- * (files stay untouched, nothing falls back to plaintext) and retried on a later access once
- * [RETRY_AFTER_FAILURE_MS] has passed, or on the next process start.
- * The main thread never waits: [open] throws there while preparation is running, so main-thread
- * entry points use [runWhenReady], which queues the work and replays it in order on the main thread.
- */
 /** Builds a SQLCipher helper on first use, so constructing a store never touches the key or the disk. */
 internal class LazyHelper<T : SQLiteOpenHelper>(
     private val context: Context,
@@ -55,6 +50,17 @@ internal class LazyHelper<T : SQLiteOpenHelper>(
     }
 }
 
+/**
+ * Prepares the encrypted databases (SQLCipher load, Keystore key unwrap, one-time plaintext migration).
+ *
+ * Preparation runs at most once per process and directory, on its own thread. A failed attempt is kept
+ * (files stay untouched, nothing falls back to plaintext) and retried on a later access once
+ * [RETRY_AFTER_FAILURE_MS] has passed, or on the next process start.
+ * The main thread never waits: [open] throws there while preparation is running, so main-thread
+ * entry points use [runWhenReady], which queues the work and replays it in order on the main thread,
+ * one queued item per main-thread turn. Queued work lives in memory only: a process kill during
+ * preparation (normally milliseconds, longer while the one-time plaintext migration runs) loses it.
+ */
 internal object EncryptedStorage {
     const val MINIMUM_SUPPORTED_VERSION = 0
     private const val TAG = "locus"
@@ -98,7 +104,7 @@ internal object EncryptedStorage {
                 Log.e(TAG, "Encrypted storage initialization failed; files preserved, retry later", failure)
                 mainHandler.post { failureListener?.invoke(failure) }
             }
-            mainHandler.post(::drainPending)
+            mainHandler.post(::drainNext)
         }
     }
 
@@ -129,7 +135,8 @@ internal object EncryptedStorage {
     /**
      * Runs [block] now if storage is prepared and nothing is queued, otherwise queues it and replays
      * the queue in order on the main thread once preparation finishes (successfully or not).
-     * Store access that throws [StorageUnavailableException] is logged and dropped.
+     * Store access that throws [StorageUnavailableException] is logged and dropped; callers that must
+     * report it (method calls) or keep their data (location writes) catch it inside [block].
      */
     fun runWhenReady(context: Context, block: () -> Unit) {
         val attempt = attemptFor(context)
@@ -144,11 +151,16 @@ internal object EncryptedStorage {
         if (runNow) invoke(block)
     }
 
-    private fun drainPending() {
-        while (true) {
-            val next = synchronized(pending) { pending.removeFirstOrNull() } ?: return
+    /** Replays one queued item and posts the next, so a long backlog never holds the main thread in one turn. */
+    private fun drainNext() {
+        val next = synchronized(pending) { pending.removeFirstOrNull() } ?: return
+        try {
             invoke(next)
+        } catch (error: RuntimeException) {
+            // Nothing may escape to the looper; one failing item must not strand the rest of the queue.
+            Log.e(TAG, "Queued storage operation failed", error)
         }
+        if (synchronized(pending) { pending.isNotEmpty() }) mainHandler.post(::drainNext)
     }
 
     private fun invoke(block: () -> Unit) {

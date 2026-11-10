@@ -56,6 +56,8 @@ class LocationStore(context: Context) : Closeable {
             val db = writableDatabase
             db.execSQL("DELETE FROM locations")
             checkpoint(db)
+        } catch (e: StorageUnavailableException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("LocationStore", "Failed to clear locations: ${e.message}", e)
         }
@@ -117,6 +119,8 @@ class LocationStore(context: Context) : Closeable {
                 db.endTransaction()
             }
             checkpoint(db)
+        } catch (e: StorageUnavailableException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("LocationStore", "Failed to insert payload: ${e.message}", e)
         }
@@ -142,6 +146,8 @@ class LocationStore(context: Context) : Closeable {
                     results.add(columns.read(cursor))
                 }
             }
+        } catch (e: StorageUnavailableException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("LocationStore", "Failed to read locations: ${e.message}", e)
         }

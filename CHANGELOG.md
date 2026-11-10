@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- **Android: encrypt location, queue and log databases at rest (#49)** — SQLCipher with a per-install key wrapped by Android Keystore; databases move to backup-excluded storage and existing plaintext data is migrated once, off the main thread, and deleted only after verification. If preparation fails the app keeps running, existing files are kept, and storage calls report `STORAGE_UNAVAILABLE`; see `doc/guides/data-protection.md`.
+- **Android: encrypt location, queue and log databases at rest (#49)** — SQLCipher with a per-install key wrapped by Android Keystore; databases move to backup-excluded storage and existing plaintext data is migrated once, off the main thread, and deleted only after verification. If preparation fails the app keeps running, existing files are kept, storage calls report `STORAGE_UNAVAILABLE` instead of success or empty data, and location fixes are held in memory until storage works again; see `doc/guides/data-protection.md`.
 
 ## [2.5.0] - 2026-11-04
 

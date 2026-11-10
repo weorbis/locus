@@ -3,12 +3,14 @@ package dev.locus.core
 import android.content.Context
 import android.content.SharedPreferences
 import android.location.Location
+import android.util.Log
 import dev.locus.LocusPlugin
 import dev.locus.location.Odometer
 import dev.locus.storage.EncryptedStorage
 import dev.locus.storage.LocationStore
 import dev.locus.storage.LogStore
 import dev.locus.storage.QueueStore
+import dev.locus.storage.StorageUnavailableException
 import dev.locus.storage.StoredLocationQuery
 import org.json.JSONArray
 import org.json.JSONException
@@ -24,6 +26,11 @@ class StateManager(private val context: Context) {
     val locationStore: LocationStore = LocationStore(context)
     val queueStore: QueueStore = QueueStore(context)
     val logStore: LogStore = LogStore(context)
+
+    private class HeldLocation(val payload: Map<String, Any>, val maxDays: Int, val maxRecords: Int)
+
+    /** Fixes that could not be written because storage was unavailable; in memory only, oldest first. */
+    private val heldLocations = ArrayDeque<HeldLocation>()
     val odometer: Odometer = Odometer(context)
 
     var odometerValue: Double
@@ -46,17 +53,48 @@ class StateManager(private val context: Context) {
 
     fun clearLocations() {
         locationStore.clear()
+        synchronized(heldLocations) { heldLocations.clear() }
     }
 
-    fun getStoredLocations(limit: Int): List<Map<String, Any>> =
-        locationStore.readLocations(limit)
+    fun getStoredLocations(limit: Int): List<Map<String, Any>> {
+        flushHeldLocations()
+        return locationStore.readLocations(limit)
             .mapNotNull { record -> buildPayloadFromRecord(record).takeIf { it.isNotEmpty() } }
+    }
 
     internal fun queryStoredLocations(query: StoredLocationQuery): List<Map<String, Any>> =
         locationStore.queryLocations(query).map { record -> buildPayloadFromRecord(record) }
 
+    /**
+     * Writes [payload], after any fixes held earlier. If storage is unavailable the fix is held (at most
+     * [MAX_HELD_LOCATIONS], oldest dropped first) and written by the next call that finds storage ready.
+     * Main thread only: it never waits for storage preparation.
+     */
     fun storeLocationPayload(payload: Map<String, Any>, maxDays: Int, maxRecords: Int) {
-        locationStore.insertPayload(payload, maxDays, maxRecords)
+        synchronized(heldLocations) {
+            heldLocations.addLast(HeldLocation(payload, maxDays, maxRecords))
+            while (heldLocations.size > MAX_HELD_LOCATIONS) {
+                heldLocations.removeFirst()
+                Log.w(TAG, "Held location limit of $MAX_HELD_LOCATIONS exceeded; dropped the oldest unsaved fix")
+            }
+        }
+        flushHeldLocations()
+    }
+
+    /** Writes held fixes in order; stops at the first one storage still cannot take. Main thread only. */
+    fun flushHeldLocations() {
+        synchronized(heldLocations) {
+            while (true) {
+                val next = heldLocations.firstOrNull() ?: return
+                try {
+                    locationStore.insertPayload(next.payload, next.maxDays, next.maxRecords)
+                } catch (error: StorageUnavailableException) {
+                    Log.w(TAG, "Storage unavailable; holding ${heldLocations.size} unsaved fix(es): ${error.message}")
+                    return
+                }
+                heldLocations.removeFirst()
+            }
+        }
     }
 
     fun enqueue(
@@ -205,6 +243,8 @@ class StateManager(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "locus.StateManager"
+        private const val MAX_HELD_LOCATIONS = 1_000
         private const val KEY_TRIP_STATE = "bg_trip_state"
     }
 }

@@ -50,6 +50,8 @@ class QueueStore(context: Context) : Closeable {
                 db.endTransaction()
             }
             checkpoint(db)
+        } catch (e: StorageUnavailableException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("QueueStore", "Failed to insert queue payload: ${e.message}", e)
         }
@@ -90,6 +92,8 @@ class QueueStore(context: Context) : Closeable {
                     results.add(record)
                 }
             }
+        } catch (e: StorageUnavailableException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("QueueStore", "Failed to read queue: ${e.message}", e)
         }
@@ -129,6 +133,8 @@ class QueueStore(context: Context) : Closeable {
             val db = writableDatabase
             db.execSQL("DELETE FROM queue")
             checkpoint(db)
+        } catch (e: StorageUnavailableException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("QueueStore", "Failed to clear queue: ${e.message}", e)
         }
