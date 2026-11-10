@@ -41,10 +41,14 @@ class SQLiteStorage {
     /// Most location fixes held in memory while storage is unavailable; the
     /// oldest is dropped beyond this. Matches the Android limit.
     static let maximumHeldLocations = 1_000
+    /// Insert attempts a held fix gets while the database is open before it is
+    /// dropped, so one unwritable fix cannot block every fix behind it.
+    static let maximumHeldWriteAttempts = 3
 
     private struct HeldLocation {
         let payload: [String: Any]
         let completion: (() -> Void)?
+        var failedWrites = 0
     }
 
     /// Only used on `queue`.
@@ -589,14 +593,22 @@ class SQLiteStorage {
 
     /// Writes held fixes oldest first and stops at the first failed insert, so
     /// that fix and every later one stay held in order for the next attempt.
+    /// A fix that fails `maximumHeldWriteAttempts` times is dropped and logged.
     /// Applies the retention limits requested meanwhile once any fix was
     /// written. Caller must already hold `queue` and have an open database.
     private func flushHeldLocationsOnQueue() {
         guard !heldLocations.isEmpty else { return }
         NSLog("[locus.SQLiteStorage] Writing %d held fix(es)", heldLocations.count)
         var written = 0
-        while let location = heldLocations.first {
+        while var location = heldLocations.first {
             guard writeLocationOnQueue(location) else {
+                location.failedWrites += 1
+                if location.failedWrites >= Self.maximumHeldWriteAttempts {
+                    heldLocations.removeFirst()
+                    NSLog("[locus.SQLiteStorage] Dropped a held fix after %d failed writes", location.failedWrites)
+                    continue
+                }
+                heldLocations[0] = location
                 NSLog("[locus.SQLiteStorage] Held fix write failed; %d fix(es) stay held", heldLocations.count)
                 break
             }
