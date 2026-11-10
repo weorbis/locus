@@ -3,6 +3,8 @@ package dev.locus.core
 import android.content.Context
 import android.content.SharedPreferences
 import android.location.Location
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import dev.locus.LocusPlugin
 import dev.locus.location.Odometer
@@ -31,6 +33,7 @@ class StateManager(private val context: Context) {
 
     /** Fixes that could not be written because storage was unavailable; in memory only, oldest first. */
     private val heldLocations = ArrayDeque<HeldLocation>()
+    private val mainHandler = Handler(Looper.getMainLooper())
     val odometer: Odometer = Odometer(context)
 
     var odometerValue: Double
@@ -81,10 +84,14 @@ class StateManager(private val context: Context) {
         flushHeldLocations()
     }
 
-    /** Writes held fixes in order; stops at the first one storage still cannot take. Main thread only. */
+    /**
+     * Writes held fixes in order, at most [HELD_FLUSH_BATCH_SIZE] per main-thread turn so a long backlog
+     * cannot stall the UI; the rest is posted to the next turn. Stops at the first fix storage still
+     * cannot take. Main thread only.
+     */
     fun flushHeldLocations() {
-        synchronized(heldLocations) {
-            while (true) {
+        val remaining = synchronized(heldLocations) {
+            repeat(HELD_FLUSH_BATCH_SIZE) {
                 val next = heldLocations.firstOrNull() ?: return
                 try {
                     locationStore.insertPayload(next.payload, next.maxDays, next.maxRecords)
@@ -94,7 +101,9 @@ class StateManager(private val context: Context) {
                 }
                 heldLocations.removeFirst()
             }
+            heldLocations.size
         }
+        if (remaining > 0) mainHandler.post(::flushHeldLocations)
     }
 
     fun enqueue(
@@ -245,6 +254,7 @@ class StateManager(private val context: Context) {
     companion object {
         private const val TAG = "locus.StateManager"
         private const val MAX_HELD_LOCATIONS = 1_000
+        private const val HELD_FLUSH_BATCH_SIZE = 50
         private const val KEY_TRIP_STATE = "bg_trip_state"
     }
 }

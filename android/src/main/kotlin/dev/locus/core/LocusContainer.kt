@@ -158,6 +158,7 @@ internal class LocusContainer private constructor(
         }
         EncryptedStorage.start(context)
         stateManager = StateManager(context)
+        EncryptedStorage.readyListener = { stateManager.flushHeldLocations() }
         trackingStats = TrackingStats(context)
         logManager = LogManager(configManager, stateManager.logStore)
 

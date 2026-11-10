@@ -84,6 +84,10 @@ internal object EncryptedStorage {
     @Volatile
     var failureListener: ((Throwable) -> Unit)? = null
 
+    /** Called on the main thread after each successful preparation so held writes can be flushed. */
+    @Volatile
+    var readyListener: (() -> Unit)? = null
+
     private class Attempt(context: Context) : FutureTask<ByteArray>(Callable { prepare(context) }) {
         @Volatile
         var failedAtElapsedMs = NOT_FAILED
@@ -103,6 +107,8 @@ internal object EncryptedStorage {
                 // The encrypted log store is unavailable during bootstrap. Use the SDK's Logcat tag.
                 Log.e(TAG, "Encrypted storage initialization failed; files preserved, retry later", failure)
                 mainHandler.post { failureListener?.invoke(failure) }
+            } else {
+                mainHandler.post { readyListener?.invoke() }
             }
             mainHandler.post(::drainNext)
         }
