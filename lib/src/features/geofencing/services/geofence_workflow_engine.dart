@@ -131,8 +131,15 @@ class GeofenceWorkflowEngine {
   }
 
   /// Clears persisted workflow state.
+  ///
+  /// Drops any pending save and waits for a running one, so an earlier
+  /// snapshot cannot be written back after the removal.
   Future<void> clearPersistedState() async {
-    await stateStore?.remove(_stateStoreKey);
+    final store = stateStore;
+    if (store == null) return;
+    _pendingState = null;
+    await _saveCompleter?.future;
+    await store.remove(_stateStoreKey);
   }
 
   Future<void> start() async {
