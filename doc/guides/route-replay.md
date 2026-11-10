@@ -22,8 +22,10 @@ dart run locus replay --platform android --dry-run route.gpx
 Select `--platform android` or `--platform ios`. Within that platform, the CLI
 selects the only ready emulator or booted iOS simulator. If there are several,
 pass `--device` with an Android emulator serial (`adb devices`) or iOS simulator
-UDID (`xcrun simctl list devices booted`). Physical Android devices are excluded;
-physical iOS devices use Xcode as described below.
+UDID (`xcrun simctl list devices booted`). Only `emulator-*` serials are picked
+automatically; name any other emulator serial, such as one reached through
+`adb connect`, with `--device`. `adb emu` does not work on physical Android
+devices; physical iOS devices use Xcode as described below.
 
 `--dry-run` reads and validates the whole file, then prints commands and waits
 without invoking external tools, waiting, or changing a device. Without
@@ -56,8 +58,9 @@ Save this as `route.gpx` to preview a short route:
 
 The simple JSON format is an array of objects. Coordinates and elevations are
 finite numbers in degrees and meters. Latitude must be between -90 and 90;
-longitude between -180 and 180. Timestamps are ISO 8601 strings with an explicit
-timezone, not numeric epoch values.
+longitude between -180 and 180. Timestamps are ISO 8601 date-time strings, not
+numeric epoch values. In both GPX and JSON, a time without a zone (`Z`, `+02:00`
+or `+0200`) is read as UTC, as the GPX format defines.
 
 ```json
 [

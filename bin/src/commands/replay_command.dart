@@ -135,7 +135,7 @@ class ReplayCommand extends Command<void> {
       }
       if (dryRun && results.flag('loop')) {
         stdout.writeln(
-          'Dry run shows one loop; live replay repeats after a fallback interval.',
+          'Dry run shows one loop; live replay repeats it until Ctrl+C.',
         );
       }
       do {
@@ -259,10 +259,14 @@ Future<String> _findDevice(
   if (platform == 'android') {
     final listing = await session.command('adb', ['devices']);
     for (final line in const LineSplitter().convert(listing)) {
-      final match = RegExp(
-        r'^(emulator-\d+)\s+device(?:\s|$)',
-      ).firstMatch(line);
-      if (match != null) devices.add(match.group(1)!);
+      final match = RegExp(r'^(\S+)\s+device(?:\s|$)').firstMatch(line);
+      final serial = match?.group(1);
+      // Auto-selection only considers local emulators; any ready serial
+      // (for example an emulator reached through `adb connect`) can be named.
+      if (serial == null) continue;
+      if (serial == requested || serial.startsWith('emulator-')) {
+        devices.add(serial);
+      }
     }
   } else {
     final listing = await session.command('xcrun', [

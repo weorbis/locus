@@ -95,18 +95,17 @@ double _number(Object? value, String name) {
 double? _optionalNumber(Object? value, String name) =>
     value == null ? null : _number(value, name);
 
+// GPX times are UTC by definition, so a time without a zone is read as UTC.
 DateTime? _time(Object? value) {
   if (value == null) return null;
-  if (value is! String ||
-      !RegExp(
-        r'^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$',
-        caseSensitive: false,
-      ).hasMatch(value)) {
-    throw const FormatException(
-      'Time must be an ISO 8601 string with a timezone.',
-    );
+  if (value is! String || !RegExp(r'^\d{4}-\d{2}-\d{2}T').hasMatch(value)) {
+    throw const FormatException('Time must be an ISO 8601 date-time string.');
   }
-  final time = DateTime.tryParse(value);
+  final hasZone = RegExp(
+    r'(?:Z|[+-]\d{2}(?::?\d{2})?)$',
+    caseSensitive: false,
+  ).hasMatch(value);
+  final time = DateTime.tryParse(hasZone ? value : '${value}Z');
   if (time == null) throw FormatException('Invalid time: $value');
   return time.toUtc();
 }
