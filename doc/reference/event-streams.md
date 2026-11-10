@@ -23,7 +23,8 @@ Guide to primary streams, when they emit, and how to consume them safely.
 
 ## Location simulation fields
 
-`Location.isMockProvider` is the OS-reported simulation flag (Android API 26+,
+`Location.isMockProvider` is the OS-reported simulation flag (Android API 26+ via
+`isMock`/`isFromMockProvider`,
 iOS 15+), `null` when unreported. It is separate from `isMock`, which spoof
 detection sets. Android history read from SQLite returns `null`; iOS history
 keeps the flag. See [spoof detection](../guides/faq.md#can-i-detect-if-location-is-spoofedmocked).

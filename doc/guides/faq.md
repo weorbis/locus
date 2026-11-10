@@ -165,7 +165,7 @@ Locus.location.stream.listen((location) {
 ```
 
 `Location.isMockProvider` is the operating system's own "simulated location"
-flag: `Location.isMock` on Android (API 26+) and
+flag: on Android `Location.isMock` (API 31+) or `isFromMockProvider` (API 26–30), and
 `CLLocation.sourceInformation.isSimulatedBySoftware` on iOS 15+. It is `null`
 when the OS did not report it. With `checkMockProvider: true`, a `true` value
 counts as one spoof factor; detection triggers once `minFactorsForDetection`

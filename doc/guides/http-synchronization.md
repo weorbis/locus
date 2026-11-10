@@ -23,11 +23,13 @@ await Locus.ready(ConfigPresets.balanced.copyWith(
 
 ## Location simulation flag
 
-Each location in the default sync body may include an optional top-level
-boolean `is_mock_provider`, set when the OS marks the fix as simulated. It is
-omitted when unknown: on iOS 14, and for Android locations sent from stored
-history (Android's history table does not keep the flag). Accept or ignore it
-at your endpoint.
+Each location in the sync body may include an optional top-level boolean
+`is_mock_provider`: `true` when the OS marked the fix as simulated, `false`
+when it reported a real fix. Read the value, not the key's presence. The key is
+omitted when unknown: on iOS 14, when iOS gives no source information, and for
+Android locations rebuilt from stored history. Android batch sync
+(`batchSync: true`, used by the `lowPower`, `balanced` and `tracking` presets) uploads from that stored
+history, so its bodies omit the key.
 
 ## Quick testing
 
