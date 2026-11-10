@@ -139,6 +139,12 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
     // Migrate existing UserDefaults data to Keychain for security
     SecureStorage.shared.migrateFromUserDefaults()
 
+    // Geofences are not armed while storage is unavailable; arm them once it recovers.
+    storage.setRecoveryHandler { [weak self] in
+      guard let self, self.isEnabled else { return }
+      self.geofenceManager.startStoredGeofences()
+    }
+
     // Wire delegates
     locationClient.delegate = self
     syncManager.delegate = self
@@ -322,11 +328,13 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
       }
       result(true)
     case "addGeofence":
+      if replyIfStorageUnavailable(result) { return }
       if let geofence = call.arguments as? [String: Any] {
         geofenceManager.addGeofence(geofence)
       }
       result(true)
     case "addGeofences":
+      if replyIfStorageUnavailable(result) { return }
       if let geofences = call.arguments as? [[String: Any]] {
         for geofence in geofences {
           geofenceManager.addGeofence(geofence)
@@ -334,25 +342,30 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
       }
       result(true)
     case "removeGeofence":
+      if replyIfStorageUnavailable(result) { return }
       if let identifier = call.arguments as? String {
         geofenceManager.removeGeofence(identifier)
       }
       result(true)
     case "removeGeofences":
+      if replyIfStorageUnavailable(result) { return }
       geofenceManager.removeAllGeofences()
       result(true)
     case "getGeofence":
+      if replyIfStorageUnavailable(result) { return }
       if let identifier = call.arguments as? String {
         result(geofenceManager.getGeofence(identifier))
       } else {
         result(nil)
       }
     case "getGeofences":
+      if replyIfStorageUnavailable(result) { return }
       // Filter out invalid geofences before returning to Dart
       let allGeofences = storage.readGeofences()
       let validGeofences = allGeofences.filter { isValidGeofence($0) }
       result(validGeofences)
     case "geofenceExists":
+      if replyIfStorageUnavailable(result) { return }
       if let identifier = call.arguments as? String {
         result(geofenceManager.getGeofence(identifier) != nil)
       } else {
@@ -369,6 +382,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
       }
       result(true)
     case "startGeofences":
+      if replyIfStorageUnavailable(result) { return }
       geofenceManager.startStoredGeofences()
       result(true)
     case "setOdometer":
@@ -379,6 +393,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
         result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected numeric odometer", details: nil))
       }
     case "enqueue":
+      if replyIfStorageUnavailable(result) { return }
       if let args = call.arguments as? [String: Any],
          let payload = args["payload"] as? [String: Any] {
         let type = args["type"] as? String
@@ -389,6 +404,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
         result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected payload map", details: nil))
       }
     case "getQueue":
+      if replyIfStorageUnavailable(result) { return }
       if let args = call.arguments as? [String: Any], let limit = args["limit"] as? Int {
         let stored = storage.readQueue()
         result(Array(stored.prefix(limit)))
@@ -396,6 +412,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
         result(storage.readQueue())
       }
     case "clearQueue":
+      if replyIfStorageUnavailable(result) { return }
       storage.writeQueue([])
       result(true)
     case "syncQueue":
@@ -429,6 +446,8 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
           switch outcome {
           case .success(let locations):
             result(locations)
+          case .failure(let error as StorageUnavailableError):
+            result(Self.storageUnavailableFlutterError(error))
           case .failure(let error):
             result(FlutterError(code: "LOCATION_QUERY_ERROR", message: error.localizedDescription, details: nil))
           }
@@ -458,9 +477,11 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
         syncManager.syncNow()
         result(true)
       } else if call.method == "destroyLocations" {
+        if replyIfStorageUnavailable(result) { return }
         storage.writeLocations([])
         result(true)
       } else if call.method == "getLocations" {
+        if replyIfStorageUnavailable(result) { return }
         if let args = call.arguments as? [String: Any], let limit = args["limit"] as? Int {
           let stored = storage.readLocations()
           result(Array(stored.suffix(limit)))
@@ -507,6 +528,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
           result(FlutterError(code: "INVALID_ARGUMENT", message: "Expected headless callback handle", details: nil))
         }
       } else if call.method == "getLog" {
+        if replyIfStorageUnavailable(result) { return }
         result(readLog())
       } else if call.method == "setAdaptiveTracking" {
         // Adaptive profile calculation is Dart-owned; native receives the
@@ -647,6 +669,29 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
       message: error.localizedDescription,
       details: nil
     )
+  }
+
+  private static func storageUnavailableFlutterError(_ error: StorageUnavailableError) -> FlutterError {
+    FlutterError(
+      code: "STORAGE_UNAVAILABLE",
+      message: "Encrypted storage is unavailable",
+      details: error.reason
+    )
+  }
+
+  /// Replies `STORAGE_UNAVAILABLE` and returns true when the encrypted database
+  /// is not open, so callers never report success or empty data for it.
+  private func replyIfStorageUnavailable(_ result: FlutterResult) -> Bool {
+    do {
+      try storage.requireAvailable()
+      return false
+    } catch let error as StorageUnavailableError {
+      result(Self.storageUnavailableFlutterError(error))
+      return true
+    } catch {
+      result(FlutterError(code: "STORAGE_UNAVAILABLE", message: "Encrypted storage is unavailable", details: error.localizedDescription))
+      return true
+    }
   }
 
   private func secureStorageFlutterError() -> FlutterError {

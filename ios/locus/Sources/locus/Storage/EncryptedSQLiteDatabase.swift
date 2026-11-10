@@ -50,6 +50,26 @@ final class EncryptedSQLiteDatabase {
         try Self.protectFiles(at: url)
     }
 
+    /// True when a non-empty database file exists that is not plaintext SQLite.
+    /// A file that cannot be read counts as encrypted, so an unreadable
+    /// database never leads to a new key being created for it.
+    static func containsEncryptedDatabase(at url: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+        do {
+            let file = try FileHandle(forReadingFrom: url)
+            defer {
+                do { try file.close() } catch {
+                    NSLog("[locus.SQLiteStorage] Header file close failed: %@", error.localizedDescription)
+                }
+            }
+            guard let header = try file.read(upToCount: plaintextHeader.count), !header.isEmpty else { return false }
+            return header != plaintextHeader
+        } catch {
+            NSLog("[locus.SQLiteStorage] Database header unreadable; treating it as encrypted: %@", error.localizedDescription)
+            return true
+        }
+    }
+
     func open(readOnly: Bool = false) throws -> OpaquePointer {
         try open(at: url, readOnly: readOnly)
     }
@@ -291,7 +311,7 @@ private final class DatabaseFileLock {
     private func acquire(_ mode: Int32) throws {
         guard flock(descriptor, mode | LOCK_NB) == 0 else {
             throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [
-                NSLocalizedDescriptionKey: "Database is in use; encryption will retry on next launch"
+                NSLocalizedDescriptionKey: "Database is in use; encryption will be retried"
             ])
         }
     }

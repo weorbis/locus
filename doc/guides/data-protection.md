@@ -16,10 +16,21 @@ migration receipts. WAL pages are encrypted and temporary SQL data stays in memo
   in the background after launch, row counts and integrity are verified, then the
   file is replaced atomically. No plaintext copy is kept. Storage calls wait for
   it to finish. It needs free space for a second copy of the database.
-- **Failure:** if the Keychain is unavailable (for example before first unlock) or
-  migration fails, storage stays unavailable and Locus logs it. It never falls
-  back to plaintext or replaces an unreadable database. Original files are kept
-  and initialization retries on the next launch.
+- **Failure:** if the Keychain is unavailable (for example before first unlock
+  after a reboot) or migration fails, nothing falls back to plaintext, existing
+  files are left untouched, and Locus logs the cause. The app keeps running.
+  Reads and writes from Dart (`getLocations`, `query`, `getLog`, geofence calls,
+  `enqueue`, `getQueue` and the like) fail with `STORAGE_UNAVAILABLE` instead of
+  returning empty data, and stored geofences are not re-armed or edited until
+  storage works. Locus retries as soon as iOS reports that protected data is
+  available (this also works when the app was launched in the background) and on
+  later access, at most every 30 seconds, and re-arms stored geofences when it
+  succeeds. Location fixes received meanwhile are held in memory (the newest
+  1,000) and written in order once storage works, after which their sync runs; a
+  process kill in between loses them. If an encrypted database exists but its
+  Keychain key is missing or unreadable, Locus never creates a replacement key,
+  because it could not open that database; a new key is created only when no
+  encrypted database exists.
 - **Size:** about +1.5 MB for the framework and +0.72 MB for the zipped app.
   SQLite and SQLCipher symbols are prefixed, so host libraries such as sqflite
   keep using system SQLite. Hosts must retain SQLCipher's

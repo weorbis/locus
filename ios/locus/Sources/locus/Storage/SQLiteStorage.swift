@@ -2,6 +2,17 @@ import Foundation
 #if canImport(LocusSQLCipher)
 import LocusSQLCipher
 #endif
+#if canImport(UIKit)
+import UIKit
+#endif
+
+/// Thrown when the encrypted database could not be prepared (for example the
+/// Keychain is locked before first unlock) and storage cannot serve the call.
+struct StorageUnavailableError: LocalizedError {
+    let reason: String
+
+    var errorDescription: String? { "Encrypted storage is unavailable: \(reason)" }
+}
 
 /// SQLite-based storage for locations, geofences, and queue items.
 /// Replaces UserDefaults to support larger datasets and better performance.
@@ -17,19 +28,52 @@ class SQLiteStorage {
     private static let busyTimeoutMilliseconds: Int32 = 5_000
     private let databaseURL: URL?
     private let userDefaults: UserDefaults
+    private let keyProvider: () throws -> Data
     private let queue = DispatchQueue(label: "dev.locus.sqlite", qos: .utility)
     private let queryQueue = DispatchQueue(label: "dev.locus.sqlite.query", qos: .utility)
     /// Only used on `queryQueue`.
     private var readDb: OpaquePointer?
     private var readSupportsJSON = false
 
+    /// Minimum time between automatic preparation retries triggered by access.
+    /// The protected-data notification retries immediately, ignoring this.
+    static let minimumPreparationRetryInterval: TimeInterval = 30
+    /// Most location fixes held in memory while storage is unavailable; the
+    /// oldest is dropped beyond this. Matches the Android limit.
+    static let maximumHeldLocations = 1_000
+
+    private struct HeldLocation {
+        let payload: [String: Any]
+        let completion: (() -> Void)?
+    }
+
+    /// Only used on `queue`.
+    private var heldLocations: [HeldLocation] = []
+    /// Only used on `queue`. System uptime of the last preparation attempt.
+    private var lastPreparationAttempt: TimeInterval?
+    /// Only used on `queue`. Why the last preparation attempt failed.
+    private var preparationFailure = "storage has not been prepared"
+    /// Only used on `queue`. Called on the main queue after a retry succeeds.
+    private var recoveryHandler: (() -> Void)?
+    private var protectedDataObserver: NSObjectProtocol?
+
     init(
         databaseURL: URL? = nil,
         userDefaults: UserDefaults = .standard,
-        keyProvider: @escaping () throws -> Data = { try SecureStorage.shared.databaseKey() }
+        keyProvider: (() throws -> Data)? = nil
     ) {
-        self.databaseURL = databaseURL ?? Self.defaultDatabaseURL()
+        let resolvedURL = databaseURL ?? Self.defaultDatabaseURL()
+        self.databaseURL = resolvedURL
         self.userDefaults = userDefaults
+        // A key may only be created while no encrypted database exists; an
+        // encrypted database whose key is gone must never get a replacement.
+        self.keyProvider = keyProvider ?? {
+            let encryptedDatabaseExists = resolvedURL.map(EncryptedSQLiteDatabase.containsEncryptedDatabase(at:)) ?? false
+            return try SecureStorage.shared.databaseKey(mayCreate: !encryptedDatabaseExists)
+        }
+        // Registered before the first attempt so an unlock between a failed
+        // attempt and a later registration cannot be missed.
+        observeProtectedData()
         // Key retrieval and the plaintext-to-encrypted migration can take long
         // on a large history, so they must not block plugin registration (the
         // app's main thread). Every other operation is dispatched to or
@@ -37,19 +81,89 @@ class SQLiteStorage {
         // block. `queryLocations` hops through `queue` before `queryQueue`, so the
         // read connection can only be opened after preparation finished.
         queue.async { [self] in
-            prepareOnQueue(keyProvider: keyProvider)
+            prepareOnQueue()
         }
     }
 
+    /// Registers `handler` to run on the main queue after storage becomes
+    /// available on a retry, so callers can redo work they skipped meanwhile.
+    func setRecoveryHandler(_ handler: @escaping () -> Void) {
+        queue.async { [self] in
+            recoveryHandler = handler
+        }
+    }
+
+    private func observeProtectedData() {
+        #if canImport(UIKit)
+        // Keychain items readable only after first unlock fail with
+        // errSecInteractionNotAllowed until then. The notification is also
+        // delivered to a process launched in the background.
+        protectedDataObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.protectedDataDidBecomeAvailableNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.queue.async { [weak self] in
+                self?.retryPreparationOnQueue()
+            }
+        }
+        #endif
+    }
+
+    /// True when the database is open; retries preparation first if one is due.
+    var isAvailable: Bool {
+        queue.sync {
+            retryPreparationIfDueOnQueue()
+            return db != nil
+        }
+    }
+
+    /// Throws `StorageUnavailableError` unless the database is open. Once it
+    /// returns normally the database stays open for the life of this object.
+    func requireAvailable() throws {
+        try queue.sync {
+            retryPreparationIfDueOnQueue()
+            guard db != nil else { throw StorageUnavailableError(reason: preparationFailure) }
+        }
+    }
+
+    /// Caller must already hold `queue`. Runs `prepareOnQueue` unless the
+    /// database is open or an attempt ran less than the minimum interval ago.
+    private func retryPreparationIfDueOnQueue() {
+        guard db == nil else { return }
+        if let lastPreparationAttempt,
+           ProcessInfo.processInfo.systemUptime - lastPreparationAttempt < Self.minimumPreparationRetryInterval {
+            return
+        }
+        retryPreparationOnQueue()
+    }
+
+    /// Caller must already hold `queue`.
+    private func retryPreparationOnQueue() {
+        guard db == nil else { return }
+        NSLog("[locus.SQLiteStorage] Retrying storage preparation")
+        prepareOnQueue()
+        guard db != nil, let recoveryHandler else { return }
+        DispatchQueue.main.async(execute: recoveryHandler)
+    }
+
     /// Opens (and if needed migrates) the database, creates tables and imports
-    /// legacy UserDefaults rows. Runs once, as the first block on `queue`.
-    private func prepareOnQueue(keyProvider: () throws -> Data) {
-        openDatabase(keyProvider: keyProvider)
+    /// legacy UserDefaults rows, then writes any location fixes held while
+    /// storage was unavailable. Runs as the first block on `queue` and again
+    /// for each retry until it succeeds. Caller must already hold `queue`.
+    private func prepareOnQueue() {
+        lastPreparationAttempt = ProcessInfo.processInfo.systemUptime
+        openDatabase()
+        guard db != nil else { return }
         createTables()
         migrateFromUserDefaults()
+        flushHeldLocationsOnQueue()
     }
 
     deinit {
+        if let protectedDataObserver {
+            NotificationCenter.default.removeObserver(protectedDataObserver)
+        }
         // Every user of the connections holds `self`, so none is running now.
         for connection in [db, readDb] {
             guard let connection else { continue }
@@ -62,9 +176,10 @@ class SQLiteStorage {
     
     // MARK: - Database Setup
     
-    private func openDatabase(keyProvider: () throws -> Data) {
+    private func openDatabase() {
         guard let databaseURL else {
             NSLog("[locus.SQLiteStorage] Documents database directory is unavailable")
+            preparationFailure = "the Documents directory is unavailable"
             db = nil
             return
         }
@@ -75,6 +190,7 @@ class SQLiteStorage {
             )
         } catch {
             NSLog("[locus.SQLiteStorage] Database directory creation failed: %@", error.localizedDescription)
+            preparationFailure = error.localizedDescription
             db = nil
             return
         }
@@ -84,7 +200,8 @@ class SQLiteStorage {
             db = try encrypted.open()
             encryptedDatabase = encrypted
         } catch {
-            NSLog("[locus.SQLiteStorage] Encrypted storage unavailable; retry next launch: %@", error.localizedDescription)
+            NSLog("[locus.SQLiteStorage] Encrypted storage unavailable; existing files are untouched and preparation will be retried: %@", error.localizedDescription)
+            preparationFailure = error.localizedDescription
             db = nil
             return
         }
@@ -436,23 +553,59 @@ class SQLiteStorage {
         return stepChecked(statement, op: "insertLocation")
     }
 
+    /// Writes the location, or holds it in memory (newest `maximumHeldLocations`)
+    /// while storage is unavailable. Held fixes are written in order, each
+    /// followed by its completion, once a retry succeeds. A process kill while
+    /// fixes are held loses them.
     func insertLocation(_ payload: [String: Any], completion: (() -> Void)? = nil) {
         queue.async { [weak self] in
-            guard let self = self, self.insertLocationOnQueue(payload) else { return }
-            self.walCheckpointOnQueue()
+            guard let self else { return }
+            self.retryPreparationIfDueOnQueue()
+            guard self.db != nil else {
+                self.holdLocationOnQueue(HeldLocation(payload: payload, completion: completion))
+                return
+            }
+            self.writeLocationOnQueue(HeldLocation(payload: payload, completion: completion))
+        }
+    }
 
-            if let completion {
-                DispatchQueue.main.async {
-                    completion()
-                }
+    /// Caller must already hold `queue`.
+    private func holdLocationOnQueue(_ location: HeldLocation) {
+        heldLocations.append(location)
+        if heldLocations.count > Self.maximumHeldLocations {
+            heldLocations.removeFirst(heldLocations.count - Self.maximumHeldLocations)
+            NSLog("[locus.SQLiteStorage] Held location limit of %d exceeded; dropped the oldest unsaved fix", Self.maximumHeldLocations)
+        }
+        NSLog("[locus.SQLiteStorage] Storage unavailable; holding %d unsaved fix(es): %@", heldLocations.count, preparationFailure)
+    }
+
+    /// Caller must already hold `queue` and have an open database.
+    private func flushHeldLocationsOnQueue() {
+        guard !heldLocations.isEmpty else { return }
+        let held = heldLocations
+        heldLocations = []
+        NSLog("[locus.SQLiteStorage] Writing %d held fix(es)", held.count)
+        for location in held {
+            writeLocationOnQueue(location)
+        }
+    }
+
+    /// Caller must already hold `queue` and have an open database.
+    private func writeLocationOnQueue(_ location: HeldLocation) {
+        guard insertLocationOnQueue(location.payload) else { return }
+        walCheckpointOnQueue()
+        if let completion = location.completion {
+            DispatchQueue.main.async {
+                completion()
             }
         }
     }
-    
+
     func readLocations(limit: Int = 0) -> [[String: Any]] {
         var results: [[String: Any]] = []
         
         queue.sync {
+            self.retryPreparationIfDueOnQueue()
             guard let db = self.db else { return }
             
             var sql = "SELECT payload FROM locations ORDER BY timestamp DESC"
@@ -481,6 +634,12 @@ class SQLiteStorage {
                         completion: @escaping (Result<[[String: Any]], Error>) -> Void) {
         // Hop through the write queue so earlier writes are visible.
         queue.async {
+            self.retryPreparationIfDueOnQueue()
+            guard self.db != nil else {
+                let failure = StorageUnavailableError(reason: self.preparationFailure)
+                DispatchQueue.main.async { completion(.failure(failure)) }
+                return
+            }
             self.queryQueue.async {
                 let result = Result { try self.queryLocationsOnQueryQueue(query) }
                 DispatchQueue.main.async { completion(result) }
@@ -690,6 +849,7 @@ class SQLiteStorage {
     func locationCount() -> Int {
         var count = 0
         queue.sync {
+            self.retryPreparationIfDueOnQueue()
             guard let db = self.db else { return }
             
             let sql = "SELECT COUNT(*) FROM locations"
@@ -738,6 +898,7 @@ class SQLiteStorage {
         var results: [[String: Any]] = []
         
         queue.sync {
+            self.retryPreparationIfDueOnQueue()
             guard let db = self.db else { return }
             
             let sql = "SELECT payload FROM geofences"
@@ -840,6 +1001,7 @@ class SQLiteStorage {
         var results: [[String: Any]] = []
         
         queue.sync {
+            self.retryPreparationIfDueOnQueue()
             guard let db = self.db else { return }
             
             let sql = "SELECT id, payload, type, idempotency_key, retry_count, next_retry_at, created_at FROM queue ORDER BY created_at"
@@ -1018,6 +1180,7 @@ class SQLiteStorage {
         var results: [[String: Any]] = []
         
         queue.sync {
+            self.retryPreparationIfDueOnQueue()
             guard let db = self.db else { return }
             
             let sql = "SELECT id, payload, type, idempotency_key, retry_count, failed_at FROM dead_letter ORDER BY failed_at DESC"
@@ -1102,6 +1265,7 @@ class SQLiteStorage {
         var results: [[String: Any]] = []
 
         queue.sync {
+            self.retryPreparationIfDueOnQueue()
             guard let db = self.db else { return }
 
             var sql = "SELECT timestamp, level, message, tag FROM logs ORDER BY timestamp DESC"

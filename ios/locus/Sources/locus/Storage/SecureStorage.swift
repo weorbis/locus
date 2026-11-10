@@ -113,7 +113,10 @@ class SecureStorage {
 
     // MARK: - Data Operations
 
-    func databaseKey() throws -> Data {
+    /// Returns the database key. A new key is created only when `mayCreate` is
+    /// true; callers pass false while an encrypted database exists, because a
+    /// replacement key could never open it and would make the loss permanent.
+    func databaseKey(mayCreate: Bool) throws -> Data {
         let read = readKeychainData(forKey: Self.databaseKeyAccount)
         if read.status == errSecSuccess {
             guard let data = read.data, data.count == Self.databaseKeyByteCount else {
@@ -125,6 +128,12 @@ class SecureStorage {
         }
         guard read.status == errSecItemNotFound else {
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(read.status))
+        }
+        guard mayCreate else {
+            logError("Encrypted database exists but its Keychain key is missing; no new key was created and no file was changed")
+            throw NSError(domain: "dev.locus.storage", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "The Keychain key for the existing encrypted database is missing"
+            ])
         }
 
         var bytes = [UInt8](repeating: 0, count: Self.databaseKeyByteCount)

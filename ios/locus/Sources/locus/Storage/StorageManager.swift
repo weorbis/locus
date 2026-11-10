@@ -13,6 +13,24 @@ class StorageManager {
         self.sqliteStorage = sqliteStorage
     }
     
+    // MARK: - Availability
+
+    /// False while the encrypted database could not be opened. Reads then
+    /// return empty lists, which must not be mistaken for an empty store.
+    var isAvailable: Bool {
+        return sqliteStorage.isAvailable
+    }
+
+    /// Throws `StorageUnavailableError` unless the database is open.
+    func requireAvailable() throws {
+        try sqliteStorage.requireAvailable()
+    }
+
+    /// Runs `handler` on the main queue after storage recovers from a failed start.
+    func setRecoveryHandler(_ handler: @escaping () -> Void) {
+        sqliteStorage.setRecoveryHandler(handler)
+    }
+
     // MARK: - Geofences
     
     func readGeofences() -> [[String: Any]] {
