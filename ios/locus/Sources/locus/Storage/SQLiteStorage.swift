@@ -53,6 +53,9 @@ class SQLiteStorage {
     private var lastPreparationAttempt: TimeInterval?
     /// Only used on `queue`. Why the last preparation attempt failed.
     private var preparationFailure = "storage has not been prepared"
+    /// Only used on `queue`. Retention limits from the latest prune requested
+    /// while storage was unavailable; applied after held fixes are written.
+    private var pendingPrune: (maxDays: Int, maxRecords: Int)?
     /// Only used on `queue`. Called on the main queue after a retry succeeds.
     private var recoveryHandler: (() -> Void)?
     private var protectedDataObserver: NSObjectProtocol?
@@ -561,11 +564,16 @@ class SQLiteStorage {
         queue.async { [weak self] in
             guard let self else { return }
             self.retryPreparationIfDueOnQueue()
-            guard self.db != nil else {
-                self.holdLocationOnQueue(HeldLocation(payload: payload, completion: completion))
+            if self.db != nil {
+                // Fixes whose replay failed stay ahead of this one.
+                self.flushHeldLocationsOnQueue()
+            }
+            let location = HeldLocation(payload: payload, completion: completion)
+            guard self.db != nil, self.heldLocations.isEmpty else {
+                self.holdLocationOnQueue(location)
                 return
             }
-            self.writeLocationOnQueue(HeldLocation(payload: payload, completion: completion))
+            self.writeLocationOnQueue(location)
         }
     }
 
@@ -576,29 +584,44 @@ class SQLiteStorage {
             heldLocations.removeFirst(heldLocations.count - Self.maximumHeldLocations)
             NSLog("[locus.SQLiteStorage] Held location limit of %d exceeded; dropped the oldest unsaved fix", Self.maximumHeldLocations)
         }
-        NSLog("[locus.SQLiteStorage] Storage unavailable; holding %d unsaved fix(es): %@", heldLocations.count, preparationFailure)
+        NSLog("[locus.SQLiteStorage] Holding %d unsaved fix(es) until storage accepts writes; last preparation failure: %@", heldLocations.count, preparationFailure)
     }
 
-    /// Caller must already hold `queue` and have an open database.
+    /// Writes held fixes oldest first and stops at the first failed insert, so
+    /// that fix and every later one stay held in order for the next attempt.
+    /// Applies the retention limits requested meanwhile once any fix was
+    /// written. Caller must already hold `queue` and have an open database.
     private func flushHeldLocationsOnQueue() {
         guard !heldLocations.isEmpty else { return }
-        let held = heldLocations
-        heldLocations = []
-        NSLog("[locus.SQLiteStorage] Writing %d held fix(es)", held.count)
-        for location in held {
-            writeLocationOnQueue(location)
+        NSLog("[locus.SQLiteStorage] Writing %d held fix(es)", heldLocations.count)
+        var written = 0
+        while let location = heldLocations.first {
+            guard writeLocationOnQueue(location) else {
+                NSLog("[locus.SQLiteStorage] Held fix write failed; %d fix(es) stay held", heldLocations.count)
+                break
+            }
+            heldLocations.removeFirst()
+            written += 1
+        }
+        if written > 0, let pendingPrune {
+            self.pendingPrune = nil
+            pruneLocationsOnQueue(maxDays: pendingPrune.maxDays, maxRecords: pendingPrune.maxRecords)
         }
     }
 
+    /// Runs the location's completion on the main queue once, only after the
+    /// insert succeeded. Returns false when the insert failed.
     /// Caller must already hold `queue` and have an open database.
-    private func writeLocationOnQueue(_ location: HeldLocation) {
-        guard insertLocationOnQueue(location.payload) else { return }
+    @discardableResult
+    private func writeLocationOnQueue(_ location: HeldLocation) -> Bool {
+        guard insertLocationOnQueue(location.payload) else { return false }
         walCheckpointOnQueue()
         if let completion = location.completion {
             DispatchQueue.main.async {
                 completion()
             }
         }
+        return true
     }
 
     func readLocations(limit: Int = 0) -> [[String: Any]] {
@@ -808,44 +831,55 @@ class SQLiteStorage {
 
     func pruneLocations(maxDays: Int, maxRecords: Int) {
         queue.async { [weak self] in
-            guard let self = self, let db = self.db else { return }
-
-            // Prune by age
-            if maxDays > 0 {
-                let cutoff = Date().addingTimeInterval(TimeInterval(-maxDays * 24 * 60 * 60))
-                let cutoffString = ISO8601DateFormatter().string(from: cutoff)
-
-                let sql = "DELETE FROM locations WHERE timestamp < ?"
-                var statement: OpaquePointer?
-                if locus_sqlite3_prepare_v2(db, sql, -1, &statement, nil) == LOCUS_SQLITE_OK {
-                    locus_sqlite3_bind_text(statement, 1, cutoffString, -1, SQLiteStorage.SQLITE_TRANSIENT)
-                    self.stepChecked(statement, op: "pruneLocations(age)")
-                } else {
-                    self.logSQLiteError("pruneLocations(age) prepare")
-                }
-                locus_sqlite3_finalize(statement)
+            guard let self = self else { return }
+            if !self.heldLocations.isEmpty {
+                // Held fixes are written later; prune again once they are.
+                self.pendingPrune = (maxDays, maxRecords)
             }
-
-            // Prune by count
-            if maxRecords > 0 {
-                let sql = """
-                    DELETE FROM locations WHERE id NOT IN (
-                        SELECT id FROM locations ORDER BY timestamp DESC LIMIT ?
-                    )
-                """
-                var statement: OpaquePointer?
-                if locus_sqlite3_prepare_v2(db, sql, -1, &statement, nil) == LOCUS_SQLITE_OK {
-                    locus_sqlite3_bind_int(statement, 1, Int32(maxRecords))
-                    self.stepChecked(statement, op: "pruneLocations(count)")
-                } else {
-                    self.logSQLiteError("pruneLocations(count) prepare")
-                }
-                locus_sqlite3_finalize(statement)
-            }
-            self.walCheckpointOnQueue()
+            guard self.db != nil else { return }
+            self.pruneLocationsOnQueue(maxDays: maxDays, maxRecords: maxRecords)
         }
     }
-    
+
+    /// Caller must already hold `queue` and have an open database.
+    private func pruneLocationsOnQueue(maxDays: Int, maxRecords: Int) {
+        guard let db = self.db else { return }
+
+        // Prune by age
+        if maxDays > 0 {
+            let cutoff = Date().addingTimeInterval(TimeInterval(-maxDays * 24 * 60 * 60))
+            let cutoffString = ISO8601DateFormatter().string(from: cutoff)
+
+            let sql = "DELETE FROM locations WHERE timestamp < ?"
+            var statement: OpaquePointer?
+            if locus_sqlite3_prepare_v2(db, sql, -1, &statement, nil) == LOCUS_SQLITE_OK {
+                locus_sqlite3_bind_text(statement, 1, cutoffString, -1, SQLiteStorage.SQLITE_TRANSIENT)
+                self.stepChecked(statement, op: "pruneLocations(age)")
+            } else {
+                self.logSQLiteError("pruneLocations(age) prepare")
+            }
+            locus_sqlite3_finalize(statement)
+        }
+
+        // Prune by count
+        if maxRecords > 0 {
+            let sql = """
+                DELETE FROM locations WHERE id NOT IN (
+                    SELECT id FROM locations ORDER BY timestamp DESC LIMIT ?
+                )
+            """
+            var statement: OpaquePointer?
+            if locus_sqlite3_prepare_v2(db, sql, -1, &statement, nil) == LOCUS_SQLITE_OK {
+                locus_sqlite3_bind_int(statement, 1, Int32(maxRecords))
+                self.stepChecked(statement, op: "pruneLocations(count)")
+            } else {
+                self.logSQLiteError("pruneLocations(count) prepare")
+            }
+            locus_sqlite3_finalize(statement)
+        }
+        self.walCheckpointOnQueue()
+    }
+
     func locationCount() -> Int {
         var count = 0
         queue.sync {

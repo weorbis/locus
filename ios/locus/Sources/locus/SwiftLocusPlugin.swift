@@ -112,6 +112,21 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
   // Timers
   var heartbeatTimer: Timer?
 
+  /// Most region events held while storage is unavailable; the oldest is
+  /// dropped beyond this.
+  static let maximumDeferredGeofenceEvents = 100
+
+  /// A region crossing received while storage was unavailable, with the fix
+  /// known at that moment.
+  struct DeferredGeofenceEvent {
+    let identifier: String
+    let action: String
+    let location: CLLocation?
+  }
+
+  /// Main thread only. Region events waiting for storage, oldest first.
+  var deferredGeofenceEvents: [DeferredGeofenceEvent] = []
+
   var headlessEngine: FlutterEngine?
   var headlessLastActivityTime: Date?
   var headlessCleanupTimer: Timer?
@@ -141,7 +156,9 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
 
     // Geofences are not armed while storage is unavailable; arm them once it recovers.
     storage.setRecoveryHandler { [weak self] in
-      guard let self, self.isEnabled else { return }
+      guard let self else { return }
+      self.processDeferredGeofenceEvents()
+      guard self.isEnabled else { return }
       self.geofenceManager.startStoredGeofences()
     }
 
@@ -416,6 +433,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
       storage.writeQueue([])
       result(true)
     case "syncQueue":
+      if replyIfStorageUnavailable(result) { return }
       result(syncManager.syncQueue(limit: (call.arguments as? [String: Any])?["limit"] as? Int ?? 0))
     case "resumeSync":
       syncManager.resumeSync()
@@ -473,6 +491,7 @@ public class SwiftLocusPlugin: NSObject, FlutterPlugin, LocationClientDelegate, 
         scheduler.stop()
         result(true)
       } else if call.method == "sync" {
+        if replyIfStorageUnavailable(result) { return }
         syncManager.resumeSync()
         syncManager.syncNow()
         result(true)

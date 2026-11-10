@@ -152,6 +152,40 @@ extension SwiftLocusPlugin {
   }
 
   public func onGeofenceEvent(identifier: String, action: String) {
+    let event = DeferredGeofenceEvent(identifier: identifier, action: action, location: lastLocation)
+    // The geofence row cannot be read while storage is unavailable, so the
+    // crossing waits instead of being mistaken for an unknown fence.
+    guard storage.isAvailable else {
+      deferGeofenceEvent(event)
+      return
+    }
+    // Earlier deferred crossings go first so events keep their order.
+    processDeferredGeofenceEvents()
+    deliver(event)
+  }
+
+  private func deferGeofenceEvent(_ event: DeferredGeofenceEvent) {
+    deferredGeofenceEvents.append(event)
+    let excess = deferredGeofenceEvents.count - Self.maximumDeferredGeofenceEvents
+    if excess > 0 {
+      deferredGeofenceEvents.removeFirst(excess)
+      NSLog("[locus] Deferred geofence event limit of %d exceeded; dropped the oldest event", Self.maximumDeferredGeofenceEvents)
+    }
+    NSLog("[locus] Storage unavailable; deferred geofence %@ for '%@' (%d waiting)", event.action, event.identifier, deferredGeofenceEvents.count)
+  }
+
+  /// Delivers region events deferred while storage was unavailable, oldest first.
+  func processDeferredGeofenceEvents() {
+    guard !deferredGeofenceEvents.isEmpty else { return }
+    let events = deferredGeofenceEvents
+    deferredGeofenceEvents = []
+    NSLog("[locus] Storage available; delivering %d deferred geofence event(s)", events.count)
+    events.forEach(deliver)
+  }
+
+  private func deliver(_ event: DeferredGeofenceEvent) {
+    let identifier = event.identifier
+    let action = event.action
     guard let geofence = geofenceManager.getGeofence(identifier) else {
       appendLog("Geofence event for unknown geofence: \(identifier)", level: "warning")
       return
@@ -164,7 +198,7 @@ extension SwiftLocusPlugin {
 
     let privacyGuardEnabled = configManager.privacyModeEnabled
     var containsRawLocation = false
-    if let location = lastLocation {
+    if let location = event.location {
       containsRawLocation = true
       let locationPayload = buildLocationPayload(location, eventName: "geofence")
       payload["location"] = locationPayload
