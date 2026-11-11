@@ -4,9 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Developer route replay (#48)** — Add the pure-Dart `locus:replay` CLI for GPX, JSON and example recorder exports through Android emulator and iOS simulator location tools, with timing controls, looping, dry runs and a route replay guide.
+
 ### Changed
 
 - **Android: encrypt location, queue and log databases at rest (#49)** — SQLCipher with a per-install key wrapped by Android Keystore; databases move to backup-excluded storage and existing plaintext data is migrated once, off the main thread, and deleted only after verification. If preparation fails the app keeps running, existing files are kept, storage calls report `STORAGE_UNAVAILABLE` instead of success or empty data, and location fixes are held in memory until storage works again; see `doc/guides/data-protection.md`.
+
+### Fixed
+
+- **Geofence workflows: saves can no longer overwrite newer state (#44)** — `GeofenceWorkflowEngine` now runs state-store writes one at a time and writes only the newest pending state. `dispose()` waits for the final save, and a failing store is logged instead of raising an uncaught error.
+- **Spoof detection now sees the OS "simulated location" flag** — Android (`Location.isMock`) and iOS 15+ (`isSimulatedBySoftware`) report it as the new nullable `Location.isMockProvider`, and `checkMockProvider` uses it. Location payloads and iOS sync bodies gain an optional `is_mock_provider` field; Android's stored history (and therefore Android batch sync) does not keep it.
 
 ## [2.5.0] - 2026-11-04
 

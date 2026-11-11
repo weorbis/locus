@@ -5,6 +5,9 @@ import 'dart:convert';
 
 import 'package:locus/src/shared/events.dart';
 import 'package:locus/src/models.dart';
+import 'package:locus/src/observability/locus_logger.dart';
+
+final _log = locusLogger('geofence_workflow');
 
 /// Abstraction for workflow state persistence.
 abstract class WorkflowStateStore {
@@ -36,6 +39,8 @@ class GeofenceWorkflowEngine {
   final Map<String, GeofenceWorkflow> _workflows = {};
   final Map<String, _WorkflowRuntimeState> _states = {};
   StreamSubscription<GeolocationEvent<dynamic>>? _subscription;
+  Completer<void>? _saveCompleter;
+  String? _pendingState;
 
   Stream<GeofenceWorkflowEvent> get events => _controller.stream;
 
@@ -57,15 +62,46 @@ class GeofenceWorkflowEngine {
   }
 
   /// Saves current workflow states to persistent storage.
+  ///
+  /// Concurrent requests coalesce into the latest pending snapshot. Completes
+  /// when all pending saves finish; store failures are logged without throwing.
   Future<void> saveState() async {
-    if (stateStore == null) return;
+    final store = stateStore;
+    if (store == null) return;
 
     final statesData = <String, Map<String, dynamic>>{};
     for (final entry in _states.entries) {
       statesData[entry.key] = entry.value.toMap();
     }
 
-    await stateStore!.save(_stateStoreKey, jsonEncode(statesData));
+    _pendingState = jsonEncode(statesData);
+    final activeSave = _saveCompleter;
+    if (activeSave != null) {
+      await activeSave.future;
+      return;
+    }
+
+    final completer = Completer<void>();
+    _saveCompleter = completer;
+    try {
+      while (_pendingState != null) {
+        final snapshot = _pendingState!;
+        _pendingState = null;
+        try {
+          await store.save(_stateStoreKey, snapshot);
+        } catch (error, stack) {
+          _log.eventSevere(
+            'workflow_state_save_failed',
+            const {},
+            error,
+            stack,
+          );
+        }
+      }
+    } finally {
+      _saveCompleter = null;
+      completer.complete();
+    }
   }
 
   /// Loads workflow states from persistent storage.
@@ -95,8 +131,16 @@ class GeofenceWorkflowEngine {
   }
 
   /// Clears persisted workflow state.
+  ///
+  /// Drops any pending save and waits for a running one, so an earlier
+  /// snapshot cannot be written back after the removal.
   Future<void> clearPersistedState() async {
-    await stateStore?.remove(_stateStoreKey);
+    final store = stateStore;
+    if (store == null) return;
+    _pendingState = null;
+    final activeSave = _saveCompleter;
+    if (activeSave != null) await activeSave.future;
+    await store.remove(_stateStoreKey);
   }
 
   Future<void> start() async {
@@ -110,9 +154,8 @@ class GeofenceWorkflowEngine {
   }
 
   Future<void> dispose() async {
-    // Save state before disposing
-    await saveState();
     await stop();
+    await saveState();
     await _controller.close();
   }
 

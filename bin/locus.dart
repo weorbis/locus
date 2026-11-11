@@ -9,6 +9,7 @@
 ///   setup     Configure native permissions and dependencies
 ///   doctor    Diagnose configuration and platform issues
 ///   migrate   Migrate from Locus v1.x to v2.0
+///   replay    Replay routes through OS location simulation
 ///
 /// Run a command with --help for more details:
 ///   dart run locus migrate --help
@@ -20,6 +21,7 @@ import 'package:args/command_runner.dart';
 import 'package:locus/src/version.dart';
 
 import 'src/commands/migrate_command.dart';
+import 'src/commands/replay_command.dart';
 
 class LocusCLI extends CommandRunner<void> {
   LocusCLI() : super('locus', 'Locus SDK CLI - v$locusVersion') {
@@ -33,6 +35,7 @@ class LocusCLI extends CommandRunner<void> {
     addCommand(SetupPlaceholderCommand());
     addCommand(DoctorPlaceholderCommand());
     addCommand(MigrateCommand());
+    addCommand(ReplayCommand());
   }
 }
 
@@ -141,6 +144,7 @@ Commands:
   setup     Configure native permissions and dependencies
   doctor    Diagnose configuration and platform issues
   migrate   Migrate from Locus v1.x to v2.0
+  replay    Replay routes through OS location simulation
 
 Run a command with --help for more details:
   dart run locus migrate --help
