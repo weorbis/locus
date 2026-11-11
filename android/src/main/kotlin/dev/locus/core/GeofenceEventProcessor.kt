@@ -68,12 +68,14 @@ class GeofenceEventProcessor(
             mapOf(
                 "uuid" to UUID.randomUUID().toString(),
                 "timestamp" to Instant.now().toString(),
-                "coords" to loc.toMap(),
+                "coords" to loc.toMap().filterKeys { it != "is_mock_provider" },
                 "event" to "geofence",
                 "is_moving" to motionManager.isMoving,
                 "odometer" to stateManager.odometerValue,
                 "extras" to config.extras.toMap()
-            )
+            ).toMutableMap().apply {
+                (loc.opt("is_mock_provider") as? Boolean)?.let { put("is_mock_provider", it) }
+            }
         }
 
         val payload = buildMap<String, Any> {
