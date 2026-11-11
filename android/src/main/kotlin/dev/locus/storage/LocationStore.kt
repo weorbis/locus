@@ -64,54 +64,31 @@ class LocationStore(context: Context) : Closeable {
     }
 
     fun insertPayload(payload: Map<String, Any>?, maxDays: Int, maxRecords: Int) {
-        if (payload == null) return
+        insertPayloads(listOfNotNull(payload), maxDays, maxRecords)
+    }
 
+    /**
+     * Inserts [payloads] in order in one transaction, then prunes and checkpoints once, so a backlog of
+     * held fixes is written quickly and atomically.
+     */
+    fun insertPayloads(payloads: List<Map<String, Any>>, maxDays: Int, maxRecords: Int) {
+        if (payloads.isEmpty()) return
         try {
-            val coords = payload["coords"] as? Map<*, *> ?: return
-            val latitude = coords["latitude"].toDoubleOrZero()
-            val longitude = coords["longitude"].toDoubleOrZero()
-            val accuracy = coords["accuracy"].toDoubleOrZero()
-            val speed = coords["speed"].toDoubleOrZero()
-            val heading = coords["heading"].toDoubleOrZero()
-            val altitude = coords["altitude"].toDoubleOrZero()
-
-            val activity = payload["activity"] as? Map<*, *>
-            val activityType = activity?.get("type") as? String
-            val activityConfidence = (activity?.get("confidence") as? Number)?.toInt() ?: 0
-
-            val timestamp = (payload["timestamp"] as? String)?.let { timestampStr ->
-                runCatching { Instant.parse(timestampStr).toEpochMilli() }.getOrNull()
-            } ?: System.currentTimeMillis()
-
-            val isMoving = payload["is_moving"] as? Boolean ?: false
-            val event = payload["event"] as? String
-            val odometer = payload["odometer"].toDoubleOrZero()
-            val extrasJson = (payload["extras"] as? Map<*, *>)?.let { extras ->
-                org.json.JSONObject(extras).toString()
+            val rows = payloads.mapNotNull { payload ->
+                try {
+                    toContentValues(payload)
+                } catch (e: Exception) {
+                    android.util.Log.e("LocationStore", "Skipping malformed payload: ${e.message}", e)
+                    null
+                }
             }
-
-            val values = ContentValues().apply {
-                put("id", UUID.randomUUID().toString())
-                put("timestamp", timestamp)
-                put("latitude", latitude)
-                put("longitude", longitude)
-                put("accuracy", accuracy)
-                put("speed", speed)
-                put("heading", heading)
-                put("altitude", altitude)
-                put("is_moving", if (isMoving) 1 else 0)
-                put("activity_type", activityType)
-                put("activity_confidence", activityConfidence)
-                put("event", event)
-                put("odometer", odometer)
-                put("extras_json", extrasJson)
-            }
-
+            if (rows.isEmpty()) return
             val db = writableDatabase
             db.beginTransaction()
             try {
-                db.insertWithOnConflict("locations", null, values, SQLiteDatabase.CONFLICT_REPLACE)
-
+                for (values in rows) {
+                    db.insertWithOnConflict("locations", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+                }
                 if (maxDays > 0) pruneByAge(maxDays)
                 if (maxRecords > 0) pruneByCount(maxRecords)
                 db.setTransactionSuccessful()
@@ -123,6 +100,48 @@ class LocationStore(context: Context) : Closeable {
             throw e
         } catch (e: Exception) {
             android.util.Log.e("LocationStore", "Failed to insert payload: ${e.message}", e)
+        }
+    }
+
+    private fun toContentValues(payload: Map<String, Any>): ContentValues? {
+        val coords = payload["coords"] as? Map<*, *> ?: return null
+        val latitude = coords["latitude"].toDoubleOrZero()
+        val longitude = coords["longitude"].toDoubleOrZero()
+        val accuracy = coords["accuracy"].toDoubleOrZero()
+        val speed = coords["speed"].toDoubleOrZero()
+        val heading = coords["heading"].toDoubleOrZero()
+        val altitude = coords["altitude"].toDoubleOrZero()
+
+        val activity = payload["activity"] as? Map<*, *>
+        val activityType = activity?.get("type") as? String
+        val activityConfidence = (activity?.get("confidence") as? Number)?.toInt() ?: 0
+
+        val timestamp = (payload["timestamp"] as? String)?.let { timestampStr ->
+            runCatching { Instant.parse(timestampStr).toEpochMilli() }.getOrNull()
+        } ?: System.currentTimeMillis()
+
+        val isMoving = payload["is_moving"] as? Boolean ?: false
+        val event = payload["event"] as? String
+        val odometer = payload["odometer"].toDoubleOrZero()
+        val extrasJson = (payload["extras"] as? Map<*, *>)?.let { extras ->
+            org.json.JSONObject(extras).toString()
+        }
+
+        return ContentValues().apply {
+            put("id", UUID.randomUUID().toString())
+            put("timestamp", timestamp)
+            put("latitude", latitude)
+            put("longitude", longitude)
+            put("accuracy", accuracy)
+            put("speed", speed)
+            put("heading", heading)
+            put("altitude", altitude)
+            put("is_moving", if (isMoving) 1 else 0)
+            put("activity_type", activityType)
+            put("activity_confidence", activityConfidence)
+            put("event", event)
+            put("odometer", odometer)
+            put("extras_json", extrasJson)
         }
     }
 
