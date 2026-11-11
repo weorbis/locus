@@ -15,7 +15,11 @@ Pod::Spec.new do |s|
     activity recognition, and HTTP sync for Android and iOS.
                        DESC
   s.homepage         = 'https://github.com/weorbis/locus'
-  s.license          = { :file => '../LICENSE' }
+  s.license          = {
+    :type => 'MIT AND BSD-3-Clause',
+    :text => File.read(File.expand_path('../LICENSE', __dir__)) + "\n\nSQLCipher:\n" +
+             File.read(File.expand_path('locus/Sources/LocusSQLCipher/LICENSE.md', __dir__))
+  }
   s.author           = { 'WeOrbis' => 'info@weorbis.com' }
   s.source           = { :path => '.' }
   s.source_files = 'locus/Sources/locus/LocusPlugin.{h,m}',
@@ -28,7 +32,18 @@ Pod::Spec.new do |s|
   s.dependency 'Flutter'
   s.platform = :ios, '14.0'
   s.frameworks = 'CoreLocation', 'CoreMotion', 'CryptoKit', 'Security'
-  s.library = 'sqlite3'
+
+  s.subspec 'SQLCipher' do |cipher|
+    cipher.source_files = 'locus/Sources/LocusSQLCipher/LocusSQLCipher.c',
+                          'locus/Sources/LocusSQLCipher/*.h',
+                          'locus/Sources/LocusSQLCipher/include/LocusSQLCipher.h'
+    cipher.public_header_files = 'locus/Sources/LocusSQLCipher/include/LocusSQLCipher.h'
+    cipher.private_header_files = 'locus/Sources/LocusSQLCipher/*.h'
+    cipher.preserve_paths = 'locus/Sources/LocusSQLCipher/vendor/sqlite3.c',
+                            'locus/Sources/LocusSQLCipher/LICENSE.md',
+                            'locus/Sources/LocusSQLCipher/README.md'
+    cipher.pod_target_xcconfig = { 'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) NDEBUG=1' }
+  end
 
   # Flutter.framework does not contain a i386 slice.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }

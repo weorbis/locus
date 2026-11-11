@@ -36,7 +36,19 @@ class GeofenceManager: NSObject, CLLocationManagerDelegate {
         locationManager.delegate = nil
     }
     
+    /// Geofence storage is read, edited and written back as a whole, so while
+    /// storage is unavailable (empty reads) these edits would erase the stored
+    /// geofences once it recovers. Skip them instead.
+    private func storageReady(for operation: String) -> Bool {
+        guard storage.isAvailable else {
+            NSLog("[locus.GeofenceManager] Storage unavailable; skipped %@ and left stored geofences untouched", operation)
+            return false
+        }
+        return true
+    }
+
     func addGeofence(_ geofence: [String: Any], store: Bool = true) {
+        if store, !storageReady(for: "addGeofence") { return }
         guard let identifier = geofence["identifier"] as? String,
               let latitude = geofence["latitude"] as? Double,
               let longitude = geofence["longitude"] as? Double,
@@ -62,6 +74,7 @@ class GeofenceManager: NSObject, CLLocationManagerDelegate {
     }
     
     func removeGeofence(_ identifier: String) {
+        guard storageReady(for: "removeGeofence") else { return }
         for region in Array(locationManager.monitoredRegions) {
             if region.identifier == identifier {
                 locationManager.stopMonitoring(for: region)
@@ -75,6 +88,7 @@ class GeofenceManager: NSObject, CLLocationManagerDelegate {
     }
     
     func removeAllGeofences() {
+        guard storageReady(for: "removeAllGeofences") else { return }
         let stored = storage.readGeofences()
         let removedIds = stored.compactMap { $0["identifier"] as? String }
         
@@ -94,6 +108,7 @@ class GeofenceManager: NSObject, CLLocationManagerDelegate {
     }
     
     func startStoredGeofences() {
+        guard storageReady(for: "startStoredGeofences") else { return }
         let stored = storage.readGeofences()
         let trimmed = enforceMaxMonitoredGeofences(stored)
 
@@ -159,7 +174,7 @@ class GeofenceManager: NSObject, CLLocationManagerDelegate {
         
         
         // Remove the failed geofence from storage to prevent retrying
-        if let id = region?.identifier {
+        if let id = region?.identifier, storageReady(for: "removal of failed geofence") {
             var stored = storage.readGeofences()
             stored.removeAll { ($0["identifier"] as? String) == id }
             storage.writeGeofences(stored)

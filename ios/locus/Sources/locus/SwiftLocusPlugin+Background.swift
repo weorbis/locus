@@ -97,6 +97,12 @@ extension SwiftLocusPlugin {
     }
     
     if configManager.batchSync || configManager.autoSync {
+      // Sync would read an empty store; try again on the next refresh.
+      guard storage.isAvailable else {
+        appendLog("Background refresh skipped: encrypted storage is unavailable", level: "warning")
+        task.setTaskCompleted(success: false)
+        return
+      }
       let group = DispatchGroup()
       
       group.enter()

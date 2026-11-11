@@ -32,7 +32,16 @@ let package = Package(
     ],
     targets: [
         .target(
+            name: "LocusSQLCipher",
+            path: "locus/Sources/LocusSQLCipher",
+            exclude: ["vendor", "LICENSE.md", "README.md"],
+            publicHeadersPath: "include",
+            cSettings: [.define("NDEBUG", to: "1")],
+            linkerSettings: [.linkedFramework("Security"), .linkedFramework("Foundation")]
+        ),
+        .target(
             name: nativeModuleName,
+            dependencies: ["LocusSQLCipher"],
             path: "locus/Sources/locus",
             exclude: [
                 "LocusPlugin.h",

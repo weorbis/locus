@@ -6,6 +6,8 @@ import XCTest
 #endif
 
 final class SQLiteStorageMigrationTests: XCTestCase {
+    private static let databaseKey = Data("locus-native-storage-fixture-key".utf8)
+
     func testLegacyRowsAreRemovedOnlyAfterTransactionCommits() throws {
         let fixture = try makeFixture()
         fixture.defaults.set(
@@ -19,7 +21,8 @@ final class SQLiteStorageMigrationTests: XCTestCase {
 
         let storage = SQLiteStorage(
             databaseURL: fixture.databaseURL,
-            userDefaults: fixture.defaults
+            userDefaults: fixture.defaults,
+            keyProvider: { Self.databaseKey }
         )
 
         XCTAssertEqual(storage.readLocations().count, 1)
@@ -38,7 +41,8 @@ final class SQLiteStorageMigrationTests: XCTestCase {
 
         let storage = SQLiteStorage(
             databaseURL: fixture.databaseURL,
-            userDefaults: fixture.defaults
+            userDefaults: fixture.defaults,
+            keyProvider: { Self.databaseKey }
         )
 
         XCTAssertTrue(storage.readLocations().isEmpty)
@@ -55,7 +59,8 @@ final class SQLiteStorageMigrationTests: XCTestCase {
         do {
             let storage = SQLiteStorage(
                 databaseURL: fixture.databaseURL,
-                userDefaults: fixture.defaults
+                userDefaults: fixture.defaults,
+                keyProvider: { Self.databaseKey }
             )
             XCTAssertEqual(storage.readLogs().count, 1)
         }
@@ -67,7 +72,8 @@ final class SQLiteStorageMigrationTests: XCTestCase {
 
         let restarted = SQLiteStorage(
             databaseURL: fixture.databaseURL,
-            userDefaults: fixture.defaults
+            userDefaults: fixture.defaults,
+            keyProvider: { Self.databaseKey }
         )
 
         XCTAssertEqual(restarted.readLogs().count, 1)
@@ -85,7 +91,8 @@ final class SQLiteStorageMigrationTests: XCTestCase {
 
         let storage = SQLiteStorage(
             databaseURL: fixture.databaseURL,
-            userDefaults: fixture.defaults
+            userDefaults: fixture.defaults,
+            keyProvider: { Self.databaseKey }
         )
 
         XCTAssertEqual(storage.readLocations().count, 1)

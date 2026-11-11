@@ -7,6 +7,8 @@ import XCTest
 #endif
 
 final class NativeHistoryQueryTests: XCTestCase {
+    private static let databaseKey = Data("locus-native-storage-fixture-key".utf8)
+
     private let epoch: Int64 = 1_783_936_800_000_000
 
     func testEveryFilterRunsBeforePagingInBothSortOrders() async throws {
@@ -332,7 +334,8 @@ final class NativeHistoryQueryTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let storage = SQLiteStorage(
             databaseURL: directory.appendingPathComponent("storage.sqlite"),
-            userDefaults: defaults
+            userDefaults: defaults,
+            keyProvider: { Self.databaseKey }
         )
         addTeardownBlock {
             defaults.removePersistentDomain(forName: suiteName)

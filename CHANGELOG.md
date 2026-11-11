@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - **Android: encrypt location, queue and log databases at rest (#49)** — SQLCipher with a per-install key wrapped by Android Keystore; databases move to backup-excluded storage and existing plaintext data is migrated once, off the main thread, and deleted only after verification. If preparation fails the app keeps running, existing files are kept, storage calls report `STORAGE_UNAVAILABLE` instead of success or empty data, and location fixes are held in memory until storage works again; see `doc/guides/data-protection.md`.
+- **iOS: always-on SQLite encryption at rest (#49)** — The whole local database now uses SQLCipher with a random Keychain key, and existing plaintext databases are migrated in the background after launch. Failures keep the original files, never replace the key of an existing encrypted database, and are retried once the device is unlocked or on later access, with storage calls returning `STORAGE_UNAVAILABLE` and new fixes and geofence events held in memory meanwhile; see the data protection guide.
 
 ### Fixed
 

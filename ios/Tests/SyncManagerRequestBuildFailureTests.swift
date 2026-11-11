@@ -6,6 +6,8 @@ import XCTest
 #endif
 
 final class SyncManagerRequestBuildFailureTests: XCTestCase {
+    private static let databaseKey = Data("locus-native-storage-fixture-key".utf8)
+
     private final class InMemoryConfigStore: ConfigSnapshotStoring {
         func read() -> PersistedConfigSnapshot { .absent }
 
@@ -138,7 +140,8 @@ final class SyncManagerRequestBuildFailureTests: XCTestCase {
         return StorageManager(
             sqliteStorage: SQLiteStorage(
                 databaseURL: directory.appendingPathComponent("storage.sqlite"),
-                userDefaults: defaults
+                userDefaults: defaults,
+                keyProvider: { Self.databaseKey }
             )
         )
     }

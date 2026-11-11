@@ -35,6 +35,8 @@ class SecureStorage {
     static let headersHandlesKey = "bg_headers_handles_v1"
 
     static let shared = SecureStorage()
+    static let databaseKeyByteCount = 32
+    private static let databaseKeyAccount = "locus_database_key_v1"
 
     init(serviceName: String = "dev.locus.secureStorage", accessGroup: String? = nil) {
         self.serviceName = serviceName
@@ -110,6 +112,51 @@ class SecureStorage {
     }
 
     // MARK: - Data Operations
+
+    /// Returns the database key. A new key is created only when `mayCreate` is
+    /// true; callers pass false while an encrypted database exists, because a
+    /// replacement key could never open it and would make the loss permanent.
+    func databaseKey(mayCreate: Bool) throws -> Data {
+        let read = readKeychainData(forKey: Self.databaseKeyAccount)
+        if read.status == errSecSuccess {
+            guard let data = read.data, data.count == Self.databaseKeyByteCount else {
+                throw NSError(domain: "dev.locus.storage", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "Database Keychain key has an invalid length"
+                ])
+            }
+            return data
+        }
+        guard read.status == errSecItemNotFound else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(read.status))
+        }
+        guard mayCreate else {
+            logError("Encrypted database exists but its Keychain key is missing; no new key was created and no file was changed")
+            throw NSError(domain: "dev.locus.storage", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "The Keychain key for the existing encrypted database is missing"
+            ])
+        }
+
+        var bytes = [UInt8](repeating: 0, count: Self.databaseKeyByteCount)
+        let randomStatus = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        guard randomStatus == errSecSuccess else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(randomStatus))
+        }
+        let key = Data(bytes)
+        var query = lookupQuery(forKey: Self.databaseKeyAccount)
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        query[kSecAttrSynchronizable as String] = false
+        query[kSecValueData as String] = key
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecSuccess { return key }
+        if status == errSecDuplicateItem {
+            let existing = readKeychainData(forKey: Self.databaseKeyAccount)
+            if existing.status == errSecSuccess,
+               let data = existing.data, data.count == Self.databaseKeyByteCount {
+                return data
+            }
+        }
+        throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+    }
 
     func setData(_ data: Data, forKey key: String) -> Bool {
         let lookup = lookupQuery(forKey: key)
