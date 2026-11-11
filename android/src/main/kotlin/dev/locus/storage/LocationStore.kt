@@ -3,6 +3,9 @@ package dev.locus.storage
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
+import android.database.sqlite.SQLiteBlobTooBigException
+import android.database.sqlite.SQLiteConstraintException
+import android.database.sqlite.SQLiteDatatypeMismatchException
 import android.location.Location
 import net.zetetic.database.sqlcipher.SQLiteCursor
 import net.zetetic.database.sqlcipher.SQLiteDatabase
@@ -63,45 +66,77 @@ class LocationStore(context: Context) : Closeable {
         }
     }
 
-    fun insertPayload(payload: Map<String, Any>?, maxDays: Int, maxRecords: Int) {
-        insertPayloads(listOfNotNull(payload), maxDays, maxRecords)
-    }
-
     /**
-     * Inserts [payloads] in order in one transaction, then prunes and checkpoints once, so a backlog of
-     * held fixes is written quickly and atomically.
+     * Inserts [payloads] in order and returns how many from the front were consumed (written, or
+     * dropped because SQLite rejects that row). The rest could not be written now and should be
+     * retried. The fast path is one transaction with a single prune and checkpoint; if it fails, rows
+     * are retried one by one so a single rejected row cannot take the others with it.
      */
-    fun insertPayloads(payloads: List<Map<String, Any>>, maxDays: Int, maxRecords: Int) {
-        if (payloads.isEmpty()) return
+    fun insertPayloads(payloads: List<Map<String, Any>>, maxDays: Int, maxRecords: Int): Int {
+        if (payloads.isEmpty()) return 0
+        val db = writableDatabase
         try {
-            val rows = payloads.mapNotNull { payload ->
-                try {
-                    toContentValues(payload)
-                } catch (e: Exception) {
-                    android.util.Log.e("LocationStore", "Skipping malformed payload: ${e.message}", e)
-                    null
-                }
-            }
-            if (rows.isEmpty()) return
-            val db = writableDatabase
             db.beginTransaction()
             try {
-                for (values in rows) {
-                    db.insertWithOnConflict("locations", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+                for (payload in payloads) {
+                    toContentValues(payload)?.let { insertRow(db, it) }
                 }
-                if (maxDays > 0) pruneByAge(maxDays)
-                if (maxRecords > 0) pruneByCount(maxRecords)
+                prune(maxDays, maxRecords)
                 db.setTransactionSuccessful()
             } finally {
                 db.endTransaction()
             }
             checkpoint(db)
+            return payloads.size
         } catch (e: StorageUnavailableException) {
             throw e
         } catch (e: Exception) {
-            android.util.Log.e("LocationStore", "Failed to insert payload: ${e.message}", e)
+            android.util.Log.w("LocationStore", "Batch insert failed; retrying rows one by one: ${e.message}")
         }
+        var consumed = 0
+        for (payload in payloads) {
+            try {
+                toContentValues(payload)?.let { insertRow(db, it) }
+            } catch (e: StorageUnavailableException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isRowRejection(e)) {
+                    android.util.Log.e("LocationStore", "Insert failed; keeping ${payloads.size - consumed} fix(es) for retry: ${e.message}", e)
+                    break
+                }
+                android.util.Log.e("LocationStore", "Dropped a location SQLite rejects: ${e.message}", e)
+            }
+            consumed++
+        }
+        if (consumed > 0) {
+            try {
+                prune(maxDays, maxRecords)
+                checkpoint(db)
+            } catch (e: StorageUnavailableException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("LocationStore", "Prune after insert failed: ${e.message}", e)
+            }
+        }
+        return consumed
     }
+
+    private fun insertRow(db: SQLiteDatabase, values: ContentValues) {
+        db.insertWithOnConflict("locations", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    private fun prune(maxDays: Int, maxRecords: Int) {
+        if (maxDays > 0) pruneByAge(maxDays)
+        if (maxRecords > 0) pruneByCount(maxRecords)
+    }
+
+    /** True when the row itself can never be stored, so retrying it cannot help. */
+    private fun isRowRejection(error: Exception): Boolean =
+        error is SQLiteConstraintException ||
+            error is SQLiteDatatypeMismatchException ||
+            error is SQLiteBlobTooBigException ||
+            error is ClassCastException ||
+            error is org.json.JSONException
 
     private fun toContentValues(payload: Map<String, Any>): ContentValues? {
         val coords = payload["coords"] as? Map<*, *> ?: return null

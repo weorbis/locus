@@ -82,19 +82,22 @@ class StateManager(private val context: Context) {
     }
 
     /**
-     * Writes all held fixes in order in one transaction, using the newest retention limits. If storage is
-     * still unavailable they all stay held. Main thread only.
+     * Writes held fixes in order, using the newest retention limits. Fixes storage could not take now
+     * (unavailable, or a transient write error) stay held for the next attempt. Main thread only.
      */
     fun flushHeldLocations() {
         synchronized(heldLocations) {
             val newest = heldLocations.lastOrNull() ?: return
-            try {
+            val consumed = try {
                 locationStore.insertPayloads(heldLocations.map { it.payload }, newest.maxDays, newest.maxRecords)
             } catch (error: StorageUnavailableException) {
                 Log.w(TAG, "Storage unavailable; holding ${heldLocations.size} unsaved fix(es): ${error.message}")
                 return
             }
-            heldLocations.clear()
+            repeat(consumed) { heldLocations.removeFirst() }
+            if (heldLocations.isNotEmpty()) {
+                Log.w(TAG, "Holding ${heldLocations.size} unsaved fix(es) after a failed write")
+            }
         }
     }
 
