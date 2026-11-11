@@ -102,22 +102,11 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-/.claude
-/.agents
-/.codex
-/.gemini
-/.agent
-.mcp.json
 
 # SwiftPM build cache for the top-level native helper-test/indexing package.
 # Production Flutter builds use either CocoaPods or ios/locus/Package.swift.
 ios/.build/
 ios/Package.resolved
-/docs/planning
-.local-agent.json
-
-# local-agent-setup: personal/machine-local agent overrides (gitignored)
-AGENTS.override.md
 
 # SwiftPM/SourceKit build output for the plugin package itself.
 ios/locus/.build/

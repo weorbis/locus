@@ -36,9 +36,6 @@ example/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.j
 pubspec.lock
 
 # Internal development documentation (not for package users)
-AGENTS.md
-CLAUDE.md
-GEMINI.md
 .github/
 doc/roadmap/
 /docs/
