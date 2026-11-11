@@ -30,24 +30,35 @@ class GeofenceEventProcessor(
         val locationPayload = extractLocationPayload(event)
         val privacyGuardEnabled = config.privacyModeEnabled
 
-        if (!privacyGuardEnabled) locationPayload?.let { payload ->
-            if (PersistencePolicy.shouldPersist(config, "geofence")) {
-                stateManager.storeLocationPayload(payload, config.maxDaysToPersist, config.maxRecordsToPersist)
-            }
-            if (config.autoSync && !config.httpUrl.isNullOrEmpty() && autoSyncChecker.isAutoSyncAllowed()) {
-                if (config.batchSync) {
-                    syncManager.attemptBatchSync()
-                } else {
-                    syncManager.syncNow(payload)
-                }
+        val send = {
+            eventDispatcher.sendEvent(
+                event,
+                containsRawLocation = locationPayload != null,
+                privacyGuardEnabled = privacyGuardEnabled,
+            )
+        }
+        if (privacyGuardEnabled || locationPayload == null) {
+            send()
+            return
+        }
+        // Store and sync first, then notify: a headless task may query history in response to the event.
+        stateManager.whenStorageReady {
+            persistAndSync(locationPayload)
+            send()
+        }
+    }
+
+    private fun persistAndSync(payload: Map<String, Any>) {
+        if (PersistencePolicy.shouldPersist(config, "geofence")) {
+            stateManager.storeLocationPayload(payload, config.maxDaysToPersist, config.maxRecordsToPersist)
+        }
+        if (config.autoSync && !config.httpUrl.isNullOrEmpty() && autoSyncChecker.isAutoSyncAllowed()) {
+            if (config.batchSync) {
+                syncManager.attemptBatchSync()
+            } else {
+                syncManager.syncNow(payload)
             }
         }
-
-        eventDispatcher.sendEvent(
-            event,
-            containsRawLocation = locationPayload != null,
-            privacyGuardEnabled = privacyGuardEnabled,
-        )
     }
 
     private fun buildGeofenceEvent(obj: JSONObject): Map<String, Any>? {

@@ -3,57 +3,23 @@ package dev.locus.storage
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
-import android.database.sqlite.SQLiteCursor
-import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteOpenHelper
+import android.database.sqlite.SQLiteBlobTooBigException
+import android.database.sqlite.SQLiteConstraintException
+import android.database.sqlite.SQLiteDatatypeMismatchException
 import android.location.Location
+import net.zetetic.database.sqlcipher.SQLiteCursor
+import net.zetetic.database.sqlcipher.SQLiteDatabase
+import net.zetetic.database.sqlcipher.SQLiteOpenHelper
+import java.io.Closeable
 import java.time.Instant
 import java.util.UUID
 
-class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
+class LocationStore(context: Context) : Closeable {
+    private val helper = LazyHelper(context, ::Helper)
+    internal val writableDatabase: SQLiteDatabase get() = helper.get().writableDatabase
+    internal val readableDatabase: SQLiteDatabase get() = helper.get().readableDatabase
 
-    override fun onConfigure(db: SQLiteDatabase) {
-        // Durability: WAL keeps the journal independent of the main DB, and
-        // synchronous=FULL fsyncs both files on commit. Together they survive
-        // process kills between commit and checkpoint without data loss.
-        //
-        // Use rawQuery instead of execSQL: Samsung's hardened SQLite (seen on
-        // SM A346E / Android 16) treats `PRAGMA journal_mode=WAL` as a query
-        // because it returns the resulting mode, and rejects it from execSQL
-        // with "Queries can be performed using SQLiteDatabase query or
-        // rawQuery methods only." rawQuery works on AOSP and Samsung alike.
-        db.rawQuery("PRAGMA journal_mode=WAL", null).use { it.moveToFirst() }
-        db.rawQuery("PRAGMA synchronous=FULL", null).use { it.moveToFirst() }
-    }
-
-    override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL(
-            """
-            CREATE TABLE locations (
-                id TEXT PRIMARY KEY,
-                timestamp INTEGER,
-                latitude REAL,
-                longitude REAL,
-                accuracy REAL,
-                speed REAL,
-                heading REAL,
-                altitude REAL,
-                is_moving INTEGER,
-                activity_type TEXT,
-                activity_confidence INTEGER,
-                event TEXT,
-                odometer REAL,
-                extras_json TEXT
-            )
-            """.trimIndent()
-        )
-    }
-
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 3) {
-            db.execSQL("ALTER TABLE locations ADD COLUMN extras_json TEXT")
-        }
-    }
+    override fun close() = helper.close()
 
     fun insertLocation(
         location: Location,
@@ -93,69 +59,124 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
             val db = writableDatabase
             db.execSQL("DELETE FROM locations")
             checkpoint(db)
+        } catch (e: StorageUnavailableException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("LocationStore", "Failed to clear locations: ${e.message}", e)
         }
     }
 
-    fun insertPayload(payload: Map<String, Any>?, maxDays: Int, maxRecords: Int) {
-        if (payload == null) return
-
+    /**
+     * Inserts [payloads] in order and returns how many from the front were consumed (written, or
+     * dropped because SQLite rejects that row). The rest could not be written now and should be
+     * retried. The fast path is one transaction with a single prune and checkpoint; if it fails, rows
+     * are retried one by one so a single rejected row cannot take the others with it.
+     */
+    fun insertPayloads(payloads: List<Map<String, Any>>, maxDays: Int, maxRecords: Int): Int {
+        if (payloads.isEmpty()) return 0
+        val db = writableDatabase
         try {
-            val coords = payload["coords"] as? Map<*, *> ?: return
-            val latitude = coords["latitude"].toDoubleOrZero()
-            val longitude = coords["longitude"].toDoubleOrZero()
-            val accuracy = coords["accuracy"].toDoubleOrZero()
-            val speed = coords["speed"].toDoubleOrZero()
-            val heading = coords["heading"].toDoubleOrZero()
-            val altitude = coords["altitude"].toDoubleOrZero()
-
-            val activity = payload["activity"] as? Map<*, *>
-            val activityType = activity?.get("type") as? String
-            val activityConfidence = (activity?.get("confidence") as? Number)?.toInt() ?: 0
-
-            val timestamp = (payload["timestamp"] as? String)?.let { timestampStr ->
-                runCatching { Instant.parse(timestampStr).toEpochMilli() }.getOrNull()
-            } ?: System.currentTimeMillis()
-
-            val isMoving = payload["is_moving"] as? Boolean ?: false
-            val event = payload["event"] as? String
-            val odometer = payload["odometer"].toDoubleOrZero()
-            val extrasJson = (payload["extras"] as? Map<*, *>)?.let { extras ->
-                org.json.JSONObject(extras).toString()
-            }
-
-            val values = ContentValues().apply {
-                put("id", UUID.randomUUID().toString())
-                put("timestamp", timestamp)
-                put("latitude", latitude)
-                put("longitude", longitude)
-                put("accuracy", accuracy)
-                put("speed", speed)
-                put("heading", heading)
-                put("altitude", altitude)
-                put("is_moving", if (isMoving) 1 else 0)
-                put("activity_type", activityType)
-                put("activity_confidence", activityConfidence)
-                put("event", event)
-                put("odometer", odometer)
-                put("extras_json", extrasJson)
-            }
-
-            val db = writableDatabase
             db.beginTransaction()
             try {
-                db.insertWithOnConflict("locations", null, values, SQLiteDatabase.CONFLICT_REPLACE)
-
-                if (maxDays > 0) pruneByAge(maxDays)
-                if (maxRecords > 0) pruneByCount(maxRecords)
+                for (payload in payloads) {
+                    toContentValues(payload)?.let { insertRow(db, it) }
+                }
+                prune(maxDays, maxRecords)
                 db.setTransactionSuccessful()
             } finally {
                 db.endTransaction()
             }
             checkpoint(db)
+            return payloads.size
+        } catch (e: StorageUnavailableException) {
+            throw e
         } catch (e: Exception) {
-            android.util.Log.e("LocationStore", "Failed to insert payload: ${e.message}", e)
+            android.util.Log.w("LocationStore", "Batch insert failed; retrying rows one by one: ${e.message}")
+        }
+        var consumed = 0
+        for (payload in payloads) {
+            try {
+                toContentValues(payload)?.let { insertRow(db, it) }
+            } catch (e: StorageUnavailableException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isRowRejection(e)) {
+                    android.util.Log.e("LocationStore", "Insert failed; keeping ${payloads.size - consumed} fix(es) for retry: ${e.message}", e)
+                    break
+                }
+                android.util.Log.e("LocationStore", "Dropped a location SQLite rejects: ${e.message}", e)
+            }
+            consumed++
+        }
+        if (consumed > 0) {
+            try {
+                prune(maxDays, maxRecords)
+                checkpoint(db)
+            } catch (e: StorageUnavailableException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("LocationStore", "Prune after insert failed: ${e.message}", e)
+            }
+        }
+        return consumed
+    }
+
+    private fun insertRow(db: SQLiteDatabase, values: ContentValues) {
+        db.insertWithOnConflict("locations", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    private fun prune(maxDays: Int, maxRecords: Int) {
+        if (maxDays > 0) pruneByAge(maxDays)
+        if (maxRecords > 0) pruneByCount(maxRecords)
+    }
+
+    /** True when the row itself can never be stored, so retrying it cannot help. */
+    private fun isRowRejection(error: Exception): Boolean =
+        error is SQLiteConstraintException ||
+            error is SQLiteDatatypeMismatchException ||
+            error is SQLiteBlobTooBigException ||
+            error is ClassCastException ||
+            error is org.json.JSONException
+
+    private fun toContentValues(payload: Map<String, Any>): ContentValues? {
+        val coords = payload["coords"] as? Map<*, *> ?: return null
+        val latitude = coords["latitude"].toDoubleOrZero()
+        val longitude = coords["longitude"].toDoubleOrZero()
+        val accuracy = coords["accuracy"].toDoubleOrZero()
+        val speed = coords["speed"].toDoubleOrZero()
+        val heading = coords["heading"].toDoubleOrZero()
+        val altitude = coords["altitude"].toDoubleOrZero()
+
+        val activity = payload["activity"] as? Map<*, *>
+        val activityType = activity?.get("type") as? String
+        val activityConfidence = (activity?.get("confidence") as? Number)?.toInt() ?: 0
+
+        val timestamp = (payload["timestamp"] as? String)?.let { timestampStr ->
+            runCatching { Instant.parse(timestampStr).toEpochMilli() }.getOrNull()
+        } ?: System.currentTimeMillis()
+
+        val isMoving = payload["is_moving"] as? Boolean ?: false
+        val event = payload["event"] as? String
+        val odometer = payload["odometer"].toDoubleOrZero()
+        val extrasJson = (payload["extras"] as? Map<*, *>)?.let { extras ->
+            org.json.JSONObject(extras).toString()
+        }
+
+        return ContentValues().apply {
+            put("id", UUID.randomUUID().toString())
+            put("timestamp", timestamp)
+            put("latitude", latitude)
+            put("longitude", longitude)
+            put("accuracy", accuracy)
+            put("speed", speed)
+            put("heading", heading)
+            put("altitude", altitude)
+            put("is_moving", if (isMoving) 1 else 0)
+            put("activity_type", activityType)
+            put("activity_confidence", activityConfidence)
+            put("event", event)
+            put("odometer", odometer)
+            put("extras_json", extrasJson)
         }
     }
 
@@ -179,6 +200,8 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
                     results.add(columns.read(cursor))
                 }
             }
+        } catch (e: StorageUnavailableException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("LocationStore", "Failed to read locations: ${e.message}", e)
         }
@@ -321,6 +344,61 @@ class LocationStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
             db.rawQuery("PRAGMA wal_checkpoint(PASSIVE)", null).use { it.moveToFirst() }
         } catch (e: Exception) {
             android.util.Log.w("LocationStore", "wal_checkpoint failed: ${e.message}")
+        }
+    }
+
+    private class Helper(context: EncryptedDatabaseContext) : SQLiteOpenHelper(
+        context,
+        DB_NAME,
+        context.password,
+        null,
+        DB_VERSION,
+        EncryptedStorage.MINIMUM_SUPPORTED_VERSION,
+        EncryptedStorage.errorHandler,
+        null,
+        false
+    ) {
+        override fun onConfigure(db: SQLiteDatabase) {
+            // Durability: WAL keeps the journal independent of the main DB, and
+            // synchronous=FULL fsyncs both files on commit. Together they survive
+            // process kills between commit and checkpoint without data loss.
+            //
+            // Use rawQuery instead of execSQL: Samsung's hardened SQLite (seen on
+            // SM A346E / Android 16) treats `PRAGMA journal_mode=WAL` as a query
+            // because it returns the resulting mode, and rejects it from execSQL
+            // with "Queries can be performed using SQLiteDatabase query or
+            // rawQuery methods only." rawQuery works on AOSP and Samsung alike.
+            db.rawQuery("PRAGMA journal_mode=WAL", null).use { it.moveToFirst() }
+            db.rawQuery("PRAGMA synchronous=FULL", null).use { it.moveToFirst() }
+        }
+
+        override fun onCreate(db: SQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE locations (
+                    id TEXT PRIMARY KEY,
+                    timestamp INTEGER,
+                    latitude REAL,
+                    longitude REAL,
+                    accuracy REAL,
+                    speed REAL,
+                    heading REAL,
+                    altitude REAL,
+                    is_moving INTEGER,
+                    activity_type TEXT,
+                    activity_confidence INTEGER,
+                    event TEXT,
+                    odometer REAL,
+                    extras_json TEXT
+                )
+                """.trimIndent()
+            )
+        }
+
+        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+            if (oldVersion < 3) {
+                db.execSQL("ALTER TABLE locations ADD COLUMN extras_json TEXT")
+            }
         }
     }
 
