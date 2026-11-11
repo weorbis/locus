@@ -11,7 +11,7 @@ import 'package:locus/src/shared/location_utils.dart';
 /// Configuration for spoof detection behavior.
 ///
 /// Multiple detection factors can be combined for more reliable detection:
-/// - Mock provider detection (Android)
+/// - OS-reported simulated locations (Android and iOS 15+)
 /// - Impossible speed detection
 /// - Altitude anomalies
 /// - Accuracy patterns
@@ -99,7 +99,7 @@ class SpoofDetectionConfig {
   /// Callback when spoofing is detected.
   final void Function(SpoofDetectionEvent event)? onSpoofDetected;
 
-  /// Whether to check for mock provider flag (Android only).
+  /// Whether to check the OS simulation flag (Android and iOS 15+).
   final bool checkMockProvider;
 
   /// Whether to check for developer options enabled.
@@ -276,7 +276,7 @@ class SpoofDetectionEvent {
 
 /// Factors that can indicate location spoofing.
 enum SpoofFactor {
-  /// Android: Location marked as from mock provider.
+  /// Location marked as simulated by Android or iOS 15+.
   mockProvider,
 
   /// Device has developer options enabled.
@@ -364,14 +364,15 @@ class SpoofDetector {
   ///
   /// Returns null if no spoofing detected, or a [SpoofDetectionEvent]
   /// if suspicious.
+  /// Uses [Location.isMockProvider] unless [isMockProvider] is supplied.
   SpoofDetectionEvent? analyze(Location location, {bool? isMockProvider}) {
     if (!config.enabled) return null;
 
     final factors = <SpoofFactor>{};
     final details = <String, dynamic>{};
 
-    // Check mock provider (Android)
-    if (config.checkMockProvider && isMockProvider == true) {
+    if (config.checkMockProvider &&
+        (isMockProvider ?? location.isMockProvider) == true) {
       factors.add(SpoofFactor.mockProvider);
     }
 

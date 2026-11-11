@@ -21,6 +21,16 @@ await Locus.ready(ConfigPresets.balanced.copyWith(
 ));
 ```
 
+## Location simulation flag
+
+Each location in the sync body may include an optional top-level boolean
+`is_mock_provider`: `true` when the OS marked the fix as simulated, `false`
+when it reported a real fix. Read the value, not the key's presence. The key is
+omitted when unknown: on iOS 14, when iOS gives no source information, and for
+Android locations rebuilt from stored history. Android batch sync
+(`batchSync: true`, used by the `lowPower`, `balanced` and `tracking` presets) uploads from that stored
+history, so its bodies omit the key.
+
 ## Quick testing
 
 For testing without a backend, use [webhook.site](https://webhook.site) to get a test endpoint:
