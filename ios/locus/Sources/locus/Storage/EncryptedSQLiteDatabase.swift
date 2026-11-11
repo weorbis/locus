@@ -23,16 +23,7 @@ final class EncryptedSQLiteDatabase {
         let exists = FileManager.default.fileExists(atPath: url.path)
         let plaintext: Bool
         if exists {
-            let file = try FileHandle(forReadingFrom: url)
-            do {
-                plaintext = try file.read(upToCount: Self.plaintextHeader.count) == Self.plaintextHeader
-                try file.close()
-            } catch {
-                do { try file.close() } catch {
-                    NSLog("[locus.SQLiteStorage] Header file close failed: %@", error.localizedDescription)
-                }
-                throw error
-            }
+            plaintext = try Self.readHeader(at: url, count: Self.plaintextHeader.count) == Self.plaintextHeader
         } else {
             plaintext = false
         }
@@ -56,18 +47,29 @@ final class EncryptedSQLiteDatabase {
     static func containsEncryptedDatabase(at url: URL) -> Bool {
         guard FileManager.default.fileExists(atPath: url.path) else { return false }
         do {
-            let file = try FileHandle(forReadingFrom: url)
-            defer {
-                do { try file.close() } catch {
-                    NSLog("[locus.SQLiteStorage] Header file close failed: %@", error.localizedDescription)
-                }
-            }
-            guard let header = try file.read(upToCount: plaintextHeader.count), !header.isEmpty else { return false }
+            let header = try readHeader(at: url, count: plaintextHeader.count)
+            guard !header.isEmpty else { return false }
             return header != plaintextHeader
         } catch {
             NSLog("[locus.SQLiteStorage] Database header unreadable; treating it as encrypted: %@", error.localizedDescription)
             return true
         }
+    }
+
+    /// Reads up to `count` leading bytes with POSIX calls, which every
+    /// deployment target supports (unlike `FileHandle.read(upToCount:)`).
+    private static func readHeader(at url: URL, count: Int) throws -> Data {
+        let descriptor = Darwin.open(url.path, O_RDONLY)
+        guard descriptor >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer {
+            if Darwin.close(descriptor) != 0 {
+                NSLog("[locus.SQLiteStorage] Header file close failed: errno %d", errno)
+            }
+        }
+        var buffer = [UInt8](repeating: 0, count: count)
+        let bytesRead = Darwin.read(descriptor, &buffer, count)
+        guard bytesRead >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        return Data(buffer.prefix(bytesRead))
     }
 
     func open(readOnly: Bool = false) throws -> OpaquePointer {
