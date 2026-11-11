@@ -4,19 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-11-11
+
 ### Added
 
-- **Developer route replay (#48)** — Add the pure-Dart `locus:replay` CLI for GPX, JSON and example recorder exports through Android emulator and iOS simulator location tools, with timing controls, looping, dry runs and a route replay guide.
+- **`Location.isMockProvider`** — The OS "simulated location" flag (Android `isMock`/`isFromMockProvider`, iOS 15+ `isSimulatedBySoftware`), now used by spoof detection's `checkMockProvider`. Sync bodies may include an optional `is_mock_provider` field; Android batch sync omits it.
+- **Route replay CLI (#48)** — `dart run locus:replay` plays a GPX or JSON route through the Android emulator or iOS simulator. See `doc/guides/route-replay.md`.
 
 ### Changed
 
-- **Android: encrypt location, queue and log databases at rest (#49)** — SQLCipher with a per-install key wrapped by Android Keystore; databases move to backup-excluded storage and existing plaintext data is migrated once, off the main thread, and deleted only after verification. If preparation fails the app keeps running, existing files are kept, storage calls report `STORAGE_UNAVAILABLE` instead of success or empty data, and location fixes are held in memory until storage works again; see `doc/guides/data-protection.md`.
-- **iOS: always-on SQLite encryption at rest (#49)** — The whole local database now uses SQLCipher with a random Keychain key, and existing plaintext databases are migrated in the background after launch. Failures keep the original files, never replace the key of an existing encrypted database, and are retried once the device is unlocked or on later access, with storage calls returning `STORAGE_UNAVAILABLE` and new fixes and geofence events held in memory meanwhile; see the data protection guide.
+- **Stored data is encrypted at rest (#49)** — Location history, the sync queue and logs use SQLCipher on Android and iOS, with a per-install key in the Android Keystore or iOS Keychain. Android databases move to backup-excluded storage. Existing data is migrated once, in the background, and the plaintext copy is removed only after verification. See `doc/guides/data-protection.md`.
+- **Storage failures are reported** — If storage cannot be opened (for example before first unlock on iOS), calls fail with `STORAGE_UNAVAILABLE` instead of returning empty data, and new locations are held until storage recovers.
 
 ### Fixed
 
-- **Geofence workflows: saves can no longer overwrite newer state (#44)** — `GeofenceWorkflowEngine` now runs state-store writes one at a time and writes only the newest pending state. `dispose()` waits for the final save, and a failing store is logged instead of raising an uncaught error.
-- **Spoof detection now sees the OS "simulated location" flag** — Android (`Location.isMock`) and iOS 15+ (`isSimulatedBySoftware`) report it as the new nullable `Location.isMockProvider`, and `checkMockProvider` uses it. Location payloads and iOS sync bodies gain an optional `is_mock_provider` field; Android's stored history (and therefore Android batch sync) does not keep it.
+- **Geofence workflows (#44)** — Saved workflow state can no longer be overwritten by an older snapshot.
+
+### Upgrade notes
+
+- After the first launch on 2.6.0, an app cannot be downgraded to an earlier locus version without losing stored history, because older versions cannot read the encrypted databases.
+- The app needs free space for a second copy of the databases during the one-time migration.
+- iOS: SwiftPM host apps must include SQLCipher's BSD license in their third-party notices (CocoaPods adds it to acknowledgements).
 
 ## [2.5.0] - 2026-11-04
 

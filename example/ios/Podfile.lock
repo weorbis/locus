@@ -2,7 +2,10 @@ PODS:
   - Flutter (1.0.0)
   - integration_test (0.0.1):
     - Flutter
-  - locus (2.5.0):
+  - locus (2.6.0):
+    - Flutter
+    - locus/SQLCipher (= 2.6.0)
+  - locus/SQLCipher (2.6.0):
     - Flutter
   - permission_handler_apple (9.4.8):
     - Flutter
@@ -26,7 +29,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
-  locus: 232726649a68ad4f7b445e46dba6f07c0f547ef9
+  locus: 1964293da18fc00831bce7c59cff8a25144677d4
   permission_handler_apple: 92d754bbaa7361d436db2d6c3c1c2a0fdcec462e
 
 PODFILE CHECKSUM: 768b4a918a83e6e6160609012b51a2f498d61a44

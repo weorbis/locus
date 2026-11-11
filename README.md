@@ -68,7 +68,7 @@ For full documentation, visit the [Locus GitHub repository](https://github.com/w
 
 ```yaml
 dependencies:
-  locus: ^2.5.0
+  locus: ^2.6.0
 ```
 
 ### 2. Basic Setup
@@ -151,7 +151,7 @@ dart run locus:migrate --dry-run
 
 ## Versioning
 
-- Current release: **v2.5.0**
+- Current release: **v2.6.0**
 - Supports Flutter 3.x / Dart 3.x
 - See [CHANGELOG.md](CHANGELOG.md) for release details
 
