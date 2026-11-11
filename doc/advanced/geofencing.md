@@ -194,4 +194,15 @@ Locus.geofencing.workflowEvents.listen((event) {
 
 ---
 
+### Workflow persistence
+
+When using `GeofenceWorkflowEngine` directly, pass a `WorkflowStateStore` to
+save progress after each completed step, and call `loadState()` after
+registering workflows to restore it.
+
+Saves run one at a time. Requests made while a save is running collapse into
+one, which writes the newest state. `dispose()` waits for that final save.
+A failed save is logged as `workflow_state_save_failed` under
+`locus.geofence_workflow` and is not retried.
+
 **Next:** [Privacy Zones](privacy-zones.md)
