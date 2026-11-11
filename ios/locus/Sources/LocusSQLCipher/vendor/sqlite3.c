@@ -111207,16 +111207,14 @@ sqlite3_mutex* sqlcipher_mutex(int mutex) {
   return sqlcipher_static_mutex[mutex];
 }
 
-static void sqlcipher_atexit(void) {
-  sqlcipher_log(SQLCIPHER_LOG_DEBUG, SQLCIPHER_LOG_CORE, "%s: calling sqlcipher_extra_shutdown()", __func__);
-  sqlcipher_extra_shutdown();
-}
+/* LOCUS PATCH: no cleanup at process exit. Background threads may still be
+** using SQLCipher then, and freeing its heap and mutexes under them crashes the
+** process. The OS reclaims the memory; sqlite3_shutdown() still cleans up. */
+static void sqlcipher_atexit(void) {}
 
 #if !defined(__wasm__)
-static void sqlcipher_fini(void) {
-  sqlcipher_log(SQLCIPHER_LOG_DEBUG, SQLCIPHER_LOG_CORE, "%s: calling sqlcipher_extra_shutdown()", __func__);
-  sqlcipher_extra_shutdown();
-}
+/* LOCUS PATCH: see sqlcipher_atexit. */
+static void sqlcipher_fini(void) {}
 #endif
 
 #if defined(_WIN32)

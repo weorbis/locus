@@ -29,7 +29,7 @@ never exposes unprefixed SQLite declarations or macros to a host. The wrapper
 prototype against the implementation. It never changes host compiler flags or
 system SQLite imports. Only the wrapper C file is compiled; the amalgamation is
 included, never compiled a second time, and its warnings are silenced because
-the file is vendored unmodified.
+the file is vendored with one patch (below).
 
 `LocusSQLCipherConfiguration.h` contains the official Apple source-integration
 flags, including CommonCrypto, codec, in-memory temporary storage, thread safety,
@@ -85,3 +85,12 @@ building a consuming app.
    queries by hand. Also link a host using system SQLite and verify both
    libraries independently. Measure a release simulator/device host before
    and after the update; source size is not application download size.
+
+## Local patch
+
+`sqlcipher_atexit` and `sqlcipher_fini` in `vendor/sqlite3.c` are empty (marked
+`LOCUS PATCH`). Upstream frees SQLCipher's heap and mutexes at process exit even
+while other threads are still using it, which crashes the process. The OS
+reclaims that memory, and `sqlite3_shutdown()` still runs the full cleanup.
+Re-apply this patch when updating the amalgamation.
+
