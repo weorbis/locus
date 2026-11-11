@@ -7,6 +7,7 @@ import android.util.Log
 import dev.locus.LocusPlugin
 import dev.locus.storage.LocationStore
 import dev.locus.storage.QueueStore
+import dev.locus.storage.StorageUnavailableException
 import kotlinx.coroutines.*
 import org.json.JSONArray
 import org.json.JSONException
@@ -282,7 +283,12 @@ class SyncManager(
         } else {
             config.maxBatchSize
         }
-        val backlog = buildBacklog()
+        val backlog = try {
+            buildBacklog()
+        } catch (error: StorageUnavailableException) {
+            Log.w("locus.SyncManager", "attemptBatchSync: skipped - storage unavailable (${error.message})")
+            return
+        }
         Log.d(
             "locus.SyncManager",
             "attemptBatchSync: pending=${backlog.pendingLocationCount}, threshold=$threshold"
@@ -362,7 +368,12 @@ class SyncManager(
             if (isLocationSyncInFlight) {
                 null
             } else {
-                val nextBatch = selectNextLocationBatch(effectiveLimit)
+                val nextBatch = try {
+                    selectNextLocationBatch(effectiveLimit)
+                } catch (error: StorageUnavailableException) {
+                    Log.w(TAG, "Location sync skipped - storage unavailable (${error.message})")
+                    null
+                }
                 if (nextBatch == null) {
                     pendingLocationDrainRequested = false
                     noBatchAvailable = true

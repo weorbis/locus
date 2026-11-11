@@ -54,6 +54,7 @@ For full documentation, visit the [Locus GitHub repository](https://github.com/w
 - **[Platform Behaviors](https://github.com/weorbis/locus/blob/main/doc/guides/platform-specific-behaviors.md)** - Android/iOS runtime differences.
 - **[HTTP Synchronization](https://github.com/weorbis/locus/blob/main/doc/guides/http-synchronization.md)** - Request formats, retry, and batching.
 - **[Performance Optimization](https://github.com/weorbis/locus/blob/main/doc/guides/performance-optimization.md)** - Tuning for battery and accuracy.
+- **[Route Replay](https://github.com/weorbis/locus/blob/main/doc/guides/route-replay.md)** - Drive the real engine with GPX or JSON through OS location simulation.
 - **[Querying Stored History](https://github.com/weorbis/locus/blob/main/doc/guides/querying-history.md)** - Native filtering, ordering, pagination, and the example's storage controls.
 - **[Data Protection](https://github.com/weorbis/locus/blob/main/doc/guides/data-protection.md)** - Encryption at rest, keys, and plaintext migration.
 - **[Testing](https://github.com/weorbis/locus/blob/main/doc/testing/unit-testing.md)** - Host-app mocks and SDK regression suites.

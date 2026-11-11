@@ -19,7 +19,7 @@ extension SwiftLocusPlugin {
       "confidence": motionDetector.lastActivityConfidence
     ]
 
-    return [
+    var payload: [String: Any] = [
       "uuid": UUID().uuidString,
       "timestamp": ISO8601DateFormatter().string(from: location.timestamp),
       "coords": coords,
@@ -29,6 +29,10 @@ extension SwiftLocusPlugin {
       "odometer": storage.readOdometer(),
       "extras": configManager.extras
     ]
+    if #available(iOS 15.0, *), let sourceInformation = location.sourceInformation {
+      payload["is_mock_provider"] = sourceInformation.isSimulatedBySoftware
+    }
+    return payload
   }
 
   func emitLocationEvent(_ location: CLLocation, eventName: String, completion: ((Bool) -> Void)? = nil) {

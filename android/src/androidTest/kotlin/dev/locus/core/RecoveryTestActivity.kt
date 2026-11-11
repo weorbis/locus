@@ -7,6 +7,8 @@ import android.os.Process
 import android.util.Log
 import dev.locus.service.AndroidForegroundServiceGateway
 import dev.locus.storage.LocationStore
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
 
 /** Test-APK-only command host for the shell process-recovery smoke test. */
 class RecoveryTestActivity : Activity() {
@@ -34,9 +36,19 @@ class RecoveryTestActivity : Activity() {
 }
 
 internal object RecoveryTestCommands {
+    // Encrypted stores are prepared off the main thread and refuse main-thread callers while that runs.
+    private fun <T> offMainThread(block: () -> T): T {
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            return executor.submit(Callable(block)).get()
+        } finally {
+            executor.shutdown()
+        }
+    }
+
     fun armRecoveryFixture(context: Context) {
         val manager = ConfigManager(context)
-        LocationStore(context).use { it.clear() }
+        offMainThread { LocationStore(context).use { it.clear() } }
         check(manager.persistPrivacyMode(false)) {
             "Recovery fixture must begin outside privacy mode"
         }
@@ -77,7 +89,7 @@ internal object RecoveryTestCommands {
     }
 
     fun reportState(context: Context) {
-        val locations = LocationStore(context).use { it.readLocations(0) }
+        val locations = offMainThread { LocationStore(context).use { it.readLocations(0) } }
         val latestTimestamp = (locations.lastOrNull()?.get("timestamp") as? Number)?.toLong() ?: -1L
         val container = LocusContainer.peek()
         Log.i(

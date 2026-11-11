@@ -103,7 +103,8 @@ internal class NativeHistoryQueryChecks(private val context: Context) {
         val directory = File(context.cacheDir, "native-history-${UUID.randomUUID()}")
         check(directory.mkdir()) { "Cannot create isolated history fixture directory" }
         val isolated = object : ContextWrapper(context) {
-            override fun getDatabasePath(name: String): File = File(directory, name)
+            override fun getNoBackupFilesDir(): File = directory
+            override fun getDatabasePath(name: String): File = File(directory, "legacy-$name")
             override fun openOrCreateDatabase(name: String, mode: Int, factory: SQLiteDatabase.CursorFactory?): SQLiteDatabase =
                 openOrCreateDatabase(name, mode, factory, null)
 
@@ -116,8 +117,12 @@ internal class NativeHistoryQueryChecks(private val context: Context) {
         } finally {
             store.close()
             // Only this check's new scratch database is eligible for cleanup.
-            directory.listFiles()?.filter { it.name.endsWith(".db") }?.forEach { database ->
-                check(SQLiteDatabase.deleteDatabase(database)) { "Cannot remove history fixture database" }
+            directory.listFiles()?.forEach { file ->
+                if (file.name.endsWith(".db")) {
+                    check(SQLiteDatabase.deleteDatabase(file)) { "Cannot remove history fixture database" }
+                } else {
+                    check(file.delete()) { "Cannot remove history fixture key or lock" }
+                }
             }
             check(directory.delete()) { "Cannot remove history fixture directory" }
         }

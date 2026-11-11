@@ -20,7 +20,7 @@ dependencies:
   permission_handler: ^13.0.2
   logging: ^1.3.0
   # CLI dependency. Consumed only by `bin/*.dart` (locus / setup / doctor /
-  # migrate executables). Pub's `executables:` contract requires CLI deps
+  # migrate / replay executables). Pub's `executables:` contract requires CLI deps
   # to live in `dependencies:` so `dart run locus:setup` works for hosts;
   # moving `args` to `dev_dependencies:` would silently break the CLI for
   # every consumer. Removing the dep entirely (hand-rolled arg parsing in
@@ -37,6 +37,7 @@ executables:
   setup: setup
   doctor: doctor
   migrate: migrate
+  replay: replay
 
 flutter:
   plugin:

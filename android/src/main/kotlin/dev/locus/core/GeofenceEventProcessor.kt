@@ -30,24 +30,35 @@ class GeofenceEventProcessor(
         val locationPayload = extractLocationPayload(event)
         val privacyGuardEnabled = config.privacyModeEnabled
 
-        if (!privacyGuardEnabled) locationPayload?.let { payload ->
-            if (PersistencePolicy.shouldPersist(config, "geofence")) {
-                stateManager.storeLocationPayload(payload, config.maxDaysToPersist, config.maxRecordsToPersist)
-            }
-            if (config.autoSync && !config.httpUrl.isNullOrEmpty() && autoSyncChecker.isAutoSyncAllowed()) {
-                if (config.batchSync) {
-                    syncManager.attemptBatchSync()
-                } else {
-                    syncManager.syncNow(payload)
-                }
+        val send = {
+            eventDispatcher.sendEvent(
+                event,
+                containsRawLocation = locationPayload != null,
+                privacyGuardEnabled = privacyGuardEnabled,
+            )
+        }
+        if (privacyGuardEnabled || locationPayload == null) {
+            send()
+            return
+        }
+        // Store and sync first, then notify: a headless task may query history in response to the event.
+        stateManager.whenStorageReady {
+            persistAndSync(locationPayload)
+            send()
+        }
+    }
+
+    private fun persistAndSync(payload: Map<String, Any>) {
+        if (PersistencePolicy.shouldPersist(config, "geofence")) {
+            stateManager.storeLocationPayload(payload, config.maxDaysToPersist, config.maxRecordsToPersist)
+        }
+        if (config.autoSync && !config.httpUrl.isNullOrEmpty() && autoSyncChecker.isAutoSyncAllowed()) {
+            if (config.batchSync) {
+                syncManager.attemptBatchSync()
+            } else {
+                syncManager.syncNow(payload)
             }
         }
-
-        eventDispatcher.sendEvent(
-            event,
-            containsRawLocation = locationPayload != null,
-            privacyGuardEnabled = privacyGuardEnabled,
-        )
     }
 
     private fun buildGeofenceEvent(obj: JSONObject): Map<String, Any>? {
@@ -68,12 +79,14 @@ class GeofenceEventProcessor(
             mapOf(
                 "uuid" to UUID.randomUUID().toString(),
                 "timestamp" to Instant.now().toString(),
-                "coords" to loc.toMap(),
+                "coords" to loc.toMap().filterKeys { it != "is_mock_provider" },
                 "event" to "geofence",
                 "is_moving" to motionManager.isMoving,
                 "odometer" to stateManager.odometerValue,
                 "extras" to config.extras.toMap()
-            )
+            ).toMutableMap().apply {
+                (loc.opt("is_mock_provider") as? Boolean)?.let { put("is_mock_provider", it) }
+            }
         }
 
         val payload = buildMap<String, Any> {

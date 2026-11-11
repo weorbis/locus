@@ -2,50 +2,19 @@ package dev.locus.storage
 
 import android.content.ContentValues
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteOpenHelper
+import net.zetetic.database.sqlcipher.SQLiteDatabase
+import net.zetetic.database.sqlcipher.SQLiteOpenHelper
 import org.json.JSONException
 import org.json.JSONObject
+import java.io.Closeable
 import java.util.UUID
 
-class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
+class QueueStore(context: Context) : Closeable {
+    private val helper = LazyHelper(context, ::Helper)
+    internal val writableDatabase: SQLiteDatabase get() = helper.get().writableDatabase
+    internal val readableDatabase: SQLiteDatabase get() = helper.get().readableDatabase
 
-    override fun onConfigure(db: SQLiteDatabase) {
-        // Durability: WAL keeps the journal independent of the main DB, and
-        // synchronous=FULL fsyncs both files on commit. Together they survive
-        // process kills between commit and checkpoint without data loss.
-        //
-        // Use rawQuery instead of execSQL: Samsung's hardened SQLite (seen on
-        // SM A346E / Android 16) treats `PRAGMA journal_mode=WAL` as a query
-        // because it returns the resulting mode, and rejects it from execSQL
-        // with "Queries can be performed using SQLiteDatabase query or
-        // rawQuery methods only." rawQuery works on AOSP and Samsung alike.
-        db.rawQuery("PRAGMA journal_mode=WAL", null).use { it.moveToFirst() }
-        db.rawQuery("PRAGMA synchronous=FULL", null).use { it.moveToFirst() }
-    }
-
-    override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL(
-            """
-            CREATE TABLE queue (
-                id TEXT PRIMARY KEY,
-                created_at INTEGER,
-                payload TEXT,
-                retry_count INTEGER,
-                next_retry_at INTEGER,
-                idempotency_key TEXT,
-                type TEXT
-            )
-            """.trimIndent()
-        )
-    }
-
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Preserve data across schema upgrades.
-        // Add migration steps for each version increment here.
-        // Example: if (oldVersion < 2) { db.execSQL("ALTER TABLE queue ADD COLUMN new_col TEXT") }
-        // Only drop and recreate as last resort.
-    }
+    override fun close() = helper.close()
 
     fun insertPayload(
         payload: Map<String, Any>,
@@ -81,6 +50,8 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
                 db.endTransaction()
             }
             checkpoint(db)
+        } catch (e: StorageUnavailableException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("QueueStore", "Failed to insert queue payload: ${e.message}", e)
         }
@@ -121,6 +92,8 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
                     results.add(record)
                 }
             }
+        } catch (e: StorageUnavailableException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("QueueStore", "Failed to read queue: ${e.message}", e)
         }
@@ -160,6 +133,8 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
             val db = writableDatabase
             db.execSQL("DELETE FROM queue")
             checkpoint(db)
+        } catch (e: StorageUnavailableException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("QueueStore", "Failed to clear queue: ${e.message}", e)
         }
@@ -191,6 +166,55 @@ class QueueStore(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB
             db.rawQuery("PRAGMA wal_checkpoint(PASSIVE)", null).use { it.moveToFirst() }
         } catch (e: Exception) {
             android.util.Log.w("QueueStore", "wal_checkpoint failed: ${e.message}")
+        }
+    }
+
+    private class Helper(context: EncryptedDatabaseContext) : SQLiteOpenHelper(
+        context,
+        DB_NAME,
+        context.password,
+        null,
+        DB_VERSION,
+        EncryptedStorage.MINIMUM_SUPPORTED_VERSION,
+        EncryptedStorage.errorHandler,
+        null,
+        false
+    ) {
+        override fun onConfigure(db: SQLiteDatabase) {
+            // Durability: WAL keeps the journal independent of the main DB, and
+            // synchronous=FULL fsyncs both files on commit. Together they survive
+            // process kills between commit and checkpoint without data loss.
+            //
+            // Use rawQuery instead of execSQL: Samsung's hardened SQLite (seen on
+            // SM A346E / Android 16) treats `PRAGMA journal_mode=WAL` as a query
+            // because it returns the resulting mode, and rejects it from execSQL
+            // with "Queries can be performed using SQLiteDatabase query or
+            // rawQuery methods only." rawQuery works on AOSP and Samsung alike.
+            db.rawQuery("PRAGMA journal_mode=WAL", null).use { it.moveToFirst() }
+            db.rawQuery("PRAGMA synchronous=FULL", null).use { it.moveToFirst() }
+        }
+
+        override fun onCreate(db: SQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE queue (
+                    id TEXT PRIMARY KEY,
+                    created_at INTEGER,
+                    payload TEXT,
+                    retry_count INTEGER,
+                    next_retry_at INTEGER,
+                    idempotency_key TEXT,
+                    type TEXT
+                )
+                """.trimIndent()
+            )
+        }
+
+        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+            // Preserve data across schema upgrades.
+            // Add migration steps for each version increment here.
+            // Example: if (oldVersion < 2) { db.execSQL("ALTER TABLE queue ADD COLUMN new_col TEXT") }
+            // Only drop and recreate as last resort.
         }
     }
 

@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Developer route replay (#48)** — Add the pure-Dart `locus:replay` CLI for GPX, JSON and example recorder exports through Android emulator and iOS simulator location tools, with timing controls, looping, dry runs and a route replay guide.
+
+### Changed
+
+- **Android: encrypt location, queue and log databases at rest (#49)** — SQLCipher with a per-install key wrapped by Android Keystore; databases move to backup-excluded storage and existing plaintext data is migrated once, off the main thread, and deleted only after verification. If preparation fails the app keeps running, existing files are kept, storage calls report `STORAGE_UNAVAILABLE` instead of success or empty data, and location fixes are held in memory until storage works again; see `doc/guides/data-protection.md`.
+
+### Fixed
+
+- **Geofence workflows: saves can no longer overwrite newer state (#44)** — `GeofenceWorkflowEngine` now runs state-store writes one at a time and writes only the newest pending state. `dispose()` waits for the final save, and a failing store is logged instead of raising an uncaught error.
+- **Spoof detection now sees the OS "simulated location" flag** — Android (`Location.isMock`) and iOS 15+ (`isSimulatedBySoftware`) report it as the new nullable `Location.isMockProvider`, and `checkMockProvider` uses it. Location payloads and iOS sync bodies gain an optional `is_mock_provider` field; Android's stored history (and therefore Android batch sync) does not keep it.
 - **iOS: always-on SQLite encryption at rest (#49)** — The whole local database now uses SQLCipher with a random Keychain key, and existing plaintext databases are migrated in the background after launch. Failures keep the original files, never replace the key of an existing encrypted database, and are retried once the device is unlocked or on later access, with storage calls returning `STORAGE_UNAVAILABLE` and new fixes and geofence events held in memory meanwhile; see the data protection guide.
 
 ## [2.5.0] - 2026-11-04

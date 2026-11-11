@@ -301,6 +301,8 @@ class PrivacyZoneService {
       event: location.event,
       isMoving: location.isMoving,
       isHeartbeat: location.isHeartbeat,
+      isMock: location.isMock,
+      isMockProvider: location.isMockProvider,
       coords: Coords(
         latitude: newLat,
         longitude: newLng,

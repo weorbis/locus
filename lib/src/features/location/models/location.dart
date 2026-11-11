@@ -17,6 +17,7 @@ class Location {
     this.isMoving,
     this.isHeartbeat,
     this.isMock = false,
+    this.isMockProvider,
     this.activity,
     this.battery,
     this.geofence,
@@ -58,6 +59,7 @@ class Location {
       isMoving: map['is_moving'] as bool?,
       isHeartbeat: map['is_heartbeat'] as bool?,
       isMock: map['mock'] as bool? ?? false,
+      isMockProvider: map['is_mock_provider'] as bool?,
       coords: coords,
       activity: activityMap is Map
           ? Activity.fromMap(Map<String, dynamic>.from(activityMap))
@@ -81,6 +83,12 @@ class Location {
   final bool? isMoving;
   final bool? isHeartbeat;
   final bool isMock;
+
+  /// Whether the operating system reported a simulated location.
+  ///
+  /// Null when unavailable, including iOS 14 and stored Android history.
+  /// This is independent of [isMock], which spoof detection can set.
+  final bool? isMockProvider;
   final Coords coords;
   final Activity? activity;
   final Battery? battery;
@@ -99,6 +107,7 @@ class Location {
     bool? isMoving,
     bool? isHeartbeat,
     bool? isMock,
+    bool? isMockProvider,
     Coords? coords,
     Activity? activity,
     Battery? battery,
@@ -114,6 +123,7 @@ class Location {
       isMoving: isMoving ?? this.isMoving,
       isHeartbeat: isHeartbeat ?? this.isHeartbeat,
       isMock: isMock ?? this.isMock,
+      isMockProvider: isMockProvider ?? this.isMockProvider,
       coords: coords ?? this.coords,
       activity: activity ?? this.activity,
       battery: battery ?? this.battery,
@@ -131,6 +141,7 @@ class Location {
     if (isMoving != null) 'is_moving': isMoving,
     if (isHeartbeat != null) 'is_heartbeat': isHeartbeat,
     'mock': isMock,
+    if (isMockProvider != null) 'is_mock_provider': isMockProvider,
     'coords': coords.toMap(),
     if (activity != null) 'activity': activity!.toMap(),
     if (battery != null) 'battery': battery!.toMap(),

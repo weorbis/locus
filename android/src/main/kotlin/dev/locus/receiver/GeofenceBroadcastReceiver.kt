@@ -7,6 +7,7 @@ import android.util.Log
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingEvent
 import dev.locus.LocusPlugin
+import dev.locus.core.isMockProvider
 import dev.locus.service.HeadlessService
 import org.json.JSONArray
 import org.json.JSONException
@@ -50,6 +51,7 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                         put("latitude", loc.latitude)
                         put("longitude", loc.longitude)
                         put("accuracy", loc.accuracy)
+                        put("is_mock_provider", loc.isMockProvider())
                     }
                     put("location", location)
                 }
