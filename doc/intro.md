@@ -23,5 +23,6 @@ Locus abstracts these complexities into a single, unified API.
 ## Next Steps
 
 - [Quick Start Guide](guides/quickstart.md)
+- [Route Replay](guides/route-replay.md)
 - [Installation](setup/installation.md)
 - [Platform Configuration](setup/platform-configuration.md)

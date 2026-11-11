@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Developer route replay (#48)** — Add the pure-Dart `locus:replay` CLI for GPX, JSON and example recorder exports through Android emulator and iOS simulator location tools, with timing controls, looping, dry runs and a route replay guide.
+
 ### Fixed
 
 - **Geofence workflows: saves can no longer overwrite newer state (#44)** — `GeofenceWorkflowEngine` now runs state-store writes one at a time and writes only the newest pending state. `dispose()` waits for the final save, and a failing store is logged instead of raising an uncaught error.
