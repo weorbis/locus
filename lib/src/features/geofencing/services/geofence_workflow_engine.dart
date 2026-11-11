@@ -138,7 +138,8 @@ class GeofenceWorkflowEngine {
     final store = stateStore;
     if (store == null) return;
     _pendingState = null;
-    await _saveCompleter?.future;
+    final activeSave = _saveCompleter;
+    if (activeSave != null) await activeSave.future;
     await store.remove(_stateStoreKey);
   }
 
