@@ -276,6 +276,12 @@ class SQLiteStorage {
     /// Caller must already hold `queue`.
     @discardableResult
     private func stepChecked(_ statement: OpaquePointer?, op: String) -> Bool {
+        stepResult(statement, op: op) == LOCUS_SQLITE_DONE
+    }
+
+    /// Steps the statement, retrying briefly while busy, and logs any result
+    /// other than DONE. Returns the final SQLite result code.
+    private func stepResult(_ statement: OpaquePointer?, op: String) -> Int32 {
         var rc = locus_sqlite3_step(statement)
         var attempts = 0
         while rc == LOCUS_SQLITE_BUSY && attempts < 5 {
@@ -284,9 +290,8 @@ class SQLiteStorage {
         }
         if rc != LOCUS_SQLITE_DONE {
             logSQLiteError("\(op) (rc=\(rc))")
-            return false
         }
-        return true
+        return rc
     }
 
     /// Surfaces SQLite errors via NSLog so silent corruption doesn't go
@@ -456,7 +461,7 @@ class SQLiteStorage {
 
         var succeeded = true
         for location in locations {
-            succeeded = self.insertLocationOnQueue(location) && succeeded
+            succeeded = self.insertLocationOnQueue(location) == .written && succeeded
         }
         for geofence in geofences {
             succeeded = self.insertGeofenceOnQueue(geofence) && succeeded
@@ -536,24 +541,40 @@ class SQLiteStorage {
 
     /// Inserts a location while already on the SQLite queue. Kept result-bearing
     /// so startup migration can commit or preserve its source atomically.
-    private func insertLocationOnQueue(_ payload: [String: Any]) -> Bool {
-        guard let db = db else { return false }
+    private enum InsertOutcome {
+        case written
+        /// The row itself can never be stored (unserializable payload or a
+        /// constraint, size or type error); retrying cannot help.
+        case rejected
+        /// The database could not take the write now (busy, full, I/O, closed).
+        case failed
+    }
+
+    private static let rowRejectingResultCodes: Set<Int32> = [
+        LOCUS_SQLITE_TOOBIG, LOCUS_SQLITE_CONSTRAINT, LOCUS_SQLITE_MISMATCH,
+    ]
+    private static let primaryResultCodeMask: Int32 = 0xff
+
+    private func insertLocationOnQueue(_ payload: [String: Any]) -> InsertOutcome {
+        guard let db = db else { return .failed }
         let uuid = payload["uuid"] as? String ?? UUID().uuidString
         let timestamp = payload["timestamp"] as? String ?? ISO8601DateFormatter().string(from: Date())
-        guard let jsonString = serializeJSON(payload, op: "insertLocation") else { return false }
+        guard let jsonString = serializeJSON(payload, op: "insertLocation") else { return .rejected }
 
         let sql = "INSERT OR REPLACE INTO locations (uuid, payload, timestamp) VALUES (?, ?, ?)"
         var statement: OpaquePointer?
         guard locus_sqlite3_prepare_v2(db, sql, -1, &statement, nil) == LOCUS_SQLITE_OK else {
             logSQLiteError("insertLocation prepare")
             locus_sqlite3_finalize(statement)
-            return false
+            return .failed
         }
         defer { locus_sqlite3_finalize(statement) }
         locus_sqlite3_bind_text(statement, 1, uuid, -1, SQLiteStorage.SQLITE_TRANSIENT)
         locus_sqlite3_bind_text(statement, 2, jsonString, -1, SQLiteStorage.SQLITE_TRANSIENT)
         locus_sqlite3_bind_text(statement, 3, timestamp, -1, SQLiteStorage.SQLITE_TRANSIENT)
-        return stepChecked(statement, op: "insertLocation")
+        let rc = stepResult(statement, op: "insertLocation")
+        if rc == LOCUS_SQLITE_DONE { return .written }
+        return Self.rowRejectingResultCodes.contains(rc & Self.primaryResultCodeMask) ? .rejected : .failed
     }
 
     /// Writes the location, or holds it in memory (newest `maximumHeldLocations`)
@@ -573,7 +594,9 @@ class SQLiteStorage {
                 self.holdLocationOnQueue(location)
                 return
             }
-            self.writeLocationOnQueue(location)
+            if self.writeLocationOnQueue(location) == .failed {
+                self.holdLocationOnQueue(location)
+            }
         }
     }
 
@@ -589,29 +612,26 @@ class SQLiteStorage {
 
     /// Writes held fixes oldest first and stops at the first failed insert, so
     /// that fix and every later one stay held in order for the next attempt.
-    /// A fix that fails while the next one writes is dropped and logged.
+    /// A fix the database rejects as a row (see `InsertOutcome.rejected`) is
+    /// dropped and logged; any other failure keeps every fix held.
     /// Applies the retention limits requested meanwhile once any fix was
     /// written. Caller must already hold `queue` and have an open database.
     private func flushHeldLocationsOnQueue() {
         guard !heldLocations.isEmpty else { return }
         NSLog("[locus.SQLiteStorage] Writing %d held fix(es)", heldLocations.count)
         var written = 0
-        while let location = heldLocations.first {
-            if writeLocationOnQueue(location) {
+        flush: while let location = heldLocations.first {
+            switch writeLocationOnQueue(location) {
+            case .written:
                 heldLocations.removeFirst()
                 written += 1
-                continue
-            }
-            // If the next fix writes, the database accepts writes and only the
-            // head is unwritable, so drop it; otherwise the failure is
-            // transient and every fix stays held.
-            guard heldLocations.count > 1, writeLocationOnQueue(heldLocations[1]) else {
+            case .rejected:
+                heldLocations.removeFirst()
+                NSLog("[locus.SQLiteStorage] Dropped one held fix the database cannot store")
+            case .failed:
                 NSLog("[locus.SQLiteStorage] Held fix write failed; %d fix(es) stay held", heldLocations.count)
-                break
+                break flush
             }
-            heldLocations.removeFirst(2)
-            written += 1
-            NSLog("[locus.SQLiteStorage] Dropped one held fix the database cannot store")
         }
         if written > 0, let pendingPrune {
             self.pendingPrune = nil
@@ -622,16 +642,16 @@ class SQLiteStorage {
     /// Runs the location's completion on the main queue once, only after the
     /// insert succeeded. Returns false when the insert failed.
     /// Caller must already hold `queue` and have an open database.
-    @discardableResult
-    private func writeLocationOnQueue(_ location: HeldLocation) -> Bool {
-        guard insertLocationOnQueue(location.payload) else { return false }
+    private func writeLocationOnQueue(_ location: HeldLocation) -> InsertOutcome {
+        let outcome = insertLocationOnQueue(location.payload)
+        guard outcome == .written else { return outcome }
         walCheckpointOnQueue()
         if let completion = location.completion {
             DispatchQueue.main.async {
                 completion()
             }
         }
-        return true
+        return .written
     }
 
     func readLocations(limit: Int = 0) -> [[String: Any]] {

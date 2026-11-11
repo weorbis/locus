@@ -16,6 +16,9 @@ typedef void (*locus_sqlite3_destructor_type)(void *);
 #define LOCUS_SQLITE_OK 0
 #define LOCUS_SQLITE_ERROR 1
 #define LOCUS_SQLITE_BUSY 5
+#define LOCUS_SQLITE_TOOBIG 18
+#define LOCUS_SQLITE_CONSTRAINT 19
+#define LOCUS_SQLITE_MISMATCH 20
 #define LOCUS_SQLITE_ROW 100
 #define LOCUS_SQLITE_DONE 101
 #define LOCUS_SQLITE_OPEN_READONLY 0x00000001
