@@ -42,5 +42,5 @@ jobs:
       - run: flutter pub publish --dry-run
 
       # Last before publishing, so the short-lived OIDC token is still valid.
-      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+      - uses: dart-lang/setup-dart@2286a0c042b44434fe26d292bbce8d34f7ec662b # v1.8.2
       - run: flutter pub publish --force
