@@ -13,8 +13,8 @@ dependencies:
     sdk: flutter
 
   google_fonts: ^9.0.0
-  flutter_svg: ^2.4.0
-  material_ui: ^1.11.0
+  flutter_svg: ^2.5.0
+  material_ui: ^1.11.1
 
   locus:
     path: ../
